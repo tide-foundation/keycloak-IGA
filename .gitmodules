@@ -1,0 +1,3 @@
+[submodule "tidecloak-iga-extensions"]
+	path = tidecloak-iga-extensions
+	url = https://github.com/tide-foundation/tidecloak-iga-extensions.git
