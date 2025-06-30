@@ -40,6 +40,10 @@ update_pom() {
   done
 }
 
+update_submodule(){
+  git submodule update --init --recursive
+}
+
 build_ext_jpa() {
   cd "$ROOT_DIR/tidecloak-iga-extensions"
   update_pom
@@ -57,7 +61,6 @@ build_ext() {
 
 build_keycloak() {
   cd "$ROOT_DIR"
-  git submodule update --init --recursive
   ./mvnw -pl quarkus/deployment,quarkus/dist -am -DskipTests -DskipProtoLock clean install
 }
 
@@ -107,6 +110,7 @@ EOF
 
 
 # Main build steps
+update_submodule
 build_ext_jpa
 build_keycloak
 build_ext
