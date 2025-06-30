@@ -28,7 +28,7 @@ This is a fork of Keycloak enhanced with **Identity Governance and Administratio
 
 ### Getting Started (Keycloak IGA)
 
-> **Supported branches:** `main`, `26.2.5-IGA`
+> **Supported branches:**, `26.2.5-IGA`
 >
 > The latest supported release is `26.2.5-IGA`. Future version tags may be supported as well.
 
@@ -38,8 +38,6 @@ This is a fork of Keycloak enhanced with **Identity Governance and Administratio
 git clone --branch 26.2.5-IGA --single-branch https://github.com/YOUR-ORG/keycloak-IGA.git
 cd keycloak-IGA
 ```
-
-> 💡 Use `main` instead of `26.2.5-IGA` for the latest development version.
 
 #### 2. Run the build and setup script
 
