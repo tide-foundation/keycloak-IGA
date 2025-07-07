@@ -170,8 +170,13 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
               addAlert("Heimdall module no provided", AlertVariant.danger);
               return
             }
-            const heimdall = new module.Heimdall(respObj.uri, [keycloak.tokenParsed!['vuid']])
-            await heimdall.openEnclave();
+            const orkURL = new URL(respObj.uri);
+            const heimdall = new module.ApprovalEnclave({
+              homeOrkOrigin: orkURL.origin,
+              voucherURL: "",
+              signed_client_origin: "",
+              vendorId: ""
+            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
             const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
 
             if (authApproval.draft === respObj.changeSetRequests) {
@@ -195,7 +200,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
                 await adminClient.tideAdmin.addAuthorization(formData)
               }
             }
-            heimdall.closeEnclave();
+            heimdall.close();
           }
           refresh();
         }
