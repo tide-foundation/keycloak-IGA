@@ -166,7 +166,7 @@ export default function ChangeRequestsSection() {
         if (response.length === 1) {
           const respObj = JSON.parse(response[0]);
           if (respObj.requiresApprovalPopup === "true") {
-            const module = await importHeimdall();
+            const module = await import("../../tide-modules/modules/heimdall/src/index");
             if(module === null){
                 addAlert("Heimdall module no provided", AlertVariant.danger);
               return
