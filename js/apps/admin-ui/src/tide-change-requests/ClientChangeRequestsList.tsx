@@ -166,7 +166,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           const respObj = JSON.parse(response[0])
           if (respObj.requiresApprovalPopup === "true") {
             const orkURL = new URL(respObj.uri);
-            const heimdall = ApprovalEnclave({
+            const heimdall = new ApprovalEnclave({
               homeOrkOrigin: orkURL.origin,
               voucherURL: "",
               signed_client_origin: "",
