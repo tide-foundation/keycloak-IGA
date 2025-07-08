@@ -22,6 +22,7 @@ import { CapabilityConfig } from "./CapabilityConfig";
 import { GeneralSettings } from "./GeneralSettings";
 import { LoginSettings } from "./LoginSettings";
 import { useState } from "react";
+import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil";
 
 const NewClientFooter = (newClientForm: any) => {
   const { t } = useTranslation();
@@ -88,6 +89,12 @@ export default function NewClientForm() {
         ...client,
         clientId: client.clientId?.trim(),
       });
+      // TIDECLOAK IMPLEMENTATION
+      const hasTideIdp = await adminClient.identityProviders.findOne({ alias: "tide" });
+      const isTideKeyEnabled = await findTideComponent(adminClient, realm) === undefined ? false : true
+      if(isTideKeyEnabled && hasTideIdp) {
+          await adminClient.tideAdmin.signIdpSettings();
+        }
       addAlert(t("createClientSuccess"), AlertVariant.success);
       navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
     } catch (error) {

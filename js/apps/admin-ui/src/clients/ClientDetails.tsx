@@ -76,6 +76,7 @@ import { getProtocolName, isRealmClient } from "./utils";
 import { UserEvents } from "../events/UserEvents";
 import { useIsAdminPermissionsClient } from "../utils/useIsAdminPermissionsClient";
 import { AdminEvents } from "../events/AdminEvents";
+import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil";
 
 type ClientDetailHeaderProps = {
   onChange: (value: boolean) => void;
@@ -380,6 +381,13 @@ export default function ClientDetails() {
       newClient.clientId = newClient.clientId?.trim();
 
       await adminClient.clients.update({ id: clientId }, newClient);
+      // TIDECLOAK IMPLEMENTATION
+      const hasTideIdp = await adminClient.identityProviders.findOne({ alias: "tide" });
+      const isTideKeyEnabled = await findTideComponent(adminClient, realm) === undefined ? false : true
+      if(isTideKeyEnabled && hasTideIdp) {
+        await adminClient.tideAdmin.signIdpSettings();
+      }
+
       setupForm(newClient);
       setClient(newClient);
       addAlert(t(messageKey), AlertVariant.success);

@@ -25,7 +25,7 @@ import type ClientRepresentation from "@keycloak/keycloak-admin-client/lib/defs/
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { useRealm } from '../context/realm-context/RealmContext';
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
-import { importHeimdall } from './HeimdallHelper';
+import { ApprovalEnclave} from "heimdall-tide";
 
 type ChangeRequestProps = {
   updateCounter: (count: number) => void;
@@ -165,13 +165,13 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         if (response.length === 1) {
           const respObj = JSON.parse(response[0])
           if (respObj.requiresApprovalPopup === "true") {
-            const module = await importHeimdall();
-            if(module === null){
-              addAlert("Heimdall module no provided", AlertVariant.danger);
-              return
-            }
-            const heimdall = new module.Heimdall(respObj.uri, [keycloak.tokenParsed!['vuid']])
-            await heimdall.openEnclave();
+            const orkURL = new URL(respObj.uri);
+            const heimdall = new ApprovalEnclave({
+              homeOrkOrigin: orkURL.origin,
+              voucherURL: "",
+              signed_client_origin: "",
+              vendorId: ""
+            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
             const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
 
             if (authApproval.draft === respObj.changeSetRequests) {
@@ -195,7 +195,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
                 await adminClient.tideAdmin.addAuthorization(formData)
               }
             }
-            heimdall.closeEnclave();
+            heimdall.close();
           }
           refresh();
         }
