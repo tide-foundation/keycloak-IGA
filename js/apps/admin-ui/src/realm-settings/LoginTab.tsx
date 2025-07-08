@@ -6,6 +6,7 @@ import { useAdminClient } from "../admin-client";
 import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { FormAccess } from "../components/form/FormAccess";
 import { useRealm } from "../context/realm-context/RealmContext";
+import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil";
 
 
 type RealmSettingsLoginTabProps = {
@@ -42,9 +43,10 @@ export const RealmSettingsLoginTab = ({
       );
 
       if (name === "registrationAllowed") {
-        const tideIdp = await adminClient.identityProviders.findOne({ alias: "tide" });
-        // TIDECLOAK IMPLEMENTATION
-        if (tideIdp) {
+      // TIDECLOAK IMPLEMENTATION
+      const hasTideIdp = await adminClient.identityProviders.findOne({ alias: "tide" });
+      const isTideKeyEnabled = await findTideComponent(adminClient, realmName) === undefined ? false : true
+      if(isTideKeyEnabled && hasTideIdp) {
           await adminClient.tideAdmin.signIdpSettings();
         }
       }
