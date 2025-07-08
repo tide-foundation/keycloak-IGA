@@ -24,7 +24,7 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { useRealm } from '../context/realm-context/RealmContext';
-import { importHeimdall } from './HeimdallHelper';
+import { ApprovalEnclave} from "heimdall-tide";
 
 
 type ChangeRequestProps = {
@@ -149,13 +149,8 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
           const respObj = JSON.parse(response[0]);
 
           if (respObj.requiresApprovalPopup === "true") {
-            const module = await import("../../tide-modules/modules/heimdall/src/index");
-            if(module === null){
-              addAlert("Heimdall module no provided", AlertVariant.danger);
-              return
-            }
             const orkURL = new URL(respObj.uri);
-            const heimdall = new module.ApprovalEnclave({
+            const heimdall = ApprovalEnclave({
               homeOrkOrigin: orkURL.origin,
               voucherURL: "",
               signed_client_origin: "",

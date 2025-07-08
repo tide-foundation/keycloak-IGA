@@ -36,7 +36,7 @@ import DraftChangeSetRequest from "@keycloak/keycloak-admin-client/lib/defs/Draf
 import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
-import { importHeimdall } from './HeimdallHelper';
+import { ApprovalEnclave} from "heimdall-tide"
 
 export interface changeSetApprovalRequest {
   message: string,
@@ -166,13 +166,8 @@ export default function ChangeRequestsSection() {
         if (response.length === 1) {
           const respObj = JSON.parse(response[0]);
           if (respObj.requiresApprovalPopup === "true") {
-            const module = await import("../../tide-modules/modules/heimdall/src/index");
-            if(module === null){
-                addAlert("Heimdall module no provided", AlertVariant.danger);
-              return
-            }
             const orkURL = new URL(respObj.uri);
-            const heimdall = new module.ApprovalEnclave({
+            const heimdall = ApprovalEnclave({
               homeOrkOrigin: orkURL.origin,
               voucherURL: "",
               signed_client_origin: "",

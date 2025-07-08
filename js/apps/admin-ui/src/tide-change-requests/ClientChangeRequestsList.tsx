@@ -25,7 +25,7 @@ import type ClientRepresentation from "@keycloak/keycloak-admin-client/lib/defs/
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { useRealm } from '../context/realm-context/RealmContext';
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
-import { importHeimdall } from './HeimdallHelper';
+import { ApprovalEnclave} from "heimdall-tide";
 
 type ChangeRequestProps = {
   updateCounter: (count: number) => void;
@@ -165,13 +165,8 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         if (response.length === 1) {
           const respObj = JSON.parse(response[0])
           if (respObj.requiresApprovalPopup === "true") {
-            const module = await import("../../tide-modules/modules/heimdall/src/index");
-            if(module === null){
-              addAlert("Heimdall module no provided", AlertVariant.danger);
-              return
-            }
             const orkURL = new URL(respObj.uri);
-            const heimdall = new module.ApprovalEnclave({
+            const heimdall = ApprovalEnclave({
               homeOrkOrigin: orkURL.origin,
               voucherURL: "",
               signed_client_origin: "",
