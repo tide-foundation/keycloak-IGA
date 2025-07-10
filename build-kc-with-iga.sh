@@ -16,13 +16,20 @@ update_pom() {
     /<project/     { in_project=1 }
     /<\/project>/  { in_project=0 }
     in_project && !in_parent && /<version>/ && !found {
-      if ($0 ~ /<version>[^<]+<\/version>/) {
-        match($0, /<version>([^<]+)<\/version>/, arr)
-        print arr[1]
-        found=1
+      # Remove leading and trailing whitespace
+      line = $0
+      gsub(/^[ \t]+|[ \t]+$/, "", line)
+      
+      # Extract version value manually
+      start = index(line, "<version>")
+      end = index(line, "</version>")
+      if (start && end) {
+        version = substr(line, start + 9, end - (start + 9))
+        print version
+        found = 1
       }
     }
-  ' "$ROOT_DIR/pom.xml")
+    ' "$ROOT_DIR/pom.xml")
 
   if [ -z "$KC_VERSION" ]; then
     echo "❌ Could not extract Keycloak version from pom.xml"
