@@ -38,7 +38,7 @@ export const DownloadDialog = ({
 }: DownloadDialogProps) => {
   const { adminClient } = useAdminClient();
 
-  const { realm } = useRealm();
+  const { realm, realmRepresentation } = useRealm();
   const { t } = useTranslation();
   const { enabled } = useHelp();
   const serverInfo = useServerInfo();
@@ -69,7 +69,7 @@ export const DownloadDialog = ({
     useEffect(() => {
       const check = async () => {
         const tideKey = await findTideComponent(adminClient, realm) === undefined ? false : true
-        const  iga = realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? true : false
+        const  iga = realmRepresentation.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? true : false
         setIsTideKeyEnabled(tideKey)
         setIsIGAEnabled(iga)
       }
