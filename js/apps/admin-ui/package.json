@@ -104,7 +104,7 @@
     "react-router-dom": "^6.30.0",
     "reactflow": "^11.11.4",
     "use-react-router-breadcrumbs": "^4.0.1",
-    "heimdall-tide": "0.1.0"
+    "heimdall-tide": "^0.1.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
