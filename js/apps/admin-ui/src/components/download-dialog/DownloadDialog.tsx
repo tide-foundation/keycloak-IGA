@@ -13,7 +13,7 @@ import {
   TextArea,
 } from "@patternfly/react-core";
 import { saveAs } from "file-saver";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useAdminClient } from "../../admin-client";
 import { useRealm } from "../../context/realm-context/RealmContext";
@@ -49,10 +49,8 @@ export const DownloadDialog = ({
   );
   const [snippet, setSnippet] = useState<string | ArrayBuffer>();
   const [openType, setOpenType] = useState(false);
+  const [isTidecloak, setIsTidecloak] = useState(false);
 
-  // TIDECLOAK IMPLEMENTATION
-  const [isTideKeyEnabled, setIsTideKeyEnabled] = useState(false);
-  const [isIGAEnabled, setIsIGAEnabled] = useState(false);
 
   const selectedConfig = useMemo(
     () => configFormats.find((config) => config.id === selected) ?? null,
@@ -65,17 +63,22 @@ export const DownloadDialog = ({
       `<PrivateKeyPem>${t("privateKeyMask")}</PrivateKeyPem>`,
     );
 
-    // TIDECLOAK IMPLEMENTATION
-    useEffect(() => {
-      const check = async () => {
-        const tideKey = await findTideComponent(adminClient, realm) === undefined ? false : true
-        const  iga = realmRepresentation?.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? true : false
-        setIsTideKeyEnabled(tideKey)
-        setIsIGAEnabled(iga)
-      }
-      check();
-    },[realm, adminClient])
-
+  // TIDECLOAK IMPLEMENTATION
+  
+  const checkTidecloakStatus = useCallback(async () => {
+    const tideKey = (await findTideComponent(adminClient, realm)) !== undefined;
+    const iga = realmRepresentation?.attributes?.["isIGAEnabled"]?.toLowerCase() === "true";
+    return { tideKey, iga };
+  }, [adminClient, realm, realmRepresentation]);
+  
+  useEffect(() => {
+    const updateStatus = async () => {
+      const { tideKey, iga } = await checkTidecloakStatus();
+      setIsTidecloak(tideKey && iga);
+    };
+    updateStatus();
+  }, [checkTidecloakStatus]);
+  
   useFetch(
     async () => {
       if (selectedConfig?.mediaType === "application/zip") {
@@ -94,7 +97,8 @@ export const DownloadDialog = ({
         return response.arrayBuffer();
       } else {
         // TIDECLOAK IMPLEMENTATION
-        const snippet = (isTideKeyEnabled && isIGAEnabled)
+        const { tideKey, iga } = await checkTidecloakStatus();
+        const snippet = (tideKey && iga)
           ? await adminClient.tideAdmin.getInstallationProviders({
             clientId: id,
             providerId: selected,
@@ -125,7 +129,7 @@ export const DownloadDialog = ({
       onConfirm={() => {
         saveAs(
           new Blob([snippet!], { type: selectedConfig?.mediaType }),
-          isTideKeyEnabled && isIGAEnabled ? "tidecloak" : selectedConfig?.filename,
+          isTidecloak ? "tidecloak" : selectedConfig?.filename,
         );
       }}
       open={open}
