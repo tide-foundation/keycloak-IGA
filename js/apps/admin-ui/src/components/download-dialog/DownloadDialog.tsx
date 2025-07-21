@@ -50,8 +50,7 @@ export const DownloadDialog = ({
   const [snippet, setSnippet] = useState<string | ArrayBuffer>();
   const [openType, setOpenType] = useState(false);
   const [isTidecloak, setIsTidecloak] = useState(false);
-
-
+  
   const selectedConfig = useMemo(
     () => configFormats.find((config) => config.id === selected) ?? null,
     [selected],
@@ -63,8 +62,6 @@ export const DownloadDialog = ({
       `<PrivateKeyPem>${t("privateKeyMask")}</PrivateKeyPem>`,
     );
 
-  // TIDECLOAK IMPLEMENTATION
-  
   const checkTidecloakStatus = useCallback(async () => {
     const tideKey = (await findTideComponent(adminClient, realm)) !== undefined;
     const iga = realmRepresentation?.attributes?.["isIGAEnabled"]?.toLowerCase() === "true";
