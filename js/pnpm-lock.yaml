@@ -184,8 +184,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       heimdall-tide:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: ^0.1.1
+        version: 0.1.1
       i18next:
         specifier: ^24.2.3
         version: 24.2.3(typescript@5.8.2)
@@ -2665,8 +2665,8 @@ packages:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
 
-  heimdall-tide@0.1.0:
-    resolution: {integrity: sha512-DY2O+WMUFzkRd7MbSHYchY2ohlfr48YWO+nFugwJdyhEcwWlJcx13sK1kVwd2VLRX0AQ6S6AnQd+GiT7nNBmQw==}
+  heimdall-tide@0.1.1:
+    resolution: {integrity: sha512-+S0c+yyZFIIjcWx4wljOnvrIZmq99h5hZOyP3Dqd6sWNFAN7ejPmgnd3LM7m2aWMV1aX2vb9wmg8dknOr0CxMw==}
 
   hermes-estree@0.25.1:
     resolution: {integrity: sha512-0wUoCcLp+5Ev5pDW2OriHC2MJCbwLwuRx+gAqMTOkGKJJiBCLjtrvy4PWUGn6MIVefecRpzoOZ/UV6iGdOr+Cw==}
@@ -4816,7 +4816,7 @@ snapshots:
       '@uiw/react-textarea-code-editor': 3.1.0(@babel/runtime@7.27.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       file-saver: 2.0.5
       flat: 6.0.1
-      heimdall-tide: 0.1.0
+      heimdall-tide: 0.1.1
       i18next: 24.2.3(typescript@5.8.2)
       i18next-fetch-backend: 6.0.0
       jszip: 3.10.1
@@ -6766,7 +6766,7 @@ snapshots:
 
   he@1.2.0: {}
 
-  heimdall-tide@0.1.0: {}
+  heimdall-tide@0.1.1: {}
 
   hermes-estree@0.25.1: {}
 
