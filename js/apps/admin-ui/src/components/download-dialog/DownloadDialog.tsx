@@ -38,7 +38,7 @@ export const DownloadDialog = ({
 }: DownloadDialogProps) => {
   const { adminClient } = useAdminClient();
 
-  const { realm } = useRealm();
+  const { realm, realmRepresentation } = useRealm();
   const { t } = useTranslation();
   const { enabled } = useHelp();
   const serverInfo = useServerInfo();
@@ -52,6 +52,7 @@ export const DownloadDialog = ({
 
   // TIDECLOAK IMPLEMENTATION
   const [isTideKeyEnabled, setIsTideKeyEnabled] = useState(false);
+  const [isIGAEnabled, setIsIGAEnabled] = useState(false);
 
   const selectedConfig = useMemo(
     () => configFormats.find((config) => config.id === selected) ?? null,
@@ -67,8 +68,10 @@ export const DownloadDialog = ({
     // TIDECLOAK IMPLEMENTATION
     useEffect(() => {
       const check = async () => {
-        const isEnabled = await findTideComponent(adminClient, realm) === undefined ? false : true
-        setIsTideKeyEnabled(isEnabled)
+        const tideKey = await findTideComponent(adminClient, realm) === undefined ? false : true
+        const  iga = realmRepresentation.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? true : false
+        setIsTideKeyEnabled(tideKey)
+        setIsIGAEnabled(iga)
       }
       check();
     },[realm, adminClient])
@@ -91,7 +94,7 @@ export const DownloadDialog = ({
         return response.arrayBuffer();
       } else {
         // TIDECLOAK IMPLEMENTATION
-        const snippet = isTideKeyEnabled
+        const snippet = (isTideKeyEnabled && isIGAEnabled)
           ? await adminClient.tideAdmin.getInstallationProviders({
             clientId: id,
             providerId: selected,
@@ -122,7 +125,7 @@ export const DownloadDialog = ({
       onConfirm={() => {
         saveAs(
           new Blob([snippet!], { type: selectedConfig?.mediaType }),
-          isTideKeyEnabled ? "tidecloak" : selectedConfig?.filename,
+          isTideKeyEnabled && isIGAEnabled ? "tidecloak" : selectedConfig?.filename,
         );
       }}
       open={open}
