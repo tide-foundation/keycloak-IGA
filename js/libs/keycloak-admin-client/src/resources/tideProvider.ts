@@ -49,6 +49,11 @@ export class TideProvider extends Resource<{ realm?: string }> {
         },
     });
 
+    public toggleBifrost = this.makeRequest<FormData, Response>({
+        method: "POST",
+        path: "/tide-idp-admin-resources/toggle-bifrost",
+    });
+
     public addAuthorization = this.makeRequest<FormData, string>({
         method: "POST",
         path: "/tideAdminResources/add-authorization",

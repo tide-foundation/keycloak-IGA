@@ -1,9 +1,10 @@
-import { FormGroup, Switch } from "@patternfly/react-core";
+import { FormGroup, Switch, AlertVariant } from "@patternfly/react-core";
 import { Controller, useFormContext } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-
-import { HelpItem } from "@keycloak/keycloak-ui-shared";
+import { HelpItem, useAlerts } from "@keycloak/keycloak-ui-shared";
 import type { ComponentProps } from "./components";
+import { useAdminClient } from "../../admin-client";
+
 
 export const BooleanComponent = ({
   name,
@@ -16,6 +17,24 @@ export const BooleanComponent = ({
 }: ComponentProps) => {
   const { t } = useTranslation();
   const { control } = useFormContext();
+  const { adminClient } = useAdminClient();
+  const { addError } = useAlerts();
+  
+
+  const handleOnChange = async (name: string, value: any) => {
+    if (name === "backupOn") {
+      try {
+        const data = new FormData();
+        data.append("isBifrostEnabled", value.toString());
+        await adminClient.tideAdmin.toggleBifrost(data)
+      } catch (e) {
+        const error = e as Error;
+        addError(`Could not toggle bifrost: ${error.message}`, "");
+        return false
+      }
+    }
+    return true;
+  }
 
   return (
     <FormGroup
@@ -40,7 +59,10 @@ export const BooleanComponent = ({
               field.value === true ||
               field.value?.[0] === "true"
             }
-            onChange={(_event, value) => field.onChange("" + value)}
+            onChange={async (_event, value) => {
+              const changed = await handleOnChange(name!, value)
+              if (changed) field.onChange("" + value)
+            }}
             data-testid={name}
             aria-label={t(label!)}
           />
