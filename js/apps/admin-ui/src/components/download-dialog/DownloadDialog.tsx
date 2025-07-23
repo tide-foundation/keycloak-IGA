@@ -63,15 +63,14 @@ export const DownloadDialog = ({
     );
 
   const checkTidecloakStatus = useCallback(async () => {
-    const tideKey = (await findTideComponent(adminClient, realm)) !== undefined;
-    const iga = realmRepresentation?.attributes?.["isIGAEnabled"]?.toLowerCase() === "true";
-    return { tideKey, iga };
-  }, [adminClient, realm, realmRepresentation]);
+    const hasTideIdp = await adminClient.identityProviders.findOne({ alias: "tide" });
+    return hasTideIdp ? true : false;
+  }, [adminClient, realm]);
   
   useEffect(() => {
     const updateStatus = async () => {
-      const { tideKey, iga } = await checkTidecloakStatus();
-      setIsTidecloak(tideKey && iga);
+      const hasTideIdp = await checkTidecloakStatus();
+      setIsTidecloak(hasTideIdp);
     };
     updateStatus();
   }, [checkTidecloakStatus]);
@@ -94,14 +93,8 @@ export const DownloadDialog = ({
         return response.arrayBuffer();
       } else {
         // TIDECLOAK IMPLEMENTATION
-        const { tideKey, iga } = await checkTidecloakStatus();
-        const snippet = (tideKey && iga)
-          ? await adminClient.tideAdmin.getInstallationProviders({
+        const snippet = await adminClient.tideAdmin.getInstallationProviders({
             clientId: id,
-            providerId: selected,
-          })
-          : await adminClient.clients.getInstallationProviders({
-            id,
             providerId: selected,
           });
 
