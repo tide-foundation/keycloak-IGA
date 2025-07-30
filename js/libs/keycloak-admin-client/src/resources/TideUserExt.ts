@@ -83,6 +83,45 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
     path: "/change-set/clients/requests",
   });
 
+  public getRequestedChangesForRealmSettings = async (): Promise<RequestedChanges[]> => {
+    // Return dummy data for now
+    return [
+      {
+        action: "UPDATE",
+        changeSetType: "REALM_SETTINGS",
+        requestType: "REALM_CONFIG",
+        clientId: "realm-management",
+        actionType: "MODIFY",
+        draftRecordId: "realm-draft-001",
+        userRecord: [{
+          username: "admin",
+          proofDetailId: "proof-001",
+          clientId: "realm-management",
+          accessDraft: "PENDING"
+        }],
+        status: "PENDING_APPROVAL",
+        deleteStatus: "ACTIVE"
+      },
+      {
+        action: "CREATE",
+        changeSetType: "REALM_SETTINGS",
+        requestType: "THEME_CONFIG",
+        clientId: "realm-management",
+        actionType: "ADD",
+        draftRecordId: "realm-draft-002",
+        userRecord: [{
+          username: "admin",
+          proofDetailId: "proof-002",
+          clientId: "realm-management",
+          accessDraft: "PENDING"
+        }],
+        status: "PENDING_APPROVAL",
+        deleteStatus: "ACTIVE"
+      }
+    ];
+  };
+
+
   public approveDraftChangeSet = this.makeRequest<
   ChangeSetRequestList,
   string[]
@@ -106,6 +145,11 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
   >({
     method: "POST",
     path: "/change-set/commit/batch",
+  });
+
+  public offboardProvider = this.makeRequest<void, void>({
+    method: "POST",
+    path: "/offboard",
   });
 
   constructor(client: KeycloakAdminClient) {

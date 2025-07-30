@@ -51,7 +51,7 @@ export class TideProvider extends Resource<{ realm?: string }> {
 
     public toggleBifrost = this.makeRequest<FormData, Response>({
         method: "POST",
-        path: "/tide-idp-admin-resources/toggle-bifrost",
+        path: "/ragnarok/toggle-bifrost",
     });
 
     public addAuthorization = this.makeRequest<FormData, string>({
@@ -239,6 +239,12 @@ export class TideProvider extends Resource<{ realm?: string }> {
         urlParamKeys: ["error"],
         path: "/vendorResources/triggerAuthorizeEvent/{error}"
     })
+
+    public offboardProvider = this.makeRequest<void, void>({
+        method: "POST",
+        path: "/ragnarok/trigger-offboarding",
+    });
+
     constructor(client: KeycloakAdminClient) {
         super(client, {
             path: "/admin/realms/{realm}",
