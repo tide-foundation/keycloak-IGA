@@ -49,9 +49,9 @@ export class TideProvider extends Resource<{ realm?: string }> {
         },
     });
 
-    public toggleBifrost = this.makeRequest<FormData, Response>({
+    public toggleRagnarok = this.makeRequest<FormData, Response>({
         method: "POST",
-        path: "/ragnarok/toggle-bifrost",
+        path: "/ragnarok/toggle-ragnarok",
     });
 
     public addAuthorization = this.makeRequest<FormData, string>({

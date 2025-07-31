@@ -3,7 +3,7 @@ import { Spinner, Card, CardBody, CardTitle, Badge, ExpandableSection } from "@p
 import { useAdminClient } from "../admin-client";
 import RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges";
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
-import { Button, ButtonVariant } from "@patternfly/react-core";
+import { Button } from "@patternfly/react-core";
 import { CheckIcon, TimesIcon, AngleRightIcon, AngleDownIcon } from "@patternfly/react-icons";
 
 interface RealmSettingsChangeRequestsListProps {
@@ -27,9 +27,8 @@ export const RealmSettingsChangeRequestsList = ({ updateCounter }: RealmSettings
   const loadRealmSettingsRequests = async () => {
     try {
       setLoading(true);
-      const requests = await adminClient.tideUsersExt.getRequestedChangesForRealmSettings();
+      const requests = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
       setRealmSettingsRequests(requests);
-      // Update counter with bundle count, not individual request count
       const bundleCount = groupRequestsByDraftId(requests).length;
       updateCounter(bundleCount);
     } catch (error) {

@@ -220,7 +220,7 @@ const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDi
                   {t("importKeys")}
                 </DropdownItem>,
               ]
-               : []),
+              : []),
           ...(provider?.alias === "tide" && toggleOffboardingDialog ? [
             <DropdownItem key="offboard" onClick={() => toggleOffboardingDialog()}>
               {t("offboard", "Offboard")}
@@ -526,6 +526,11 @@ export default function DetailSettings() {
       /** TIDECLOAK IMPLEMENTATION end */
       reset(p);
       addAlert(t("updateSuccessIdentityProvider"), AlertVariant.success);
+      /** TIDECLOAK IMPLEMENTATION start */
+      const data = new FormData();
+      data.append("isRagnarokEnabled", form.getValues("config.backupOn"));
+      await adminClient.tideAdmin.toggleRagnarok(data)
+      /** TIDECLOAK IMPLEMENTATION end */
     } catch (error) {
       addError("updateErrorIdentityProvider", error);
     }
@@ -580,7 +585,7 @@ export default function DetailSettings() {
 
   const [toggleOffboardingDialog, OffboardingConfirm] = useOffboardingDialog({
     titleKey: "offboardProvider",
-    messageKey: "offboardProviderConfirmation", 
+    messageKey: "offboardProviderConfirmation",
     confirmationText: "CONFIRM OFFBOARDING",
     onConfirm: async () => {
       try {
