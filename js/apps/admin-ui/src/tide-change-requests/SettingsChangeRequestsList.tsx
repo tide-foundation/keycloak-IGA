@@ -30,11 +30,13 @@ import { useAdminClient } from "../admin-client";
 import RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import { useAccess } from '../context/access/Access';
-import { useAlerts, useEnvironment  } from '@keycloak/keycloak-ui-shared';
+import { useAlerts, useEnvironment } from '@keycloak/keycloak-ui-shared';
+import { useRealm } from "../context/realm-context/RealmContext";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { groupRequestsByDraftId, BundledRequest } from './utils/bundleUtils';
 import { useCurrentUser } from '../utils/useCurrentUser';
 import { ApprovalEnclave } from "heimdall-tide";
+import { Modal, ModalVariant } from "@patternfly/react-core";
 
 
 interface SettingsChangeRequestsListProps {
@@ -50,8 +52,11 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const [key, setKey] = useState<number>(0);
   const [approveRecord, setApproveRecord] = useState<boolean>(false);
   const [commitRecord, setCommitRecord] = useState<boolean>(false);
+  const [showEmailConfirmModal, setShowEmailConfirmModal] = useState<boolean>(false);
+  const [userCount, setUserCount] = useState<number>(0);
   const { keycloak } = useEnvironment();
-  
+  const { realmRepresentation } = useRealm();
+
 
   const refresh = () => {
     setSelectedRow([]);
@@ -124,7 +129,7 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
       const allRequests = selectedRow.flatMap(bundle => bundle.requests);
       const changeRequests = allRequests.map(x => ({
         changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType || "RAGNAROK",
+        changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
@@ -173,9 +178,20 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const handleCommit = async () => {
     try {
       const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+      const hasRagnarokRequest = allRequests.some(req => req.changeSetType.toLowerCase() === "ragnarok");
+      
+      if (hasRagnarokRequest) {
+        // Get user count and show modal BEFORE committing
+        const users = await adminClient.users.find();
+        setUserCount(users.length);
+        setShowEmailConfirmModal(true);
+        return; // Wait for user decision
+      }
+
+      // No Ragnarok request, proceed with normal commit
       const changeRequests = allRequests.map(x => ({
         changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType || "RAGNAROK",
+        changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
@@ -184,6 +200,59 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
       refresh();
     } catch (error: any) {
       addAlert(error.responseData || "Failed to commit request", AlertVariant.danger);
+    }
+  };
+
+  const handleSendEmails = async () => {
+    try {
+      // First commit the changeset
+      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
+      
+      // Then send emails
+      const users = await adminClient.users.find();
+      await Promise.all(
+        users.map(user =>
+          adminClient.users.executeActionsEmail({
+            id: user.id!,
+            actions: ["UPDATE_PASSWORD"],
+            lifespan: 43200,
+          })
+        )
+      );
+      
+      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      addAlert(t(`Settings committed and emails sent to ${userCount} users`), AlertVariant.success);
+      setShowEmailConfirmModal(false);
+      refresh();
+    } catch (error: any) {
+      addAlert(error.responseData || "Failed to send emails", AlertVariant.danger);
+      setShowEmailConfirmModal(false);
+    }
+  };
+
+  const handleSkipEmails = async () => {
+    try {
+      // Commit the changeset without sending emails
+      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
+      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      addAlert(t("Settings change request committed"), AlertVariant.success);
+      setShowEmailConfirmModal(false);
+      refresh();
+    } catch (error: any) {
+      addAlert(error.responseData || "Failed to commit request", AlertVariant.danger);
+      setShowEmailConfirmModal(false);
     }
   };
 
@@ -388,6 +457,54 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
         />
       </div>
       <CancelConfirm />
+      
+      <Modal
+        variant={ModalVariant.small}
+        title="Send Password Reset Emails"
+        isOpen={showEmailConfirmModal}
+        onClose={() => setShowEmailConfirmModal(false)}
+        actions={
+          !realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 
+            ? [
+                <Button key="send" variant="primary" onClick={handleSkipEmails}>
+                  Continue with offboarding
+                </Button>,
+                <Button key="close" variant="primary" onClick={() => setShowEmailConfirmModal(false)}>
+                  Close
+                </Button>
+              ]
+            : [
+                <Button key="send" variant="primary" onClick={handleSendEmails}>
+                  Send Emails to {userCount} Users and Offboard
+                </Button>,
+                <Button key="skip" variant="secondary" onClick={handleSkipEmails}>
+                  Skip Email Notification
+                </Button>,
+              ]
+        }
+      >
+        <TextContent>
+          {!realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 ? (
+            <>
+              <Text>
+                A Ragnarok (offboarding) request is ready to be committed, which will affect {userCount} users in the realm.
+              </Text>
+              <Text className="pf-v5-u-mt-md pf-v5-u-color-danger">
+                <strong>No SMTP server is configured for this realm.</strong> You will need to manually email users to reset their passwords.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text>
+                A Ragnarok (offboarding) request has been committed. Would you like to send password reset emails to all {userCount} users in the realm?
+              </Text>
+              <Text className="pf-v5-u-mt-md pf-v5-u-color-200">
+                This will require all users to reset their passwords within 12 hours.
+              </Text>
+            </>
+          )}
+        </TextContent>
+      </Modal>
     </>
   );
 };
