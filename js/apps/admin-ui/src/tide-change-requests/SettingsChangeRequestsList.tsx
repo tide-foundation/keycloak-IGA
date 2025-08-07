@@ -491,8 +491,8 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-danger">
                 <strong>No SMTP server is configured for this realm.</strong> You will need to manually email user/s to reset their passwords.
-                <br>
-                <br>
+                <br/>
+                <br/>
                 <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
 
               </Text>
@@ -504,8 +504,8 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-200">
                 This will require all users to reset their passwords within 12 hours.
-                <br>
-                <br>
+                <br/>
+                <br/>
                 <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
               </Text>
             </>
