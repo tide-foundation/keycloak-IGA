@@ -429,7 +429,7 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={false}
+          isRadio={true}
           loader={loader}
           ariaLabelKey="Settings Change Requests"
           detailColumns={[
@@ -487,19 +487,26 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
           {!realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 ? (
             <>
               <Text>
-                A Ragnarok (offboarding) request is ready to be committed, which will affect {userCount} users in the realm.
+                A Ragnarok (offboarding) request is ready to be committed, which will affect <strong>{userCount}</strong> user/s in the realm.
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-danger">
-                <strong>No SMTP server is configured for this realm.</strong> You will need to manually email users to reset their passwords.
+                <strong>No SMTP server is configured for this realm.</strong> You will need to manually email user/s to reset their passwords.
+                <br>
+                <br>
+                <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
+
               </Text>
             </>
           ) : (
             <>
               <Text>
-                A Ragnarok (offboarding) request has been committed. Would you like to send password reset emails to all {userCount} users in the realm?
+                A Ragnarok (offboarding) request has been committed. Would you like to send password reset emails to all {userCount} user/s in the realm?
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-200">
                 This will require all users to reset their passwords within 12 hours.
+                <br>
+                <br>
+                <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
               </Text>
             </>
           )}

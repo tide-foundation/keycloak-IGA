@@ -538,7 +538,7 @@ export default function ChangeRequestsSection() {
               <>
                 <TabTitleText>Settings</TabTitleText>
                 {realmSettingsRequestCount > 0 && (
-                  <Label color="orange" className="keycloak-admin--role-mapping__client-name pf-v5-u-ml-sm">
+                  <Label className="keycloak-admin--role-mapping__client-name pf-v5-u-ml-sm">
                     {realmSettingsRequestCount}
                   </Label>
                 )}
