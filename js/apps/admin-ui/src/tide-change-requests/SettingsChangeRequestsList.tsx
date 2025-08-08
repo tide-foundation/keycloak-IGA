@@ -38,7 +38,6 @@ import { useCurrentUser } from '../utils/useCurrentUser';
 import { ApprovalEnclave } from "heimdall-tide";
 import { Modal, ModalVariant } from "@patternfly/react-core";
 
-
 interface SettingsChangeRequestsListProps {
   updateCounter: (count: number) => void;
 }
@@ -54,9 +53,11 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const [commitRecord, setCommitRecord] = useState<boolean>(false);
   const [showEmailConfirmModal, setShowEmailConfirmModal] = useState<boolean>(false);
   const [userCount, setUserCount] = useState<number>(0);
+  // New state for email sending/loading
+  const [isEmailing, setIsEmailing] = useState<boolean>(false);
+
   const { keycloak } = useEnvironment();
   const { realmRepresentation } = useRealm();
-
 
   const refresh = () => {
     setSelectedRow([]);
@@ -144,7 +145,9 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
             voucherURL: "",
             signed_client_origin: "",
             vendorId: ""
-          }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
+          }).init([keycloak.tokenParsed![
+            'vuid']
+          ], respObj.uri);
           const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "Offboard:1", respObj.expiry, "base64url");
 
           if (authApproval.draft === respObj.changeSetRequests) {
@@ -204,18 +207,11 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   };
 
   const handleSendEmails = async () => {
+    setIsEmailing(true);
     try {
-      // First commit the changeset
-      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => ({
-        changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType,
-        actionType: x.actionType,
-      }));
-
-      
       // Then send emails
       const users = await adminClient.users.find();
+      setUserCount(users.length);
       await Promise.all(
         users.map(user =>
           adminClient.users.executeActionsEmail({
@@ -226,6 +222,14 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
         )
       );
       
+      // Commit the changeset after emails
+      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
       await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
       addAlert(t(`Settings committed and emails sent to ${userCount} users`), AlertVariant.success);
       setShowEmailConfirmModal(false);
@@ -233,10 +237,13 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     } catch (error: any) {
       addAlert(error.responseData || "Failed to send emails", AlertVariant.danger);
       setShowEmailConfirmModal(false);
+    } finally {
+      setIsEmailing(false);
     }
   };
 
   const handleSkipEmails = async () => {
+    setIsEmailing(true);
     try {
       // Commit the changeset without sending emails
       const allRequests = selectedRow.flatMap(bundle => bundle.requests);
@@ -253,6 +260,8 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     } catch (error: any) {
       addAlert(error.responseData || "Failed to commit request", AlertVariant.danger);
       setShowEmailConfirmModal(false);
+    } finally {
+      setIsEmailing(false);
     }
   };
 
@@ -355,12 +364,12 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     >
       <Thead>
         <Tr>
-          <Th width={15}>Action</Th>
-          <Th width={15}>Request Type</Th>
-          <Th width={15}>Change Set Type</Th>
-          <Th width={15}>Action Type</Th>
+          <Th width={10}>Action</Th>
+          <Th width={20} modifier="wrap">Request Type</Th>
+          <Th width={20} modifier="wrap">Change Set Type</Th>
+          <Th width={10} modifier="wrap">Action Type</Th>
           <Th width={10}>Status</Th>
-          <Th width={15}>Realm ID</Th>
+          <Th width={10}>Realm ID</Th>
         </Tr>
       </Thead>
       <Tbody>
@@ -412,11 +421,6 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
       }
     },
     {
-      name: 'Requested By',
-      displayKey: 'Requested By',
-      cellRenderer: (bundle: BundledRequest) => bundle.requestedBy || currentUser?.username || t("unknown")
-    },
-    {
       name: 'Status',
       displayKey: 'Status',
       cellRenderer: (bundle: BundledRequest) => bundleStatusLabel(bundle)
@@ -466,19 +470,19 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
         actions={
           !realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 
             ? [
-                <Button key="send" variant="primary" onClick={handleSkipEmails}>
-                  Continue with offboarding
+                <Button key="send" variant="primary" onClick={handleSkipEmails} isDisabled={isEmailing}>
+                  {isEmailing ? <Spinner size="sm" /> : t("Continue with offboarding")}
                 </Button>,
-                <Button key="close" variant="primary" onClick={() => setShowEmailConfirmModal(false)}>
-                  Close
+                <Button key="close" variant="primary" onClick={() => setShowEmailConfirmModal(false)} isDisabled={isEmailing}>
+                  {t("Close")}
                 </Button>
               ]
             : [
-                <Button key="send" variant="primary" onClick={handleSendEmails}>
-                  Send Emails to {userCount} Users and Offboard
+                <Button key="send" variant="primary" onClick={handleSendEmails} isDisabled={isEmailing}>
+                  {isEmailing ? <Spinner size="sm" /> : `Send Emails to ${userCount} Users and Offboard`}
                 </Button>,
-                <Button key="skip" variant="secondary" onClick={handleSkipEmails}>
-                  Skip Email Notification
+                <Button key="skip" variant="secondary" onClick={handleSkipEmails} isDisabled={isEmailing}>
+                  {isEmailing ? <Spinner size="sm" /> : t("Skip Email Notification")}
                 </Button>,
               ]
         }
@@ -491,10 +495,8 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-danger">
                 <strong>No SMTP server is configured for this realm.</strong> You will need to manually email user/s to reset their passwords.
-                <br/>
-                <br/>
+                <br/><br/>
                 <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
-
               </Text>
             </>
           ) : (
@@ -504,8 +506,7 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-200">
                 This will require all users to reset their passwords within 12 hours.
-                <br/>
-                <br/>
+                <br/><br/>
                 <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
               </Text>
             </>

@@ -235,7 +235,7 @@ export default function ChangeRequestsSection() {
           return (
             <div>
               <div className="pf-v5-u-font-weight-bold">
-                {request.action} {request.requestType}
+                {request.action}
               </div>
               <div className="pf-v5-u-color-200">
                 {request.role ? `Role: ${request.role}` : ''} {request.clientId ? `• Client: ${request.clientId}` : ''}
@@ -257,11 +257,6 @@ export default function ChangeRequestsSection() {
           );
         }
       }
-    },
-    {
-      name: 'Requested By',
-      displayKey: 'Requested By',
-      cellRenderer: (bundle: any) => bundle.requestedBy
     },
     {
       name: 'Status',
@@ -330,14 +325,14 @@ export default function ChangeRequestsSection() {
     >
       <Thead>
         <Tr>
-          <Th width={15}>Action</Th>
-          <Th width={15}>Role</Th>
-          <Th width={15}>Client ID</Th>
-          <Th width={15}>Type</Th>
+          <Th width={10}>Action</Th>
+          <Th width={10}>Role</Th>
+          <Th width={10}>Client ID</Th>
+          <Th width={10}>Type</Th>
           <Th width={10}>Status</Th>
-          <Th width={15}>Affected User</Th>
-          <Th width={15}>Affected Client</Th>
-          <Th width={30}>Access Draft</Th>
+          <Th width={15} modifier="wrap">Affected User</Th>
+          <Th width={15} modifier="wrap">Affected Client</Th>
+          <Th width={40}>Access Draft</Th>
         </Tr>
       </Thead>
       <Tbody>

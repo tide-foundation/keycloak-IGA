@@ -260,7 +260,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           return (
             <div>
               <div className="pf-v5-u-font-weight-bold">
-                {request.action} {request.requestType}
+                {request.action}
               </div>
               <div className="pf-v5-u-color-200">
                 {request.role ? `Role: ${request.role}` : ''} {request.clientId ? `• Client: ${request.clientId}` : ''}
@@ -282,11 +282,6 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           );
         }
       }
-    },
-    {
-      name: 'Requested By',
-      displayKey: 'Requested By',
-      cellRenderer: (bundle: BundledRequest) => bundle.requestedBy
     },
     {
       name: 'Status',
@@ -344,14 +339,14 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     >
       <Thead>
         <Tr>
-          <Th width={15}>Action</Th>
-          <Th width={15}>Role</Th>
-          <Th width={15}>Client ID</Th>
-          <Th width={15}>Type</Th>
+          <Th width={10}>Action</Th>
+          <Th width={10}>Role</Th>
+          <Th width={10}>Client ID</Th>
+          <Th width={10}>Type</Th>
           <Th width={10}>Status</Th>
-          <Th width={15}>Affected User</Th>
-          <Th width={15}>Affected Client</Th>
-          <Th width={30}>Access Draft</Th>
+          <Th width={15} modifier="wrap">Affected User</Th>
+          <Th width={15} modifier="wrap">Affected Client</Th>
+          <Th width={40}>Access Draft</Th>
         </Tr>
       </Thead>
       <Tbody>
@@ -422,12 +417,20 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           isPaginated
           onSelect={(value: BundledRequest[]) => setSelectedRow([...value])}
           emptyState={
-            <EmptyState variant="lg">
-              <TextContent>
-                <Text>No requested changes found.</Text>
-              </TextContent>
-            </EmptyState>
-          }
+                    <>
+                      <EmptyState variant="lg">
+                        <TextContent>
+                          <Text>No requested changes found.</Text>
+                          {isTideEnabled && (
+                            <Button variant="secondary" onClick={() => setShowModal(true)}>
+                              {t("Generate Default")}
+                            </Button>
+                          )}
+                        </TextContent>
+                      </EmptyState>
+                    </>
+
+                  }
         />
       </div>
     </>
