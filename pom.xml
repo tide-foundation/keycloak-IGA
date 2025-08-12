@@ -177,7 +177,7 @@
         <junit.version>4.13.2</junit.version>
         <picketlink.version>2.7.0.Final</picketlink.version>
         <!-- Needs to be aligned with Quarkus, handled in quarkus/set-quarkus-version.sh script -->
-        <version.surefire.plugin>3.5.3</version.surefire.plugin>
+        <surefire-plugin.version>3.0.0-M7</surefire-plugin.version>
         <xml-apis.version>1.4.01</xml-apis.version>
         <subethasmtp.version>3.1.7</subethasmtp.version>
         <assertj-core.version>3.22.0</assertj-core.version>
