@@ -30,55 +30,13 @@ import { useAdminClient } from "../admin-client";
 import RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import { useAccess } from '../context/access/Access';
-import { useAlerts, useEnvironment  } from '@keycloak/keycloak-ui-shared';
+import { useAlerts, useEnvironment } from '@keycloak/keycloak-ui-shared';
+import { useRealm } from "../context/realm-context/RealmContext";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { groupRequestsByDraftId, BundledRequest } from './utils/bundleUtils';
 import { useCurrentUser } from '../utils/useCurrentUser';
 import { ApprovalEnclave } from "heimdall-tide";
-
-/** TIDECLOAK IMPLEMENTATION START */
-interface ReconfirmDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  changesetType: string;
-}
-
-const ReconfirmDialog = ({ isOpen, onClose, onConfirm, changesetType }: ReconfirmDialogProps) => {
-  const { t } = useTranslation();
-  
-  if (!isOpen) return null;
-  
-  return (
-    <div className="pf-v5-c-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="pf-v5-c-modal-box pf-m-sm" style={{ position: 'relative', top: 'auto' }}>
-        <div className="pf-v5-c-modal-box__header">
-          <h1 className="pf-v5-c-modal-box__title">
-            {t("confirmAction", "Confirm Action")}
-          </h1>
-        </div>
-        <div className="pf-v5-c-modal-box__body">
-          <p>
-            {changesetType === "OFFBOARD" 
-              ? t("confirmOffboardAction", "Are you sure you want to proceed with the OFFBOARD action? This action cannot be undone.")
-              : t("confirmRagnarokAction", "Are you sure you want to proceed with the Ragnarok action? This action cannot be undone.")
-            }
-          </p>
-        </div>
-        <div className="pf-v5-c-modal-box__footer">
-          <Button variant="danger" onClick={onConfirm}>
-            {t("confirm", "Confirm")}
-          </Button>
-          <Button variant="link" onClick={onClose}>
-            {t("cancel", "Cancel")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-/** TIDECLOAK IMPLEMENTATION END */
-
+import { Modal, ModalVariant } from "@patternfly/react-core";
 
 interface SettingsChangeRequestsListProps {
   updateCounter: (count: number) => void;
@@ -93,12 +51,13 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const [key, setKey] = useState<number>(0);
   const [approveRecord, setApproveRecord] = useState<boolean>(false);
   const [commitRecord, setCommitRecord] = useState<boolean>(false);
+  const [showEmailConfirmModal, setShowEmailConfirmModal] = useState<boolean>(false);
+  const [userCount, setUserCount] = useState<number>(0);
+  // New state for email sending/loading
+  const [isEmailing, setIsEmailing] = useState<boolean>(false);
+
   const { keycloak } = useEnvironment();
-  
-  /** TIDECLOAK IMPLEMENTATION START */
-  const [reconfirmDialog, setReconfirmDialog] = useState({ isOpen: false, changesetType: "" });
-  /** TIDECLOAK IMPLEMENTATION END */
-  
+  const { realmRepresentation } = useRealm();
 
   const refresh = () => {
     setSelectedRow([]);
@@ -171,7 +130,7 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
       const allRequests = selectedRow.flatMap(bundle => bundle.requests);
       const changeRequests = allRequests.map(x => ({
         changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType || "RAGNAROK",
+        changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
@@ -186,7 +145,9 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
             voucherURL: "",
             signed_client_origin: "",
             vendorId: ""
-          }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
+          }).init([keycloak.tokenParsed![
+            'vuid']
+          ], respObj.uri);
           const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "Offboard:1", respObj.expiry, "base64url");
 
           if (authApproval.draft === respObj.changeSetRequests) {
@@ -218,21 +179,22 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   };
 
   const handleCommit = async () => {
-    /** TIDECLOAK IMPLEMENTATION START */
-    const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-    const changesetType = allRequests[0]?.changeSetType;
-    
-    // Check if this is OFFBOARD or Ragnarok changeset that needs reconfirmation
-    if (changesetType === "OFFBOARD" || changesetType === "RAGNAROK") {
-      setReconfirmDialog({ isOpen: true, changesetType });
-      return;
-    }
-    /** TIDECLOAK IMPLEMENTATION END */
-    
     try {
+      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+      const hasRagnarokRequest = allRequests.some(req => req.changeSetType.toLowerCase() === "ragnarok");
+      
+      if (hasRagnarokRequest) {
+        // Get user count and show modal BEFORE committing
+        const users = await adminClient.users.find();
+        setUserCount(users.length);
+        setShowEmailConfirmModal(true);
+        return; // Wait for user decision
+      }
+
+      // No Ragnarok request, proceed with normal commit
       const changeRequests = allRequests.map(x => ({
         changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType || "RAGNAROK",
+        changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
@@ -244,26 +206,64 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     }
   };
 
-  /** TIDECLOAK IMPLEMENTATION START */
-  const handleReconfirmCommit = async () => {
-    setReconfirmDialog({ isOpen: false, changesetType: "" });
-    
+  const handleSendEmails = async () => {
+    setIsEmailing(true);
     try {
+      // Then send emails
+      const users = await adminClient.users.find();
+      setUserCount(users.length);
+      await Promise.all(
+        users.map(user =>
+          adminClient.users.executeActionsEmail({
+            id: user.id!,
+            actions: ["UPDATE_PASSWORD"],
+            lifespan: 43200,
+          })
+        )
+      );
+      
+      // Commit the changeset after emails
       const allRequests = selectedRow.flatMap(bundle => bundle.requests);
       const changeRequests = allRequests.map(x => ({
         changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType || "RAGNAROK", 
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
+      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      addAlert(t(`Settings committed and emails sent to ${userCount} users`), AlertVariant.success);
+      setShowEmailConfirmModal(false);
+      refresh();
+    } catch (error: any) {
+      addAlert(error.responseData || "Failed to send emails", AlertVariant.danger);
+      setShowEmailConfirmModal(false);
+    } finally {
+      setIsEmailing(false);
+    }
+  };
+
+  const handleSkipEmails = async () => {
+    setIsEmailing(true);
+    try {
+      // Commit the changeset without sending emails
+      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
       await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
       addAlert(t("Settings change request committed"), AlertVariant.success);
+      setShowEmailConfirmModal(false);
       refresh();
     } catch (error: any) {
       addAlert(error.responseData || "Failed to commit request", AlertVariant.danger);
+      setShowEmailConfirmModal(false);
+    } finally {
+      setIsEmailing(false);
     }
   };
-  /** TIDECLOAK IMPLEMENTATION END */
 
   const [toggleCancelDialog, CancelConfirm] = useConfirmDialog({
     titleKey: "Cancel Settings Change Request",
@@ -364,12 +364,12 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     >
       <Thead>
         <Tr>
-          <Th width={15}>Action</Th>
-          <Th width={15}>Request Type</Th>
-          <Th width={15}>Change Set Type</Th>
-          <Th width={15}>Action Type</Th>
+          <Th width={10}>Action</Th>
+          <Th width={20} modifier="wrap">Request Type</Th>
+          <Th width={20} modifier="wrap">Change Set Type</Th>
+          <Th width={10} modifier="wrap">Action Type</Th>
           <Th width={10}>Status</Th>
-          <Th width={15}>Realm ID</Th>
+          <Th width={10}>Realm ID</Th>
         </Tr>
       </Thead>
       <Tbody>
@@ -421,11 +421,6 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
       }
     },
     {
-      name: 'Requested By',
-      displayKey: 'Requested By',
-      cellRenderer: (bundle: BundledRequest) => bundle.requestedBy || currentUser?.username || t("unknown")
-    },
-    {
       name: 'Status',
       displayKey: 'Status',
       cellRenderer: (bundle: BundledRequest) => bundleStatusLabel(bundle)
@@ -438,7 +433,7 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={false}
+          isRadio={true}
           loader={loader}
           ariaLabelKey="Settings Change Requests"
           detailColumns={[
@@ -466,14 +461,58 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
         />
       </div>
       <CancelConfirm />
-      {/** TIDECLOAK IMPLEMENTATION START */}
-      <ReconfirmDialog
-        isOpen={reconfirmDialog.isOpen}
-        onClose={() => setReconfirmDialog({ isOpen: false, changesetType: "" })}
-        onConfirm={handleReconfirmCommit}
-        changesetType={reconfirmDialog.changesetType}
-      />
-      {/** TIDECLOAK IMPLEMENTATION END */}
+      
+      <Modal
+        variant={ModalVariant.small}
+        title="Send Password Reset Emails"
+        isOpen={showEmailConfirmModal}
+        onClose={() => setShowEmailConfirmModal(false)}
+        actions={
+          !realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 
+            ? [
+                <Button key="send" variant="primary" onClick={handleSkipEmails} isDisabled={isEmailing}>
+                  {isEmailing ? <Spinner size="sm" /> : t("Continue with offboarding")}
+                </Button>,
+                <Button key="close" variant="primary" onClick={() => setShowEmailConfirmModal(false)} isDisabled={isEmailing}>
+                  {t("Close")}
+                </Button>
+              ]
+            : [
+                <Button key="send" variant="primary" onClick={handleSendEmails} isDisabled={isEmailing}>
+                  {isEmailing ? <Spinner size="sm" /> : `Send Emails to ${userCount} Users and Offboard`}
+                </Button>,
+                <Button key="skip" variant="secondary" onClick={handleSkipEmails} isDisabled={isEmailing}>
+                  {isEmailing ? <Spinner size="sm" /> : t("Skip Email Notification")}
+                </Button>,
+              ]
+        }
+      >
+        <TextContent>
+          {!realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 ? (
+            <>
+              <Text>
+                A Ragnarok (offboarding) request is ready to be committed, which will affect <strong>{userCount}</strong> user/s in the realm.
+              </Text>
+              <Text className="pf-v5-u-mt-md pf-v5-u-color-danger">
+                <strong>No SMTP server is configured for this realm.</strong> You will need to manually email user/s to reset their passwords.
+                <br/><br/>
+                <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text>
+                A Ragnarok (offboarding) request has been committed. Would you like to send password reset emails to all {userCount} user/s in the realm?
+              </Text>
+              <Text className="pf-v5-u-mt-md pf-v5-u-color-200">
+                This will require all users to reset their passwords within 12 hours.
+                <br/><br/>
+                <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
+              </Text>
+            </>
+          )}
+        </TextContent>
+      </Modal>
     </>
   );
 };
