@@ -256,6 +256,8 @@ public class UserSessionAdapter<T extends SessionRefreshStore & UserSessionProvi
             }
         };
 
+        getUser().setLastSessionRefreshTime(lastSessionRefresh);
+
         update(task);
     }
 
