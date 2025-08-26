@@ -123,6 +123,10 @@ export class TideProvider extends Resource<{ realm?: string }> {
         path: "/vendorResources/generate-initial-key",
     });
 
+    public reAddTideKey = this.makeRequest<void, Response>({
+        method: "POST",
+        path: "/vendorResources/readd-tide-key",
+    });
     public signIdpSettings = this.makeRequest<void, Response>({
         method: "POST",
         path: "/vendorResources/sign-idp-settings",
