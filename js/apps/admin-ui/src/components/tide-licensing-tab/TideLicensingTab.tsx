@@ -47,9 +47,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
 
   const [hasTideIdpPresent, setHasTideIdpPresent] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
-  const [showResign, setShowResign] = useState(false);
-
-
 
 
   const [key, setKey] = useState(0);
@@ -76,12 +73,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     "config.initialSessionId",
     "config.systemHomeOrk"
   ] as const;
-  useEffect(() => {
-    const qs = new URLSearchParams(window.location.search);
-    if (qs.get("advanced") === "1" || localStorage.getItem("tide.showResign") === "1") {
-      setShowResign(true);
-    }
-  }, []);
+
   const signSettings = async () => {
     const tideComponent = await findTideComponent(adminClient, realm);
     if (tideComponent) {
@@ -578,33 +570,18 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
                       {secureStatus === "secure" ? (
                         <Label color="green" className="pf-v5-u-mr-lg">{t("Secure")}</Label>
                       ) : (
-                        <div>
-                          <Label color="red" className="pf-v5-u-font-weight-bold pf-v5-u-mr-lg">
-                            {t("Failed")}
-                          </Label>
-                          <Button
-                            type="button"
-                            variant={retryVariant} // outlined if secure, filled red if failed
-                            data-testid="secure-config-retry"
-                            onClick={signSettings}
-                          >
-                            {t("Retry")}
-                          </Button>
-                        </div>
+                        <Label color="red" className="pf-v5-u-font-weight-bold pf-v5-u-mr-lg">
+                          {t("Failed")}
+                        </Label>
                       )}
-
-                      {/* Hidden advanced control: only when secure AND explicitly enabled */}
-                      {secureStatus === "secure" && showResign && (
-                        <Button
-                          type="button"
-                          variant="link"
-                          data-testid="resign-anyway"
-                          onClick={signSettings}
-                          className="pf-v5-u-ml-md"
-                        >
-                          {t("Re-sign anyway")}
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant={retryVariant} // outlined if secure, filled red if failed
+                        data-testid="secure-config-retry"
+                        onClick={signSettings}
+                      >
+                        {t("Retry")}
+                      </Button>
                     </div>
                   </FormGroup>
                 </>
