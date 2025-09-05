@@ -529,9 +529,9 @@ export default function DetailSettings() {
       reset(p);
       addAlert(t("updateSuccessIdentityProvider"), AlertVariant.success);
       /** TIDECLOAK IMPLEMENTATION start */
-      const data = new FormData();
-      data.append("isRagnarokEnabled", form.getValues("config.backupOn"));
-      await adminClient.tideAdmin.toggleRagnarok(data)
+      // const data = new FormData();
+      // data.append("isRagnarokEnabled", form.getValues("config.backupOn"));
+      // await adminClient.tideAdmin.toggleRagnarok(data)
       /** TIDECLOAK IMPLEMENTATION end */
     } catch (error) {
       addError("updateErrorIdentityProvider", error);

@@ -30,8 +30,8 @@ import { ChangeRequestsTab, toChangeRequests } from './routes/ChangeRequests';
 import { useRealm } from "../context/realm-context/RealmContext";
 import { RolesChangeRequestsList } from "./RolesChangeRequestsList"
 import { ClientChangeRequestsList } from './ClientChangeRequestsList';
-import { RealmSettingsChangeRequestsList } from './RealmSettingsChangeRequestsList';
-import { SettingsChangeRequestsList } from './SettingsChangeRequestsList';
+// import { RealmSettingsChangeRequestsList } from './RealmSettingsChangeRequestsList';
+// import { SettingsChangeRequestsList } from './SettingsChangeRequestsList';
 import { groupRequestsByDraftId } from './utils/bundleUtils';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { useAccess } from '../context/access/Access';
@@ -430,11 +430,11 @@ export default function ChangeRequestsSection() {
   });
 
 
-  const updateSettingsCounter = (counter: number) => {
-    if (counter !== realmSettingsRequestCount) {
-      setRealmSettingsRequestCount(counter);
-    }
-  };
+  // const updateSettingsCounter = (counter: number) => {
+  //   if (counter !== realmSettingsRequestCount) {
+  //     setRealmSettingsRequestCount(counter);
+  //   }
+  // };
 
   return (
     <>
@@ -528,7 +528,7 @@ export default function ChangeRequestsSection() {
           >
             <ClientChangeRequestsList updateCounter={updateClientCounter} />
           </Tab>
-          <Tab
+          {/* <Tab
             title={
               <>
                 <TabTitleText>Settings</TabTitleText>
@@ -542,7 +542,7 @@ export default function ChangeRequestsSection() {
             {...settingsRequestsTab}
           >
             <SettingsChangeRequestsList updateCounter={updateSettingsCounter} />
-          </Tab>
+          </Tab> */}
         </RoutableTabs>
       </PageSection>
     </>
