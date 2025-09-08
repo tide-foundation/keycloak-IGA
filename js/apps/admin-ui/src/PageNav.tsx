@@ -184,6 +184,16 @@ export const PageNav = () => {
           )}
 
           {showConfigure && (
+            <NavGroup aria-label={t("forseti.nav")} title={t("forseti.nav")}>
+              <LeftNav title="forseti.routes" path="/forseti/routes" />
+              <LeftNav title="forseti.manifests" path="/forseti/manifests" />
+              <LeftNav title="forseti.catalog" path="/forseti/catalog" />
+              <LeftNav title="forseti.code" path="/forseti/code" />
+              <LeftNav title="forseti.policyBuilder.title" path="/forseti/policy-builder" />
+            </NavGroup>
+          )}
+
+          {showConfigure && (
             <NavGroup aria-label={t("configure")} title={t("configure")}>
               <LeftNav title="realmSettings" path="/realm-settings" />
               <LeftNav title="authentication" path="/authentication" />

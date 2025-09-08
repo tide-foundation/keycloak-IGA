@@ -22,6 +22,7 @@ import userFederationRoutes from "./user-federation/routes";
 import userRoutes from "./user/routes";
 import changeRequestsRoutes from "./tide-change-requests/routes"; // TIDE IMPLEMENTATION
 import tideKeyRoute from "./realm-settings/keys/routes"; // TIDE IMPLEMENTATION
+import forsetiRoutes from "./forseti/routes";
 
 export type AppRouteObjectHandle = {
   access: AccessType | AccessType[];
@@ -60,6 +61,7 @@ export const routes: AppRouteObject[] = [
   ...pageRoutes,
   ...changeRequestsRoutes, // TIDE IMPLEMENTATION
   ...tideKeyRoute, // TIDE IMPLEMENTATION
+  ...forsetiRoutes,
   NotFoundRoute,
 ];
 
