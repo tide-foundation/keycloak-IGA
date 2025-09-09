@@ -1,15 +1,6 @@
+
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardBody,
-  FormGroup,
-  TextInput,
-  Button,
-  Alert,
-  Progress,
-  ProgressMeasureLocation,
-  ClipboardCopy,
+  Card, CardHeader, CardTitle, CardBody, FormGroup, TextInput, Button, Alert, Progress, ProgressMeasureLocation, ClipboardCopy
 } from "@patternfly/react-core";
 import { RocketIcon } from "@patternfly/react-icons";
 import { useState, useCallback } from "react";
@@ -55,39 +46,24 @@ export function CompileActions({ state }: { state: BuilderState }) {
 
   return (
     <Card className="pf-v5-u-box-shadow-md">
-      <CardHeader><CardTitle className="pf-v5-u-font-size-lg"><RocketIcon className="pf-v5-u-mr-sm" /> {t("forseti.policyBuilder.compileDeploy", "Compile & Deploy")}</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="pf-v5-u-font-size-lg"><RocketIcon className="pf-v5-u-mr-sm" />{t("forseti.policyBuilder.compileDeploy", "Compile & Deploy")}</CardTitle></CardHeader>
       <CardBody className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-md">
         <FormGroup label={t("forseti.policyBuilder.publisherSig", "Publisher signature (optional)")} fieldId="ca-pub">
           <TextInput id="ca-pub" aria-label="Publisher signature" value={publisherSig} onChange={(_, v) => setPublisherSig(String(v))} />
         </FormGroup>
 
         <div className="pf-v5-u-display-flex pf-v5-u-gap-sm">
-          <Button onClick={compile} isDisabled={busy !== "idle"}>{busy === "compiling" ? t("compiling", "Compiling…") : t("forseti.policyBuilder.compile", "Compile")}</Button>
-          <Button variant="primary" onClick={upload} isDisabled={!assembly || busy !== "idle"}>{busy === "uploading" ? t("uploading", "Uploading…") : t("forseti.policyBuilder.upload", "Upload")}</Button>
+          <Button onClick={compile} isDisabled={busy != "idle"}>{busy == "compiling" ? t("common:compiling", "Compiling…") : t("forseti.policyBuilder.compile", "Compile")}</Button>
+          <Button variant="primary" onClick={upload} isDisabled={!assembly || busy != "idle"}>{busy == "uploading" ? t("common:uploading", "Uploading…") : t("forseti.policyBuilder.upload", "Upload")}</Button>
         </div>
 
-        {busy !== "idle" && <Progress measureLocation={ProgressMeasureLocation.top} title={busy === "compiling" ? t("compiling", "Compiling...") : t("uploading", "Uploading...")} />}
+        {busy != "idle" && <Progress measureLocation={ProgressMeasureLocation.top} title={busy == "compiling" ? t("common:compiling", "Compiling...") : t("common:uploading", "Uploading...")} />}
 
-        {error && <Alert isInline variant="danger" title={t("error", "Error")}>{error}</Alert>}
+        {error && <Alert isInline variant="danger" title={t("common:error", "Error")}>{error}</Alert>}
 
-        {diag && (
-          <FormGroup label={t("forseti.policyBuilder.diagnostics", "Diagnostics")} fieldId="ca-diag">
-            <ClipboardCopy id="ca-diag" isReadOnly variant="expansion">{diag}</ClipboardCopy>
-          </FormGroup>
-        )}
-
-        {bh && (
-          <FormGroup label={t("forseti.policyBuilder.buildHash", "Build hash (bh)")} fieldId="ca-bh">
-            <ClipboardCopy id="ca-bh" isReadOnly>{bh}</ClipboardCopy>
-          </FormGroup>
-        )}
-
-        {assembly && (
-          <FormGroup label={t("forseti.policyBuilder.assembly", "Assembly (base64)")} fieldId="ca-asm">
-            <ClipboardCopy id="ca-asm" isReadOnly variant="expansion">{assembly}</ClipboardCopy>
-          </FormGroup>
-        )}
-
+        {diag && (<FormGroup label={t("forseti.policyBuilder.diagnostics", "Diagnostics")} fieldId="ca-diag"><ClipboardCopy id="ca-diag" isReadOnly variant="expansion">{diag}</ClipboardCopy></FormGroup>)}
+        {bh && (<FormGroup label={t("forseti.policyBuilder.buildHash", "Build hash (bh)")} fieldId="ca-bh"><ClipboardCopy id="ca-bh" isReadOnly>{bh}</ClipboardCopy></FormGroup>)}
+        {assembly && (<FormGroup label={t("forseti.policyBuilder.assembly", "Assembly (base64)")} fieldId="ca-asm"><ClipboardCopy id="ca-asm" isReadOnly variant="expansion">{assembly}</ClipboardCopy></FormGroup>)}
         {uploaded && <Alert isInline variant="success" title={t("forseti.policyBuilder.uploadOk", "Uploaded!")}>{t("forseti.policyBuilder.uploadAck", "Server acknowledged")} <code>{uploaded.bh}</code></Alert>}
       </CardBody>
     </Card>

@@ -1,53 +1,35 @@
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardBody,
-  FormGroup,
-  Select,
-  SelectList,
-  SelectOption,
-  MenuToggle,
-  MenuToggleElement,
-  Button,
-  ActionList,
-  ActionListItem,
-  Divider,
-  TextInput,
-  Alert,
-  AlertVariant,
+  Card, CardHeader, CardTitle, CardBody, FormGroup,
+  Select, SelectList, SelectOption, MenuToggle, MenuToggleElement,
+  Button, ActionList, ActionListItem, Divider, TextInput, Alert, AlertVariant
 } from "@patternfly/react-core";
-import { PlusIcon, TrashIcon } from "@patternfly/react-icons";
+import { PlusIcon, TrashIcon, WrenchIcon, CodeIcon } from "@patternfly/react-icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BuilderState, Group, Clause, ClauseKind, ClauseOperator, GroupOperator } from "../../../types/policy-builder-types";
 import { FillBlanks } from "./FillBlanks";
 import { CodePreview } from "./CodePreview";
 
-interface Props {
-  state: BuilderState;
-  onChange: (s: BuilderState) => void;
-}
+interface Props { state: BuilderState; onChange: (s: BuilderState) => void; }
 
 export function RuleBuilder({ state, onChange }: Props) {
   const { t } = useTranslation();
   const [showPreview, setShowPreview] = useState(true);
+  const [focusedPath, setFocusedPath] = useState<string | null>(null);
+  const [pinnedPath, setPinnedPath] = useState<string | null>(null);
 
   const updateRoot = (root: Group) => onChange({ ...state, root });
   const setRootOp = (op: GroupOperator) => updateRoot({ ...state.root, op });
-
   const addClause = (path: number[] = []) => updateRoot(addClauseAt(state.root, path));
-  const addGroup = (path: number[] = []) => updateRoot(addGroupAt(state.root, path));
-  const removeAt = (path: number[]) => updateRoot(removeItemAt(state.root, path));
+  const addGroup  = (path: number[] = []) => updateRoot(addGroupAt(state.root, path));
+  const removeAt  = (path: number[]) => updateRoot(removeItemAt(state.root, path));
 
   return (
     <div className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-lg">
       <FillBlanks state={state} onChange={onChange} />
 
       <Card className="pf-v5-u-box-shadow-md">
-        <CardHeader>
-          <CardTitle className="pf-v5-u-font-size-lg">{t("forseti.policyBuilder.policyRules", "Policy Rules (Visual)")}</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="pf-v5-u-font-size-lg"><WrenchIcon className="pf-v5-u-mr-sm" />{t("forseti.policyBuilder.policyRules", "Policy Rules (Visual)")}</CardTitle></CardHeader>
         <CardBody>
           <FormGroup label={t("forseti.policyBuilder.rootLogic", "Root logic")} fieldId="rb-root-op">
             <GroupOperatorSelect value={state.root.op} onChange={setRootOp} id="rb-root-op" />
@@ -63,24 +45,13 @@ export function RuleBuilder({ state, onChange }: Props) {
             onAddGroup={addGroup}
             onRemove={removeAt}
             level={0}
+            onHoverPath={setFocusedPath}
           />
 
           <ActionList className="pf-v5-u-justify-content-flex-start pf-v5-u-mt-md">
-            <ActionListItem>
-              <Button variant="primary" icon={<PlusIcon />} onClick={() => addClause([])}>
-                {t("forseti.policyBuilder.addCondition", "Add Condition")}
-              </Button>
-            </ActionListItem>
-            <ActionListItem>
-              <Button variant="secondary" icon={<PlusIcon />} onClick={() => addGroup([])}>
-                {t("forseti.policyBuilder.addGroup", "Add Group")}
-              </Button>
-            </ActionListItem>
-            <ActionListItem>
-              <Button variant="link" onClick={() => setShowPreview((s) => !s)}>
-                {showPreview ? t("hidePreview", "Hide Preview") : t("showPreview", "Show Preview")}
-              </Button>
-            </ActionListItem>
+            <ActionListItem><Button variant="primary" icon={<PlusIcon />} onClick={() => addClause([])}>{t("forseti.policyBuilder.addCondition", "Add Condition")}</Button></ActionListItem>
+            <ActionListItem><Button variant="secondary" icon={<PlusIcon />} onClick={() => addGroup([])}>{t("forseti.policyBuilder.addGroup", "Add Group")}</Button></ActionListItem>
+            <ActionListItem><Button variant="link" icon={<CodeIcon />} onClick={() => setShowPreview((s) => !s)}>{showPreview ? t("common:hidePreview", "Hide Preview") : t("common:showPreview", "Show Preview")}</Button></ActionListItem>
           </ActionList>
 
           {state.root.items.length === 0 && (
@@ -91,7 +62,7 @@ export function RuleBuilder({ state, onChange }: Props) {
         </CardBody>
       </Card>
 
-      {showPreview && <CodePreview state={state} />}
+      {showPreview && <CodePreview state={state} highlightPath={pinnedPath || focusedPath} onHoverPath={setFocusedPath} onSelectPath={(p) => setPinnedPath(p)} />}
     </div>
   );
 }
@@ -121,79 +92,43 @@ function GroupOperatorSelect({ value, onChange, id }: { value: GroupOperator; on
 }
 
 function GroupEditor({
-  group,
-  path,
-  level,
-  onChange,
-  onAddClause,
-  onAddGroup,
-  onRemove,
+  group, path, level, onChange, onAddClause, onAddGroup, onRemove, onHoverPath,
 }: {
-  group: Group;
-  path: number[];
-  level: number;
-  onChange: (g: Group) => void;
-  onAddClause: (p: number[]) => void;
-  onAddGroup: (p: number[]) => void;
-  onRemove: (p: number[]) => void;
+  group: Group; path: number[]; level: number;
+  onChange: (g: Group) => void; onAddClause: (p: number[]) => void; onAddGroup: (p: number[]) => void; onRemove: (p: number[]) => void; onHoverPath: (p: string | null) => void;
 }) {
   const { t } = useTranslation();
-
   const updateAtIndex = (index: number, node: Group | Clause) => {
-    const items = [...group.items];
-    items[index] = node as any;
-    onChange({ ...group, items });
+    const items = [...group.items]; items[index] = node as any; onChange({ ...group, items });
   };
-
   return (
     <div className={level === 0 ? "" : "pf-v5-u-ml-lg pf-v5-u-pl-md pf-v5-u-border-left"}>
       {group.items.map((item, idx) => (
-        <div key={idx} className="pf-v5-u-mb-md pf-v5-u-p-md pf-v5-u-border pf-v5-u-border-radius-sm">
+        <div
+          key={idx}
+          className="pf-v5-u-mb-md pf-v5-u-p-md pf-v5-u-border pf-v5-u-border-radius-sm"
+          onMouseEnter={() => onHoverPath(`0.${[...path, idx].join(".")}`)}
+          onMouseLeave={() => onHoverPath(null)}
+        >
           {"items" in (item as any) ? (
             <>
               <FormGroup label={t("forseti.policyBuilder.groupLogic", "Group logic")} fieldId={`group-op-${path.join("-")}-${idx}`}>
-                <GroupOperatorSelect
-                  id={`group-op-${path.join("-")}-${idx}`}
-                  value={(item as Group).op}
-                  onChange={(op) => updateAtIndex(idx, { ...(item as Group), op })}
-                />
+                <GroupOperatorSelect id={`group-op-${path.join("-")}-${idx}`} value={(item as Group).op} onChange={(op) => updateAtIndex(idx, { ...(item as Group), op })} />
+              </FormGroup>
+              <FormGroup label={t("forseti.policyBuilder.subGroupLogic", "Subgroup logic")} fieldId={`group-gop-${path.join("-")}-${idx}`}>
+                <GroupOperatorSelect id={`group-gop-${path.join("-")}-${idx}`} value={(item as Group).groupOp ?? (item as Group).op} onChange={(op) => updateAtIndex(idx, { ...(item as Group), groupOp: op })} />
               </FormGroup>
 
-              <GroupEditor
-                group={item as Group}
-                path={[...path, idx]}
-                level={level + 1}
-                onChange={(g) => updateAtIndex(idx, g)}
-                onAddClause={onAddClause}
-                onAddGroup={onAddGroup}
-                onRemove={onRemove}
-              />
+              <GroupEditor group={item as Group} path={[...path, idx]} level={level + 1} onChange={(g) => updateAtIndex(idx, g)} onAddClause={onAddClause} onAddGroup={onAddGroup} onRemove={onRemove} onHoverPath={onHoverPath} />
 
               <ActionList className="pf-v5-u-justify-content-flex-start">
-                <ActionListItem>
-                  <Button variant="secondary" onClick={() => onAddClause([...path, idx])}>
-                    {t("forseti.policyBuilder.addCondition", "Add Condition")}
-                  </Button>
-                </ActionListItem>
-                <ActionListItem>
-                  <Button variant="secondary" onClick={() => onAddGroup([...path, idx])}>
-                    {t("forseti.policyBuilder.addGroup", "Add Group")}
-                  </Button>
-                </ActionListItem>
-                <ActionListItem>
-                  <Button variant="link" icon={<TrashIcon />} onClick={() => onRemove([...path, idx])}>
-                    {t("removeGroup", "Remove group")}
-                  </Button>
-                </ActionListItem>
+                <ActionListItem><Button variant="secondary" onClick={() => onAddClause([...path, idx])}>{t("forseti.policyBuilder.addCondition", "Add Condition")}</Button></ActionListItem>
+                <ActionListItem><Button variant="secondary" onClick={() => onAddGroup([...path, idx])}>{t("forseti.policyBuilder.addGroup", "Add Group")}</Button></ActionListItem>
+                <ActionListItem><Button variant="link" icon={<TrashIcon />} onClick={() => onRemove([...path, idx])}>{t("common:remove", "Remove")}</Button></ActionListItem>
               </ActionList>
             </>
           ) : (
-            <ClauseEditor
-              clause={item as Clause}
-              idx={`${path.join("-")}-${idx}`}
-              onChange={(c) => updateAtIndex(idx, c)}
-              onRemove={() => onRemove([...path, idx])}
-            />
+            <ClauseEditor clause={item as Clause} idx={`${path.join("-")}-${idx}`} onChange={(c) => updateAtIndex(idx, c)} onRemove={() => onRemove([...path, idx])} />
           )}
         </div>
       ))}
@@ -205,7 +140,6 @@ function ClauseEditor({ clause, onChange, onRemove, idx }: { clause: Clause; onC
   const { t } = useTranslation();
   const [kindOpen, setKindOpen] = useState(false);
   const [opOpen, setOpOpen] = useState(false);
-
   const update = (patch: Partial<Clause>) => onChange({ ...clause, ...patch });
 
   const operatorLabel: Record<ClauseOperator, string> = {
@@ -240,14 +174,7 @@ function ClauseEditor({ clause, onChange, onRemove, idx }: { clause: Clause; onC
 
       {clause.kind === "claim" && (
         <FormGroup label={t("forseti.policyBuilder.claimName", "Claim name")} fieldId={`clause-claim-${idx}`} isRequired>
-          <TextInput
-            id={`clause-claim-${idx}`}
-            value={clause.key ?? ""}
-            onChange={(_, v) => update({ key: String(v) })}
-            placeholder="role"
-            aria-label={t("forseti.policyBuilder.claimAria", "Claim key")}
-            validated={clause.key ? "default" : "error"}
-          />
+          <TextInput id={`clause-claim-${idx}`} value={clause.key ?? ""} onChange={(_, v) => update({ key: String(v) })} placeholder="role" aria-label={t("forseti.policyBuilder.claimAria", "Claim key")} validated={clause.key ? "default" : "error"} />
         </FormGroup>
       )}
 
@@ -274,64 +201,39 @@ function ClauseEditor({ clause, onChange, onRemove, idx }: { clause: Clause; onC
       </FormGroup>
 
       <FormGroup label={t("forseti.policyBuilder.value", "Value")} fieldId={`clause-val-${idx}`} isRequired>
-        <TextInput
-          id={`clause-val-${idx}`}
-          value={clause.value}
-          onChange={(_, v) => update({ value: String(v) })}
-          placeholder={clause.kind === "method" ? "GET" : clause.kind === "path" ? "/api/private" : "admin"}
-          aria-label={t("forseti.policyBuilder.valueAria", "Clause value")}
-          validated={clause.value ? "default" : "error"}
-        />
+        <TextInput id={`clause-val-${idx}`} value={clause.value} onChange={(_, v) => update({ value: String(v) })} placeholder={clause.kind === "method" ? "GET" : clause.kind === "path" ? "/api/private" : "admin"} aria-label={t("forseti.policyBuilder.valueAria", "Clause value")} validated={clause.value ? "default" : "error"} />
       </FormGroup>
 
       <ActionList className="pf-v5-u-justify-content-flex-start">
-        <ActionListItem>
-          <Button variant="link" icon={<TrashIcon />} onClick={onRemove}>
-            {t("remove", "Remove")}
-          </Button>
-        </ActionListItem>
+        <ActionListItem><Button variant="link" icon={<TrashIcon />} onClick={onRemove}>{t("common:remove", "Remove")}</Button></ActionListItem>
       </ActionList>
 
-      {/* Readable sentence */}
       <Alert isInline variant={AlertVariant.info} title={t("forseti.policyBuilder.readsAs", "Reads as:")}>
-        {clause.kind === "claim" && clause.key ? `"${clause.key}"` : clause.kind} {operatorLabel[clause.op]} "{clause.value || t("empty", "(empty)")}"
+        {(clause.kind === "claim" && clause.key ? `"${clause.key}"` : clause.kind) + " " + operatorLabel[clause.op] + " \"" + (clause.value || t("common:empty", "(empty)")) + "\""}
       </Alert>
     </div>
   );
 }
 
-/* ----------------- immutable helpers for group editing ----------------- */
-
+/* helpers */
 function addClauseAt(group: Group, path: number[]): Group {
   const clause: Clause = { kind: "method", op: "eq", value: "GET" };
   if (path.length === 0) return { ...group, items: [...group.items, clause] };
-  const [i, ...rest] = path;
-  const items = [...group.items];
-  const node = items[i];
+  const [i, ...rest] = path; const items = [...group.items]; const node = items[i];
   if (node && "items" in (node as any)) items[i] = addClauseAt(node as Group, rest);
   return { ...group, items };
 }
-
 function addGroupAt(group: Group, path: number[]): Group {
   const newGroup: Group = { op: "AND", items: [] };
   if (path.length === 0) return { ...group, items: [...group.items, newGroup] };
-  const [i, ...rest] = path;
-  const items = [...group.items];
-  const node = items[i];
+  const [i, ...rest] = path; const items = [...group.items]; const node = items[i];
   if (node && "items" in (node as any)) items[i] = addGroupAt(node as Group, rest);
   return { ...group, items };
 }
-
 function removeItemAt(group: Group, path: number[]): Group {
   if (path.length === 0) return group;
-  if (path.length === 1) {
-    const items = [...group.items];
-    items.splice(path[0], 1);
-    return { ...group, items };
-  }
-  const [i, ...rest] = path;
-  const items = [...group.items];
-  const node = items[i];
+  if (path.length === 1) { const items = [...group.items]; items.splice(path[0], 1); return { ...group, items }; }
+  const [i, ...rest] = path; const items = [...group.items]; const node = items[i];
   if (node && "items" in (node as any)) items[i] = removeItemAt(node as Group, rest);
   return { ...group, items };
 }
