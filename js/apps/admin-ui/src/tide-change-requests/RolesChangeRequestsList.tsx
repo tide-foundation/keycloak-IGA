@@ -154,7 +154,7 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
               signed_client_origin: "",
               vendorId: ""
             }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
+            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:2", respObj.expiry, "base64url");
 
             if (authApproval.draft === respObj.changeSetRequests) {
               if (authApproval.accepted === false) {
