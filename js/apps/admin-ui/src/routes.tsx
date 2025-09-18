@@ -60,8 +60,8 @@ export const routes: AppRouteObject[] = [
   ...dashboardRoutes,
   ...pageRoutes,
   ...changeRequestsRoutes, // TIDE IMPLEMENTATION
-  ...tideKeyRoute, // TIDE IMPLEMENTATION
-  ...forsetiRoutes,
+  ...tideKeyRoute,        // TIDE IMPLEMENTATION
+  ...forsetiRoutes, // TIDE IMPLEMENTATION
   NotFoundRoute,
 ];
 
