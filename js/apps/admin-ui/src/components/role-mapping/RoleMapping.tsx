@@ -10,7 +10,7 @@ import {
   ButtonVariant,
   Checkbox,
   ToolbarItem,
-  Label
+  Label,
 } from "@patternfly/react-core";
 import { cellWidth } from "@patternfly/react-table";
 import { useState, useEffect } from "react";
@@ -67,41 +67,64 @@ export const mapRoles = (
       }))),
 ];
 
+export type ResourcesKey = keyof KeycloakAdminClient;
+
+/**
+ * ServiceRole: renders the role name + client badge + live draft status
+ */
 export const ServiceRole = ({ role, client, id, type }: Row) => {
   const { adminClient } = useAdminClient();
 
-  const [roleStatus, setRoleStatus] = useState("");
-  const [deleteStatus, setDeleteStatus] = useState("");
+  const [roleStatus, setRoleStatus] = useState<string>("");
+  const [deleteStatus, setDeleteStatus] = useState<string>("");
 
-
-
-  /** TIDECLOAK IMPLEMENTATION START */
+  /** TIDECLOAK IMPLEMENTATION (updated to tideUserExt) */
   useEffect(() => {
-      const fetchUserStatus = async () => {
-        const test = ((role as CompositeRole).parent || null)
+    let cancelled = false;
+    const fetchStatus = async () => {
+      try {
+        // @ts-ignore tideUserExt is attached at runtime (registered during app bootstrap)
+        const tide = adminClient.tideUserExt;
+        if (!tide) return;
 
-        if (type === "users" ) {
-          const result = await adminClient.tideUsersExt.getUserRoleDraftStatus({ userId: id!, roleId: role.id!}); // TIDE IMPLEMENTATION
-          
-          setRoleStatus(result.draftStatus ?? "");
-          setDeleteStatus(result.deleteStatus ?? "");
-
+        // For user-role mapping screens
+        if (type === "users") {
+          const res = await tide.getUserRoleDraftStatus(id!, role.id!);
+          if (!cancelled) {
+            // backend returns { status, deleteStatus? }
+            setRoleStatus((res?.status ?? "ACTIVE").toUpperCase());
+            setDeleteStatus((res?.deleteStatus ?? "").toUpperCase());
+          }
         }
-        else if (type === "roles" ){
-            const result = await adminClient.tideUsersExt.getRoleDraftStatus({ parentId: id!, childId: role.id!}); // TIDE IMPLEMENTATION
-            setRoleStatus(result.draftStatus ?? "");
-            setDeleteStatus(result.deleteStatus ?? "");
-            // sort this out another time
-            //           const roleIsInherited = (role as CompositeRole).isInherited || false
-            //           console.log("I AM ROLES CHECKING STATUS AND IM INHERITED " + roleIsInherited)
-            //           if (roleIsInherited){
-            //
-            // }
-
+        // For composite role mapping screens (parent/child role)
+        else if (type === "roles") {
+          const res = await tide.getCompositeRoleDraftStatus(id!, role.id!);
+          if (!cancelled) {
+            setRoleStatus((res?.status ?? "ACTIVE").toUpperCase());
+            setDeleteStatus((res as any)?.deleteStatus?.toUpperCase?.() ?? "");
+          }
+        } else {
+          // default fallback
+          if (!cancelled) {
+            setRoleStatus("ACTIVE");
+            setDeleteStatus("");
+          }
         }
-    }
-    fetchUserStatus();
-  }, [id, role.id, adminClient]);
+      } catch {
+        if (!cancelled) {
+          // If status endpoint fails, default to ACTIVE so UI still renders sanely
+          setRoleStatus("ACTIVE");
+          setDeleteStatus("");
+        }
+      }
+    };
+
+    fetchStatus();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminClient, id, (role as RoleRepresentation).id, type]);
 
   return (
     <>
@@ -112,37 +135,32 @@ export const ServiceRole = ({ role, client, id, type }: Row) => {
       )}
       {role.name}
       {roleStatus === "DRAFT" && (
-        <Label className="keycloak-admin--role-mapping__client-name">
-          {"DRAFT"}
-        </Label>
+        <Label className="keycloak-admin--role-mapping__client-name">DRAFT</Label>
       )}
       {roleStatus === "PENDING" && (
         <Label color="orange" className="keycloak-admin--role-mapping__client-name">
-          {"PENDING"}
+          PENDING
         </Label>
       )}
       {roleStatus === "APPROVED" && (
-          <Label color="blue" className="keycloak-admin--role-mapping__client-name">
-            {"APPROVED"}
-          </Label>
+        <Label color="blue" className="keycloak-admin--role-mapping__client-name">
+          APPROVED
+        </Label>
       )}
       {roleStatus === "ACTIVE" && (
         <Label color="green" className="keycloak-admin--role-mapping__client-name">
-          {"ACTIVE"}
+          ACTIVE
         </Label>
       )}
       {roleStatus === "ACTIVE" && deleteStatus === "DRAFT" && (
         <Label color="gold" className="keycloak-admin--role-mapping__client-name">
-          {"Pending delete"}
+          Pending delete
         </Label>
       )}
     </>
   );
 };
-
-  /** TIDECLOAK IMPLEMENTATION END */
-
-export type ResourcesKey = keyof KeycloakAdminClient;
+/** END tideUserExt status rendering */
 
 type RoleMappingProps = {
   name: string;
@@ -165,7 +183,7 @@ export const RoleMapping = ({
   const { addAlert, addError } = useAlerts();
 
   const [key, setKey] = useState(0);
-  const refresh = () => setKey(key + 1);
+  const refresh = () => setKey((k) => k + 1);
 
   const [hide, setHide] = useState(true);
   const [showAssign, setShowAssign] = useState(false);
@@ -325,7 +343,9 @@ export const RoleMapping = ({
             name: "role.name",
             displayKey: "name",
             transforms: [cellWidth(30)],
-            cellRenderer: (row => <ServiceRole id={id} client={row.client} role={row.role} type={type}/>),
+            cellRenderer: (row) => (
+              <ServiceRole id={id} client={row.client} role={row.role} type={type} />
+            ),
           },
           {
             name: "role.isInherited",
@@ -359,7 +379,7 @@ export const RoleMapping = ({
                 setFilterType(type);
                 setShowAssign(true);
               }}
-          />
+            />
           </ListEmptyState>
         }
       />

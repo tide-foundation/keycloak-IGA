@@ -5,5 +5,5 @@ import { TFunction } from "i18next";
 export const translationFormatter =
   (t: TFunction): IFormatter =>
   (data?: IFormatterValueType) => {
-    return data ? label(t, data as string) || "—" : "—";
+    return data ? label(t, data as string) || "-" : "-";
   };

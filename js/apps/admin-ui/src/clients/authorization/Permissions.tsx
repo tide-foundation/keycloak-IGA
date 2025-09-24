@@ -63,7 +63,7 @@ const AssociatedPoliciesRenderer = ({
 }) => {
   return (
     <>
-      {row.associatedPolicies?.[0]?.name || "—"}{" "}
+      {row.associatedPolicies?.[0]?.name || "-"}{" "}
       <MoreLabel array={row.associatedPolicies} />
     </>
   );
@@ -323,7 +323,7 @@ export const AuthorizationPermissions = ({
                     <Td>
                       <AssociatedPoliciesRenderer row={permission} />
                     </Td>
-                    <Td>{permission.description || "—"}</Td>
+                    <Td>{permission.description || "-"}</Td>
                     <Td
                       actions={{
                         items: [

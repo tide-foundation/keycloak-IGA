@@ -80,7 +80,7 @@ const OrganizationLink = (identityProvider: IdentityProviderRepresentation) => {
   const { realm } = useRealm();
 
   if (!identityProvider?.organizationId) {
-    return "—";
+    return "-";
   }
 
   return (

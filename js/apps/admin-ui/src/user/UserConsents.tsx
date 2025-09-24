@@ -105,14 +105,14 @@ export const UserConsents = () => {
             displayKey: "created",
             transforms: [cellWidth(20)],
             cellRenderer: ({ createdDate }) =>
-              createdDate ? formatDate(new Date(createdDate)) : "—",
+              createdDate ? formatDate(new Date(createdDate)) : "-",
           },
           {
             name: "lastUpdatedDate",
             displayKey: "lastUpdated",
             transforms: [cellWidth(10)],
             cellRenderer: ({ lastUpdatedDate }) =>
-              lastUpdatedDate ? formatDate(new Date(lastUpdatedDate)) : "—",
+              lastUpdatedDate ? formatDate(new Date(lastUpdatedDate)) : "-",
           },
         ]}
         actions={[

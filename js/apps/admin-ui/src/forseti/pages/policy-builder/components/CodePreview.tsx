@@ -78,7 +78,7 @@ export function CodePreview({ state, highlightPath, onHoverPath, onSelectPath }:
 
     const info = meta?.[active.path];
     const tooltip = info && info.kind === "group"
-      ? `${info.path === "0" ? "Root" : "Group"} — clauses: ${info.clauseCount ?? 0}, subgroups: ${info.groupCount ?? 0} (clauses ${info.op}, groups ${info.groupOp})`
+      ? `${info.path === "0" ? "Root" : "Group"} - clauses: ${info.clauseCount ?? 0}, subgroups: ${info.groupCount ?? 0} (clauses ${info.op}, groups ${info.groupOp})`
       : `Clause (${active.path})`;
 
     nodes.push(

@@ -89,7 +89,7 @@ const ClientHomeLink = (client: ClientRepresentation) => {
   const href = convertClientToUrl(client, environment);
 
   if (!href) {
-    return "—";
+    return "-";
   }
 
   return (

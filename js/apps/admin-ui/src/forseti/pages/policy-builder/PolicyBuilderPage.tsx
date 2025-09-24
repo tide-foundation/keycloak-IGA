@@ -68,7 +68,7 @@ export default function PolicyBuilderPage() {
           </div>
           <div className="pf-v5-u-display-flex pf-v5-u-gap-sm">
             <Label color="blue" aria-label={t("forseti.policyBuilder.currentStep", "Current step")} className="pf-v5-u-font-size-sm">
-              {t("forseti.policyBuilder.stepXofY", "Step {{x}} of {{y}}", { x: currentStep, y: steps.length })} — {activeStep.name}
+              {t("forseti.policyBuilder.stepXofY", "Step {{x}} of {{y}}", { x: currentStep, y: steps.length })} - {activeStep.name}
             </Label>
           </div>
         </div>

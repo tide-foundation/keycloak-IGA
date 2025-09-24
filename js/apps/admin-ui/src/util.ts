@@ -146,7 +146,7 @@ export function convertFormValuesToObject<T extends Record<string, any>, G = T>(
 
 export const emptyFormatter =
   (): IFormatter => (data?: IFormatterValueType) => {
-    return data ? data : "—";
+    return data ? data : "-";
   };
 
 export const upperCaseFormatter =

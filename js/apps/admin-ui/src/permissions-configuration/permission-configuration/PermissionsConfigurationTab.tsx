@@ -256,7 +256,7 @@ export const PermissionsConfigurationTab = ({
                           }}
                         />
                       </Td>
-                      <Td>{permission.description || "—"}</Td>
+                      <Td>{permission.description || "-"}</Td>
                       <Td
                         actions={{
                           items: [
