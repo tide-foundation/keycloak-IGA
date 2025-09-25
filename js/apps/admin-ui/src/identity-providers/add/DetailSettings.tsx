@@ -589,9 +589,13 @@ export default function DetailSettings() {
     confirmationText: "CONFIRM OFFBOARDING",
     onConfirm: async () => {
       try {
-        await adminClient.tideAdmin.offboardProvider();
-        addAlert(t("offboardingSuccessful", "Provider offboarded successfully"), AlertVariant.success);
+        const message  = await adminClient.tideAdmin.offboardProvider();
+        addAlert(
+          t("offboardingSuccessful", message || "Provider offboarded successfully"),
+          AlertVariant.success
+        );
         navigate(toIdentityProviders({ realm }));
+
       } catch (error) {
         addError("offboardingError", error);
       }

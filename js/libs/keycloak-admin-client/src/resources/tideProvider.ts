@@ -240,7 +240,7 @@ export class TideProvider extends Resource<{ realm?: string }> {
         path: "/vendorResources/triggerAuthorizeEvent/{error}"
     })
 
-    public offboardProvider = this.makeRequest<void, void>({
+    public offboardProvider = this.makeRequest<void, string>({
         method: "POST",
         path: "/ragnarok/trigger-offboarding",
     });
