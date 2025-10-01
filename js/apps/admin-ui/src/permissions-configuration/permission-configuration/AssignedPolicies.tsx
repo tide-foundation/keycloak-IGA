@@ -1,6 +1,5 @@
 import PolicyRepresentation from "@keycloak/keycloak-admin-client/lib/defs/policyRepresentation";
 import {
-  Action,
   FormErrorText,
   HelpItem,
   KeycloakDataTable,
@@ -25,7 +24,7 @@ import { ExistingPoliciesDialog } from "./ExistingPoliciesDialog";
 import { CaretDownIcon, FilterIcon } from "@patternfly/react-icons";
 import { capitalize, sortBy } from "lodash-es";
 import useToggle from "../../utils/useToggle";
-import { IRowData } from "@patternfly/react-table";
+import type { IRowData, IActionsResolver, ISeparator, IAction } from "@patternfly/react-table";
 
 type AssignedPoliciesProps = {
   permissionClientId: string;
@@ -77,9 +76,10 @@ export const AssignedPolicies = ({
         );
       return Promise.resolve([]);
     },
-    (policies) => {
-      const filteredPolicy = policies.filter((p) => p) as [];
-      setSelectedPolicies(filteredPolicy);
+    (list) => {
+      const arr = (Array.isArray(list) ? list : []) as unknown[];
+      const filtered = arr.filter(Boolean) as PolicyRepresentation[];
+      setSelectedPolicies(filtered);
     },
     [policies],
   );
@@ -87,14 +87,17 @@ export const AssignedPolicies = ({
   const sortedProviders = sortBy(
     providers
       ? providers
-          .filter((p) => p.type !== "resource" && p.type !== "scope")
-          .map((provider) => provider.name)
+        .filter((p) => p.type !== "resource" && p.type !== "scope")
+        .map((provider) => provider.name)
       : [],
   );
 
   const assign = (policies: { policy: PolicyRepresentation }[]) => {
     const assignedPolicies = policies.map(({ policy }) => ({
       id: policy.id!,
+      type: policy.type,
+      name: policy.name,
+      description: policy.description,
     }));
 
     setValue("policies", [
@@ -115,20 +118,41 @@ export const AssignedPolicies = ({
     setSelectedPolicies(updatedPolicies);
     setValue(
       "policies",
-      updatedPolicies.map((policy) => ({
-        id: policy.id!,
-        name: policy.name!,
-        type: policy.type!,
-        description: policy.description!,
+      updatedPolicies.map((p) => ({
+        id: p.id!,
+        name: p.name!,
+        type: p.type!,
+        description: p.description!,
       })),
     );
   };
 
   const filteredPolicies = filterType
     ? selectedPolicies.filter(
-        (policy) => capitalize(policy.type) === filterType,
-      )
+      (policy) => capitalize(policy.type) === filterType,
+    )
     : selectedPolicies;
+
+  // ---- Row action handlers ----
+  const onView = async (row: PolicyRepresentation) => {
+    // Lightweight "view" for now: open the existing policies dialog pre-filtered to this type.
+    setFilterType(capitalize(row.type || ""));
+    setExistingPoliciesOpen(true);
+  };
+
+  const onDetach = (row: PolicyRepresentation) => {
+    unAssign(row);
+  };
+
+  const policyActionsResolver: IActionsResolver = (rowData: IRowData) => {
+    const row = rowData?.data as PolicyRepresentation;
+    const items: (IAction | ISeparator)[] = [
+      { title: t("view"), onClick: () => onView(row) },
+      { isSeparator: true },
+      { title: t("detach"), onClick: () => onDetach(row) },
+    ];
+    return items;
+  };
 
   return (
     <FormGroup
@@ -201,12 +225,12 @@ export const AssignedPolicies = ({
       {selectedPolicies.length > 0 && (
         <KeycloakDataTable
           loader={filteredPolicies}
-          ariaLabelKey={t("policies")}
-          searchPlaceholderKey={t("searchClientAuthorizationPolicy")}
+          ariaLabelKey="policies"
+          searchPlaceholderKey="searchClientAuthorizationPolicy"
           isSearching={true}
           searchTypeComponent={
             <Dropdown
-              onSelect={(event, value) => {
+              onSelect={(_, value) => {
                 setFilterType(value as string | undefined);
                 toggleIsFilterTypeDropdownOpen();
               }}
@@ -245,20 +269,15 @@ export const AssignedPolicies = ({
               </DropdownList>
             </Dropdown>
           }
-          actionResolver={(rowData: IRowData) => [
-            {
-              title: t("unAssignPolicy"),
-              onClick: () => unAssign(rowData.data as PolicyRepresentation),
-            } as Action<PolicyRepresentation>,
-          ]}
+          actionResolver={policyActionsResolver}
           columns={[
-            { name: "name", displayKey: t("name") },
+            { name: "name", displayKey: "name" },
             {
               name: "type",
-              displayKey: t("type"),
+              displayKey: "type",
               cellFormatters: [(value) => capitalize(String(value || ""))],
             },
-            { name: "description", displayKey: t("description") },
+            { name: "description", displayKey: "description" },
           ]}
           emptyState={
             <ListEmptyState

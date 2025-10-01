@@ -1,80 +1,64 @@
-![Keycloak](https://github.com/keycloak/keycloak-misc/blob/main/logo/logo.svg)
+# Keycloak IGA → tidecloak-iga-extensions UI update (drop-in)
 
-![GitHub Release](https://img.shields.io/github/v/release/keycloak/keycloak?label=latest%20release)
-[![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/6818/badge)](https://bestpractices.coreinfrastructure.org/projects/6818)
-[![CLOMonitor](https://img.shields.io/endpoint?url=https://clomonitor.io/api/projects/cncf/keycloak/badge)](https://clomonitor.io/projects/cncf/keycloak)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/keycloak/keycloak/badge)](https://securityscorecards.dev/viewer/?uri=github.com/keycloak/keycloak)
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/keycloak-operator)](https://artifacthub.io/packages/olm/community-operators/keycloak-operator)
-![GitHub Repo stars](https://img.shields.io/github/stars/keycloak/keycloak?style=flat)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/keycloak/keycloak)
-[![Translation status](https://hosted.weblate.org/widget/keycloak/svg-badge.svg)](docs/translation.md)
+This bundle adds:
+- A new **admin client extension** `tideAdmin` (calls `/tide-admin/*`).
+- Shared **StatusChip** and **RoleStatusBadge** components showing Draft/Pending/Approved/Active/Denied.
+- Bulk **merge-by-user+client** logic for approvals/commits, with a **Preview Modal**.
+- Patches to wire bulk actions into `ChangeRequestsSection.tsx` and to render per-action status in role mapping.
 
-# Open Source Identity and Access Management
+## Files
+- `js/apps/admin-ui/src/admin-client/tideAdmin.ts`
+- `js/apps/admin-ui/src/components/tide/StatusChip.tsx`
+- `js/apps/admin-ui/src/components/tide/RoleStatusBadge.tsx`
+- `js/apps/admin-ui/src/tide-change-requests/types.ts`
+- `js/apps/admin-ui/src/tide-change-requests/merge.ts`
+- `js/apps/admin-ui/src/tide-change-requests/MergePreviewModal.tsx`
+- `PATCHES/ChangeRequestsSection.patch`
+- `PATCHES/RoleMapping.patch`
 
-Add authentication to applications and secure services with minimum effort. No need to deal with storing users or authenticating users.
+## 1) Install files
+Copy the `js/` tree into your repo root so paths line up.
 
-Keycloak provides user federation, strong authentication, user management, fine-grained authorization, and more.
+## 2) Register the admin client extension
+In the file where the AdminClient is created (e.g. `js/apps/admin-ui/src/context/admin-client/index.ts`), add:
 
+```ts
+import tideAdminExt from "../../admin-client/tideAdmin";
+// after creating the client:
+tideAdminExt(client);
+```
 
-## Help and Documentation
+Ensure `adminClient.realmName` is set prior to first call (follows the existing Admin UI patterns).
 
-* [Documentation](https://www.keycloak.org/documentation.html)
-* [User Mailing List](https://groups.google.com/d/forum/keycloak-user) - Mailing list for help and general questions about Keycloak
-* Join [#keycloak](https://cloud-native.slack.com/archives/C056HC17KK9) for general questions, or [#keycloak-dev](https://cloud-native.slack.com/archives/C056XU905S6) on Slack for design and development discussions, by creating an account at [https://slack.cncf.io/](https://slack.cncf.io/).
+## 3) Change Requests: enable bulk approve/commit with merge
+- Open `js/apps/admin-ui/src/tide-change-requests/ChangeRequestsSection.tsx`.
+- Apply `PATCHES/ChangeRequestsSection.patch` or manually integrate the code:
+  - Import `mergeByUserClient`, `MergePreviewModal`, and types.
+  - Track `selectedRows` and `allRows` (from your loader).
+  - Replace old button handlers with `handleBulkApprove/confirmBulkApprove/handleBulkCommit`.
+  - Use the modal for a user-visible preview.
+  - For Tide IGA flows, call `tideAdmin.signChangeSet` before `commitDraftChangeSet`. For non-Tide, skip signing.
 
+## 4) Action pages status (e.g., Role Mapping)
+- Add `<RoleStatusBadge userId={...} roleId={...} />` to the Status column.
+- If you surface user-level or composite role status, call the other status readers in `tideAdmin` similarly.
 
-## Reporting Security Vulnerabilities
+## 5) Tide vs non-Tide
+- Gate the signing step with your existing `isTideEnabled` flag/logic.
 
-If you have found a security vulnerability, please look at the [instructions on how to properly report it](https://github.com/keycloak/keycloak/security/policy).
+## 6) Build
+TypeScript files are self-contained; no tsconfig changes required. Run your normal build.
 
+## 7) Troubleshooting
+- If your backend path differs, adjust the base in `tideAdmin.ts`.
+- If your Change Request row shape differs, map it to `ChangeRequestRow` in your loader and everything else works unchanged.
 
-## Reporting an issue
+---
+## Optional: git apply
+The included patches are **best-effort** and may need small edits if your sources differ.
+Run from repo root:
 
-If you believe you have discovered a defect in Keycloak, please open [an issue](https://github.com/keycloak/keycloak/issues).
-Please remember to provide a good summary, description as well as steps to reproduce the issue.
-
-
-## Getting started
-
-To run Keycloak, download the distribution from our [website](https://www.keycloak.org/downloads.html). Unzip and run:
-
-    bin/kc.[sh|bat] start-dev
-
-Alternatively, you can use the Docker image by running:
-
-    docker run quay.io/keycloak/keycloak start-dev
-    
-For more details refer to the [Keycloak Documentation](https://www.keycloak.org/documentation.html).
-
-
-## Building from Source
-
-To build from source, refer to the [building and working with the code base](docs/building.md) guide.
-
-
-### Testing
-
-To run tests, refer to the [running tests](docs/tests.md) guide.
-
-
-### Writing Tests
-
-To write tests, refer to the [writing tests](docs/tests-development.md) guide.
-
-
-## Contributing
-
-Before contributing to Keycloak, please read our [contributing guidelines](CONTRIBUTING.md). Participation in the Keycloak project is governed by the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md).
-
-Joining a [community meeting](https://www.keycloak.org/community) is a great way to get involved and help shape the future of Keycloak.
-
-## Other Keycloak Projects
-
-* [Keycloak](https://github.com/keycloak/keycloak) - Keycloak Server and Java adapters
-* [Keycloak QuickStarts](https://github.com/keycloak/keycloak-quickstarts) - QuickStarts for getting started with Keycloak
-* [Keycloak Node.js Connect](https://github.com/keycloak/keycloak-nodejs-connect) - Node.js adapter for Keycloak
-
-
-## License
-
-* [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+```bash
+git apply --reject --whitespace=fix PATCHES/ChangeRequestsSection.patch
+git apply --reject --whitespace=fix PATCHES/RoleMapping.patch
+```

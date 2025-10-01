@@ -10,7 +10,8 @@ import {
   Tooltip,
 } from "@patternfly/react-core";
 import { CubesIcon, InfoCircleIcon } from "@patternfly/react-icons";
-import { IRowData } from "@patternfly/react-table";
+import type { IRowData, IActionsResolver, ISeparator, IAction } from "@patternfly/react-table";
+
 import { ReactNode, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useMatch, useNavigate } from "react-router-dom";
@@ -20,7 +21,6 @@ import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { ListEmptyState } from "@keycloak/keycloak-ui-shared";
 import {
-  Action,
   Field,
   KeycloakDataTable,
   LoaderFunction,
@@ -77,7 +77,7 @@ const ClientsCell = (row: UserSessionRepresentation) => {
   const { realm } = useRealm();
   return (
     <List variant={ListVariant.inline}>
-      {Object.entries(row.clients!).map(([clientId, client]) => (
+      {Object.entries(row.clients || {}).map(([clientId, client]) => (
         <ListItem key={clientId}>
           <Link to={toClient({ realm, clientId, tab: "sessions" })}>
             {client}
@@ -165,33 +165,41 @@ export default function SessionsTable({
     },
   });
 
-  async function onClickRevoke(rowData: IRowData) {
-    const session = rowData.data as UserSessionRepresentation;
-    await adminClient.realms.deleteSession({
-      realm,
-      session: session.id!,
-      isOffline: true,
-    });
+  // ----- Row actions -----
+  const onViewSession = (row: UserSessionRepresentation) => {
+    // Navigate to the user's sessions page; highlight by default UX
+    navigate(toUser({ realm, id: row.userId!, tab: "sessions" }));
+  };
 
-    refresh();
-  }
+  const onLogout = async (row: UserSessionRepresentation) => {
+    try {
+      await adminClient.realms.deleteSession({
+        realm,
+        session: row.id!,
+        isOffline: false,
+      });
 
-  async function onClickSignOut(rowData: IRowData) {
-    const session = rowData.data as UserSessionRepresentation;
-    await adminClient.realms.deleteSession({
-      realm,
-      session: session.id!,
-      isOffline: false,
-    });
-
-    if (session.userId === whoAmI.getUserId()) {
-      await keycloak.logout({ redirectUri: "" });
-    } else if (isOnUserPage && isLightweightUser(session.userId)) {
-      navigate(toUsers({ realm: realm }));
-    } else {
-      refresh();
+      if (row.userId === whoAmI.getUserId()) {
+        await keycloak.logout({ redirectUri: "" });
+      } else if (isOnUserPage && isLightweightUser(row.userId)) {
+        navigate(toUsers({ realm }));
+      } else {
+        refresh();
+      }
+    } catch (error) {
+      addError("signOutSessionError", error);
     }
-  }
+  };
+
+  const sessionActions: IActionsResolver = (rowData: IRowData) => {
+    const row = rowData?.data as UserSessionRepresentation;
+    const items: (IAction | ISeparator)[] = [
+      { title: t("viewSession"), onClick: () => onViewSession(row) },
+      { isSeparator: true },
+      { title: t("logout"), onClick: () => onLogout(row) },
+    ];
+    return items;
+  };
 
   return (
     <>
@@ -214,25 +222,7 @@ export default function SessionsTable({
           )
         }
         columns={columns}
-        actionResolver={(rowData: IRowData) => {
-          if (
-            rowData.data.type === "Offline" ||
-            rowData.data.type === "OFFLINE"
-          ) {
-            return [
-              {
-                title: t("revoke"),
-                onClick: () => onClickRevoke(rowData),
-              } as Action<UserSessionRepresentation>,
-            ];
-          }
-          return [
-            {
-              title: t("signOut"),
-              onClick: () => onClickSignOut(rowData),
-            } as Action<UserSessionRepresentation>,
-          ];
-        }}
+        actionResolver={sessionActions}
         emptyState={
           <ListEmptyState
             hasIcon

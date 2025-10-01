@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StatusChip } from "./StatusChip";
 import { useAdminClient } from "../../admin-client";
+import { fetchChangeRequests, matchUserRoleRequest } from "../../tide-change-requests/api";
 
 export function RoleStatusBadge({
   userId,

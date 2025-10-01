@@ -144,7 +144,6 @@ export const KeysListTab = ({ realmComponents }: KeysListTabProps) => {
       <PublicKeyDialog />
       <CertificateDialog />
       <KeycloakDataTable
-        isNotCompact
         className="kc-keys-list"
         loader={filteredKeyData}
         ariaLabelKey="keysList"

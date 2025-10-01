@@ -14,9 +14,11 @@ import {
 } from "@patternfly/react-core";
 import { WarningTriangleIcon } from "@patternfly/react-icons";
 import { IRowData, TableText, cellWidth } from "@patternfly/react-table";
+import type { IAction, IActionsResolver, ISeparator } from "@patternfly/react-table";
+
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { FormattedLink } from "../components/external-link/FormattedLink";
@@ -24,13 +26,13 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
-import { Action, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { Environment } from "../environment";
 import helpUrls from "../help-urls";
-import { emptyFormatter, exportClient } from "../util";
+import { emptyFormatter } from "../util";
 import { convertClientToUrl } from "../utils/client-url";
 import { translationFormatter } from "../utils/translationFormatter";
 import { InitialAccessTokenList } from "./initial-access/InitialAccessTokenList";
@@ -39,7 +41,7 @@ import { toAddClient } from "./routes/AddClient";
 import { toClient } from "./routes/Client";
 import { ClientsTab, toClients } from "./routes/Clients";
 import { toImportClient } from "./routes/ImportClient";
-import { getProtocolName, isRealmClient } from "./utils";
+import { getProtocolName } from "./utils";
 
 const ClientDetailLink = (client: ClientRepresentation) => {
   const { t } = useTranslation();
@@ -88,9 +90,7 @@ const ClientHomeLink = (client: ClientRepresentation) => {
   const { environment } = useEnvironment<Environment>();
   const href = convertClientToUrl(client, environment);
 
-  if (!href) {
-    return "-";
-  }
+  if (!href) return "-";
 
   return (
     <FormattedLink
@@ -136,13 +136,14 @@ const ToolbarItems = () => {
 
 export default function ClientsSection() {
   const { adminClient } = useAdminClient();
+  const navigate = useNavigate();
 
   const { t } = useTranslation();
   const { addAlert, addError } = useAlerts();
   const { realm } = useRealm();
 
   const [key, setKey] = useState(0);
-  const refresh = () => setKey(new Date().getTime());
+  const refresh = () => setKey(Date.now());
   const [selectedClient, setSelectedClient] = useState<ClientRepresentation>();
 
   const { hasAccess } = useAccess();
@@ -184,6 +185,32 @@ export default function ClientsSection() {
     },
   });
 
+  // --- Actions: strongly typed resolver (PF) with safe handlers
+  const onEdit = (row: ClientRepresentation) => {
+    navigate(
+      toClient({
+        realm,
+        clientId: row.id!,
+        tab: "settings",
+      }),
+    );
+  };
+
+  const onDelete = (row: ClientRepresentation) => {
+    setSelectedClient(row);
+    toggleDeleteDialog();
+  };
+
+  const actionsResolver: IActionsResolver = (rowData: IRowData) => {
+    const row = rowData?.data as ClientRepresentation;
+    const items: (IAction | ISeparator)[] = [
+      { title: t("edit"), onClick: () => onEdit(row) },
+      { isSeparator: true },
+      { title: t("delete"), onClick: () => onDelete(row) },
+    ];
+    return items;
+  };
+
   return (
     <>
       <ViewHeader
@@ -208,39 +235,14 @@ export default function ClientsSection() {
             {...listTab}
           >
             <DeleteConfirm />
-            <KeycloakDataTable
+            <KeycloakDataTable<ClientRepresentation>
               key={key}
               loader={loader}
               isPaginated
               ariaLabelKey="clientList"
               searchPlaceholderKey="searchForClient"
               toolbarItem={<ToolbarItems />}
-              actionResolver={(rowData: IRowData) => {
-                const client: ClientRepresentation = rowData.data;
-                const actions: Action<ClientRepresentation>[] = [
-                  {
-                    title: t("export"),
-                    onClick() {
-                      exportClient(client);
-                    },
-                  },
-                ];
-
-                if (
-                  !isRealmClient(client) &&
-                  (isManager || client.access?.configure)
-                ) {
-                  actions.push({
-                    title: t("delete"),
-                    onClick() {
-                      setSelectedClient(client);
-                      toggleDeleteDialog();
-                    },
-                  });
-                }
-
-                return actions;
-              }}
+              actionResolver={actionsResolver}
               columns={[
                 {
                   name: "clientId",

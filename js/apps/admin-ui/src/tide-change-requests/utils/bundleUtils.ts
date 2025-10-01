@@ -1,41 +1,62 @@
-import type RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges";
-import type RoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/RoleChangeRequest";
-import type CompositeRoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/CompositeRoleChangeRequest";
-
+// src/tide-change-requests/utils/bundleUtils.ts
 export interface BundledRequest<T = any> {
-  draftRecordId: string;
+  draftRecordId: string;     // normalized id key for UI
   requests: T[];
-  status: string;
-  requestedBy: string;
+  status: string;            // DRAFT | PENDING | APPROVED | ACTIVE | DENIED | MIXED
+  requestedBy: string;       // best-effort
   count: number;
 }
 
-export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; userRecord: any[] }>(
-  requests: T[]
-): BundledRequest<T>[] {
-  // Group requests by draftRecordId
-  const grouped = requests.reduce((acc, request) => {
-    const id = request.draftRecordId;
-    if (!acc[id]) {
-      acc[id] = [];
-    }
-    acc[id].push(request);
+/**
+ * Works with:
+ *  - SDK rows (RequestedChanges / RoleChangeRequest / CompositeRoleChangeRequest) → have draftRecordId
+ *  - IGA envelopes (/tide-admin/change-set/.../requests) → have changeSetId, status, affectedUsers, userContextsPreview
+ */
+export function groupRequestsByDraftId<T extends Record<string, any>>(rows: T[]): BundledRequest<T>[] {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  // Choose an id for grouping (prefer draftRecordId, fallback changeSetId)
+  const getId = (r: any) => (r?.draftRecordId || r?.changeSetId || r?.id || "unknown") as string;
+
+  // Group by id
+  const grouped = rows.reduce((acc, r) => {
+    const id = getId(r);
+    (acc[id] ||= []).push(r);
     return acc;
   }, {} as Record<string, T[]>);
 
-  return Object.entries(grouped).map(([draftRecordId, requests]) => {
-    // Calculate bundle status more intelligently
-    const statuses = [...new Set(requests.map(r => r.status))];
-    let bundleStatus = requests[0].status;
-    if (statuses.length > 1) {
-      bundleStatus = "MIXED";
-    }
+  // Normalize a single row's status
+  const getRowStatus = (r: any): string => {
+    // SDK rows: status / deleteStatus; envelopes: status already present
+    const s = (r?.status ?? "").toString();
+    const del = (r?.deleteStatus ?? "").toString();
+    // Treat ACTIVE+deleteStatus specially if you show that elsewhere; otherwise return s
+    return s || "DRAFT";
+  };
+
+  // Try to pull a "requested by" label
+  const getRequestedBy = (rs: any[]): string => {
+    // SDK rows: userRecord[0]?.username
+    const fromUserRecord = rs.find(x => Array.isArray(x?.userRecord) && x.userRecord[0]?.username)?.userRecord?.[0]?.username;
+    if (fromUserRecord) return fromUserRecord;
+
+    // Envelopes: might have affectedUsers; no usernames unless you resolve them - show first id
+    const firstWithAffected = rs.find(x => Array.isArray(x?.affectedUsers) && x.affectedUsers.length > 0);
+    if (firstWithAffected) return firstWithAffected.affectedUsers[0];
+
+    // Fallback
+    return "Unknown";
+  };
+
+  return Object.entries(grouped).map(([id, requests]) => {
+    const statuses = Array.from(new Set(requests.map(getRowStatus)));
+    const status = statuses.length > 1 ? "MIXED" : statuses[0] || "DRAFT";
 
     return {
-      draftRecordId,
+      draftRecordId: id,
       requests,
-      status: bundleStatus,
-      requestedBy: requests[0].userRecord[0]?.username || 'Unknown',
+      status,
+      requestedBy: getRequestedBy(requests),
       count: requests.length,
     };
   });

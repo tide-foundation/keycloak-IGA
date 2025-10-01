@@ -8,8 +8,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
-import { ListEmptyState } from "@keycloak/keycloak-ui-shared";
-import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import { ListEmptyState, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import { useAccess } from "../context/access/Access";
 import useToggle from "../utils/useToggle";
 import { GroupsModal } from "./GroupsModal";
@@ -18,6 +17,7 @@ import { DeleteGroup } from "./components/DeleteGroup";
 import { GroupToolbar } from "./components/GroupToolbar";
 import { MoveDialog } from "./components/MoveDialog";
 import { getLastId } from "./groupIdUtils";
+import type { IAction, ISeparator, IActionsResolver, IRowData } from "@patternfly/react-table";
 
 type GroupTableProps = {
   refresh: () => void;
@@ -34,7 +34,7 @@ export const GroupTable = ({ refresh: viewRefresh }: GroupTableProps) => {
   const [move, setMove] = useState<GroupRepresentation>();
   const { currentGroup } = useSubGroups();
   const [key, setKey] = useState(0);
-  const refresh = () => setKey(key + 1);
+  const refresh = () => setKey((k) => k + 1);
   const [search, setSearch] = useState<string>();
   const location = useLocation();
   const id = getLastId(location.pathname);
@@ -42,25 +42,53 @@ export const GroupTable = ({ refresh: viewRefresh }: GroupTableProps) => {
   const isManager = hasAccess("manage-users") || currentGroup()?.access?.manage;
 
   const loader = async (first?: number, max?: number) => {
-    let groupsData = undefined;
     if (id) {
       const args: SubGroupQuery = {
         search: search || "",
-        first: first,
-        max: max,
+        first,
+        max,
         parentId: id,
       };
-      groupsData = await adminClient.groups.listSubGroups(args);
-    } else {
-      const args: GroupQuery = {
-        search: search || "",
-        first: first || undefined,
-        max: max || undefined,
-      };
-      groupsData = await adminClient.groups.find(args);
+      return adminClient.groups.listSubGroups(args);
     }
+    const args: GroupQuery = {
+      search: search || "",
+      first: first ?? undefined,
+      max: max ?? undefined,
+    };
+    return adminClient.groups.find(args);
+  };
 
-    return groupsData;
+  // Row-level handlers kept in scope so the resolver can use them
+  const onEdit = (row: GroupRepresentation) => setRename(row);
+
+  const onDelete = (row: GroupRepresentation) => {
+    setSelectedRows([row]);
+    toggleShowDelete();
+  };
+
+  const onMoveTo = (row: GroupRepresentation) => setMove(row);
+
+  const onCreateChild = (row: GroupRepresentation) => {
+    setSelectedRows([row]);
+    toggleCreateOpen();
+  };
+
+  // PatternFly-style actions for the kebab per row
+  const actionsResolver: IActionsResolver = (rowData: IRowData) => {
+    const row = rowData?.data as GroupRepresentation;
+    if (!isManager) return [];
+    const items: (IAction | ISeparator)[] = [
+      { title: t("edit"), onClick: () => onEdit(row) },
+      { title: t("moveTo"), onClick: () => onMoveTo(row) },
+      { title: t("createChildGroup"), onClick: () => onCreateChild(row) },
+      ...(id
+        ? []
+        : [{ title: t("duplicate"), onClick: () => setDuplicateId(row.id!) }]),
+      { isSeparator: true },
+      { title: t("delete"), onClick: () => onDelete(row) },
+    ];
+    return items;
   };
 
   return (
@@ -119,7 +147,8 @@ export const GroupTable = ({ refresh: viewRefresh }: GroupTableProps) => {
           onClose={() => setMove(undefined)}
         />
       )}
-      <KeycloakDataTable
+
+      <KeycloakDataTable<GroupRepresentation>
         key={`${id}${key}`}
         onSelect={(rows) => setSelectedRows([...rows])}
         canSelectAll
@@ -136,9 +165,7 @@ export const GroupTable = ({ refresh: viewRefresh }: GroupTableProps) => {
                 value={search}
                 onChange={(_, value) => {
                   setSearch(value);
-                  if (value === "") {
-                    refresh();
-                  }
+                  if (value === "") refresh();
                 }}
                 onSearch={refresh}
                 onClear={() => {
@@ -150,60 +177,59 @@ export const GroupTable = ({ refresh: viewRefresh }: GroupTableProps) => {
             <GroupToolbar
               toggleCreate={toggleCreateOpen}
               toggleDelete={toggleShowDelete}
-              kebabDisabled={selectedRows!.length === 0}
+              kebabDisabled={selectedRows.length === 0}
             />
           </>
         }
+        actionResolver={actionsResolver}
+        // IMPORTANT: The `actions` prop is your legacy KeycloakDataTable action API (no separators, uses onRowClick).
+        // Keep it, but do not include separators here to satisfy the Action<T> type.
         actions={
           !isManager
             ? []
             : [
-                {
-                  title: t("edit"),
-                  onRowClick: async (group) => {
-                    setRename(group);
-                    return false;
+              {
+                title: t("edit"),
+                onRowClick: async (row: GroupRepresentation) => {
+                  onEdit(row);
+                  return false;
+                },
+              },
+              {
+                title: t("moveTo"),
+                onRowClick: async (row: GroupRepresentation) => {
+                  onMoveTo(row);
+                  return false;
+                },
+              },
+              {
+                title: t("createChildGroup"),
+                onRowClick: async (row: GroupRepresentation) => {
+                  onCreateChild(row);
+                  return false;
+                },
+              },
+              ...(!id
+                ? [
+                  {
+                    title: t("duplicate"),
+                    onRowClick: async (row: GroupRepresentation) => {
+                      setDuplicateId(row.id!);
+                      return false;
+                    },
                   },
+                ]
+                : []),
+              {
+                title: t("delete"),
+                onRowClick: async (row: GroupRepresentation) => {
+                  onDelete(row);
+                  return true;
                 },
-                {
-                  title: t("moveTo"),
-                  onRowClick: async (group) => {
-                    setMove(group);
-                    return false;
-                  },
-                },
-                {
-                  title: t("createChildGroup"),
-                  onRowClick: async (group) => {
-                    setSelectedRows([group]);
-                    toggleCreateOpen();
-                    return false;
-                  },
-                },
-                ...(!id
-                  ? [
-                      {
-                        title: t("duplicate"),
-                        onRowClick: async (group: GroupRepresentation) => {
-                          setDuplicateId(group.id);
-                          return false;
-                        },
-                      },
-                    ]
-                  : []),
-                {
-                  isSeparator: true,
-                },
-                {
-                  title: t("delete"),
-                  onRowClick: async (group: GroupRepresentation) => {
-                    setSelectedRows([group]);
-                    toggleShowDelete();
-                    return true;
-                  },
-                },
-              ]
+              },
+            ]
         }
+
         columns={[
           {
             name: "name",
