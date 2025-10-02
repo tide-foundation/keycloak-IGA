@@ -169,11 +169,11 @@ function DataTable<T>({
           isSelected
             ? [...selectedRows, ...rows.map((row) => row.data)]
             : selectedRows.filter(
-                (v) =>
-                  !rowsSelectedOnPageIds.includes(
-                    get(v, "id") ?? get(v, "draftRecordId") // # TIDE IMPLEMENTATION #
-                  ),
-              ),
+              (v) =>
+                !rowsSelectedOnPageIds.includes(
+                  get(v, "id") ?? get(v, "draftRecordId") // # TIDE IMPLEMENTATION #
+                ),
+            ),
         );
       } else {
         if (isSelected) {
@@ -196,7 +196,7 @@ function DataTable<T>({
     <Table
       {...props}
       variant={isNotCompact ? undefined : TableVariant.compact}
-      aria-label={ariaLabelKey}
+      aria-label={t(ariaLabelKey)}
     >
       <Thead>
         <Tr>
@@ -209,10 +209,11 @@ function DataTable<T>({
               select={
                 !isRadio
                   ? {
-                      onSelect: (_, isSelected) =>
-                        updateState(-1, isSelected),
-                      isSelected: rowsSelectedOnPage.length === rows.length,
-                    }
+                    onSelect: (_, isSelected) => {
+                      updateState(-1, isSelected);
+                    },
+                    isSelected: rowsSelectedOnPage.length === rows.length,
+                  }
                   : undefined
               }
             />
@@ -227,15 +228,37 @@ function DataTable<T>({
           ))}
         </Tr>
       </Thead>
-
       {!onCollapse ? (
         <Tbody>
-          {(rows as IRow[]).map((row, index) => (
-            <Tr key={index} isExpanded={expandedRows[index]}>
-              {canSelect && (
-                <Td
-                  select={{
-                    rowIndex: index,
+          {(rows as IRow[]).map((row, index) => {
+            // derive a stable ID and selection flag
+            const recordId =
+              get(row.data, "id") ?? get(row.data, "draftRecordId");
+            const rowSelected = selectedRows.some(
+              v =>
+                (get(v, "id") ?? get(v, "draftRecordId")) === recordId
+            );
+
+            return (
+              <Tr
+                key={index}
+                isExpanded={expandedRows[index]}
+                // make the whole row clickable
+                onClick={() => updateState(index, !rowSelected)}
+                style={{ cursor: "pointer" }}
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    updateState(index, !rowSelected);
+                  }
+                }}
+              >
+                {canSelect && (
+                  <Td
+                    // bump the whole cell up to at least 32×32px
+                    select={{
+                      rowIndex: index,
                     onSelect: (_, isSelected) =>
                       updateState(index, isSelected),
                     isSelected: !!selectedRows.find(
@@ -244,25 +267,39 @@ function DataTable<T>({
                         (get(row.data, "id") ??
                           get(row.data, "draftRecordId"))
                     ),
-                    variant: isRadio ? "radio" : "checkbox",
-                  }}
+                      variant: isRadio ? "radio" : "checkbox",
+                    }}
+                  />
+                )}
+                <CellRenderer
+                  row={row}
+                  index={index}
+                  actions={actions}
+                  actionResolver={actionResolver}
                 />
-              )}
-
-              <CellRenderer
-                row={row}
-                index={index}
-                actions={actions}
-                actionResolver={actionResolver}
-              />
-            </Tr>
-          ))}
+              </Tr>
+            );
+          })}
         </Tbody>
       ) : (
         (rows as IRow[]).map((row, index) => (
           <Tbody key={index}>
             {index % 2 === 0 ? (
-              <Tr>
+              <Tr
+                onClick={() => updateState(index, !selectedRows.some(
+                  v => (get(v, "id") ?? get(v, "draftRecordId")) === ((rows as IRow[])[index].data.id ?? (rows as IRow[])[index].data.draftRecordId)
+                ))}
+                style={{ cursor: "pointer" }}
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    updateState(index, !selectedRows.some(
+                      v => (get(v, "id") ?? get(v, "draftRecordId")) === ((rows as IRow[])[index].data.id ?? (rows as IRow[])[index].data.draftRecordId)
+                    ));
+                  }
+                }}
+              >
                 {/* // tide implementation start */}
                 {canSelect && (
                   <Td
@@ -287,18 +324,18 @@ function DataTable<T>({
                     rows[index + 1].cells.length === 0
                       ? undefined
                       : {
-                          isExpanded: !!expandedRows[index],
-                          rowIndex: index,
-                          onToggle: (_, rowIndex, isOpen) => {
-                            onCollapse(isOpen, rowIndex);
-                            const copy = [...expandedRows];
-                            copy[index] = isOpen;
-                            setExpandedRows(copy);
-                          },
-                        }
+                        isExpanded: !!expandedRows[index],
+                        rowIndex: index,
+                        expandId: "expandable-row-",
+                        onToggle: (_, rowIndex, isOpen) => {
+                          onCollapse(isOpen, rowIndex);
+                          const expand = [...expandedRows];
+                          expand[index] = isOpen;
+                          setExpandedRows(expand);
+                        },
+                      }
                   }
                 />
-
                 <CellRenderer
                   row={row}
                   index={index}
@@ -311,7 +348,6 @@ function DataTable<T>({
                 {/* two blanks: one for the selector column, one for the expand toggle */}
                 {canSelect && <Td />}
                 <Td />
-
                 <Td colSpan={columns.length}>
                   <ExpandableRowContent>
                     <ExpandableRowRenderer row={row} />
@@ -325,7 +361,6 @@ function DataTable<T>({
     </Table>
   );
 }
-
 
 export type Field<T> = {
   name: string;
@@ -513,16 +548,16 @@ export function KeycloakDataTable<T>({
       search === "" || isPaginated
         ? undefined
         : convertToColumns(unPaginatedData || [])
-            .filter((row) =>
-              row.cells.some(
-                (cell) =>
-                  cell &&
-                  getNodeText(cell)
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
-              ),
-            )
-            .slice(first, first + max + 1),
+          .filter((row) =>
+            row.cells.some(
+              (cell) =>
+                cell &&
+                getNodeText(cell)
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+            ),
+          )
+          .slice(first, first + max + 1),
     [search, first, max],
   );
 
@@ -658,12 +693,12 @@ export function KeycloakDataTable<T>({
               secondaryActions={
                 !isSearching
                   ? [
-                      {
-                        text: t("clearAllFilters"),
-                        onClick: () => setSearch(""),
-                        type: ButtonVariant.link,
-                      },
-                    ]
+                    {
+                      text: t("clearAllFilters"),
+                      onClick: () => setSearch(""),
+                      type: ButtonVariant.link,
+                    },
+                  ]
                   : []
               }
             />

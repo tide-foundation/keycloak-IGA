@@ -42,6 +42,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { useAdminClient } from "../../admin-client";
 import { useConfirmDialog } from "../../components/confirm-dialog/ConfirmDialog";
+import { useOffboardingDialog } from "../../components/confirm-dialog/OffboardingDialog";
 import { DynamicComponents } from "../../components/dynamic/DynamicComponents";
 import { FixedButtonsGroup } from "../../components/form/FixedButtonGroup";
 import { FormAccess } from "../../components/form/FormAccess";
@@ -83,6 +84,7 @@ type HeaderProps = {
   value: boolean;
   save: () => void;
   toggleDeleteDialog: () => void;
+  toggleOffboardingDialog?: () => void;
 };
 
 type IdPWithMapperAttributes = IdentityProviderMapperRepresentation & {
@@ -93,7 +95,7 @@ type IdPWithMapperAttributes = IdentityProviderMapperRepresentation & {
   mapperId: string;
 };
 
-const Header = ({ onChange, value, save, toggleDeleteDialog }: HeaderProps) => {
+const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDialog }: HeaderProps) => {
   const { adminClient } = useAdminClient();
 
   const { t } = useTranslation();
@@ -219,6 +221,11 @@ const Header = ({ onChange, value, save, toggleDeleteDialog }: HeaderProps) => {
                 </DropdownItem>,
               ]
               : []),
+          ...(provider?.alias === "tide" && toggleOffboardingDialog ? [
+            <DropdownItem key="offboard" onClick={() => toggleOffboardingDialog()}>
+              {t("offboard", "Offboard")}
+            </DropdownItem>,
+          ] : []),
           <Divider key="separator" />,
           <DropdownItem key="delete" onClick={() => toggleDeleteDialog()}>
             {t("delete")}
@@ -519,6 +526,11 @@ export default function DetailSettings() {
       /** TIDECLOAK IMPLEMENTATION end */
       reset(p);
       addAlert(t("updateSuccessIdentityProvider"), AlertVariant.success);
+      /** TIDECLOAK IMPLEMENTATION start */
+      const data = new FormData();
+      data.append("isRagnarokEnabled", form.getValues("config.backupOn"));
+      await adminClient.tideAdmin.toggleRagnarok(data)
+      /** TIDECLOAK IMPLEMENTATION end */
     } catch (error) {
       addError("updateErrorIdentityProvider", error);
     }
@@ -567,6 +579,25 @@ export default function DetailSettings() {
         );
       } catch (error) {
         addError("deleteErrorIdentityProvider", error);
+      }
+    },
+  });
+
+  const [toggleOffboardingDialog, OffboardingConfirm] = useOffboardingDialog({
+    titleKey: "offboardProvider",
+    messageKey: "offboardProviderConfirmation",
+    confirmationText: "CONFIRM OFFBOARDING",
+    onConfirm: async () => {
+      try {
+        const message  = await adminClient.tideAdmin.offboardProvider();
+        addAlert(
+          t("offboardingSuccessful", message || "Provider offboarded successfully"),
+          AlertVariant.success
+        );
+        navigate(toIdentityProviders({ realm }));
+
+      } catch (error) {
+        addError("offboardingError", error);
       }
     },
   });
@@ -787,6 +818,7 @@ export default function DetailSettings() {
     <FormProvider {...form}>
       <DeleteConfirm />
       <DeleteMapperConfirm />
+      <OffboardingConfirm />
       <Controller
         name="enabled"
         control={form.control}
@@ -797,6 +829,7 @@ export default function DetailSettings() {
             onChange={field.onChange}
             save={save}
             toggleDeleteDialog={toggleDeleteDialog}
+            toggleOffboardingDialog={alias === "tide" ? toggleOffboardingDialog : undefined}
           />
         )}
       />
