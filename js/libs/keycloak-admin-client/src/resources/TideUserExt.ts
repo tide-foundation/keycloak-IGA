@@ -87,6 +87,11 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
     method: "GET",
     path: "/ragnarok/change-set/offboarding/requests",
   });
+    public getRequestedChangesForRealmLicensing = this.makeRequest<void, RequestedChanges[]>({
+    method: "GET",
+    path: "/tideAdminResources/change-set/licensing/requests",
+  });
+
 
 
   public approveDraftChangeSet = this.makeRequest<

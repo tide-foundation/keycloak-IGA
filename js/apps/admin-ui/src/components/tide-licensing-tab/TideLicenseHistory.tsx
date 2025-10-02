@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Table,
   Thead,
@@ -6,7 +6,7 @@ import {
   Tr,
   Th,
   Td,
-  TableText
+  TableText,
 } from "@patternfly/react-table";
 import {
   ClipboardCopy,
@@ -16,17 +16,21 @@ import {
   Bullseye,
   EmptyState,
   EmptyStateHeader,
-  EmptyStateIcon,
   EmptyStateBody,
-  Button
+  Button,
+  Spinner,
+  AlertVariant,
 } from "@patternfly/react-core";
 import { InfoCircleIcon } from "@patternfly/react-icons";
+import { useTranslation } from "react-i18next";
+import { useAdminClient } from "../../admin-client";
+import { useAlerts } from "@keycloak/keycloak-ui-shared";
 
 // TIDECLOAK IMPLEMENTATION
 export interface License {
-  licenseData: string; // full JSON string or compact string
+  licenseData: any;   // can be JSON string or object
   status: string;
-  date: string;        // epoch seconds string (e.g., "1726728319")
+  date: string;       // epoch seconds string OR ms number string
 }
 
 type TideLicenseHistoryProps = {
@@ -36,19 +40,35 @@ type TideLicenseHistoryProps = {
 // --- helpers (browser-time only) ---
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Local";
 
-function formatLocal(epochSeconds: number) {
+/** Normalize epoch input: supports seconds or milliseconds; returns seconds or null if invalid */
+function normalizeEpoch(input: unknown): number | null {
+  const n = Number(input);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n >= 1e11) return Math.floor(n / 1000); // treat 11–13 digits as ms
+  return Math.floor(n); // seconds
+}
+
+type FormattedLocal =
+  | { local: string; iso: string; ago: string; dateObj: Date }
+  | null;
+
+function formatLocal(epochSeconds: number | null): FormattedLocal {
+  if (epochSeconds == null) return null;
   const d = new Date(epochSeconds * 1000);
+  if (isNaN(d.getTime())) return null;
+
   const local = d.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit"
+    second: "2-digit",
   });
-  const iso = d.toISOString(); // UTC representation
-  const ms = Date.now() - d.getTime();
-  const abs = Math.abs(ms);
+  const iso = d.toISOString();
+
+  const diff = Date.now() - d.getTime();
+  const abs = Math.abs(diff);
   const mins = Math.round(abs / 60000);
   const hrs = Math.round(abs / 3600000);
   const days = Math.round(abs / 86400000);
@@ -56,99 +76,184 @@ function formatLocal(epochSeconds: number) {
     abs < 60000
       ? "just now"
       : abs < 3600000
-      ? `${mins}m ${ms < 0 ? "from now" : "ago"}`
+      ? `${mins}m ${diff < 0 ? "from now" : "ago"}`
       : abs < 86400000
-      ? `${hrs}h ${ms < 0 ? "from now" : "ago"}`
-      : `${days}d ${ms < 0 ? "from now" : "ago"}`;
+      ? `${hrs}h ${diff < 0 ? "from now" : "ago"}`
+      : `${days}d ${diff < 0 ? "from now" : "ago"}`;
 
   return { local, iso, ago, dateObj: d };
 }
 
-function truncateMiddle(s: string, max = 120) {
+// --- robust string utilities ---
+function safeStringify(val: unknown, pretty = false): string {
+  try {
+    if (typeof val === "string") return val;
+    return JSON.stringify(val, null, pretty ? 2 : 0);
+  } catch {
+    try {
+      return String(val ?? "");
+    } catch {
+      return "";
+    }
+  }
+}
+
+/** If string & valid JSON → pretty JSON; if object → JSON.stringify; else → raw string */
+function coerceJsonString(val: unknown, pretty = false): string {
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      return JSON.stringify(parsed, null, pretty ? 2 : 0);
+    } catch {
+      return val;
+    }
+  }
+  return safeStringify(val, pretty);
+}
+
+function truncateMiddle(input: unknown, max = 160) {
+  const s = typeof input === "string" ? input : safeStringify(input);
   if (s.length <= max) return s;
   const head = Math.floor(max / 2) - 3;
   const tail = max - head - 3;
   return `${s.slice(0, head)}...${s.slice(-tail)}`;
 }
 
+function parseLicenseData(raw: any): null | { gVRK?: string; [k: string]: any } {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    try {
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === "object" ? obj : null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object") return raw;
+  return null;
+}
+
 const isActionableStatus = (status: string) =>
   /^(upcoming\s*renewal|active)$/i.test((status || "").trim());
 
 export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
-  licenseList
+  licenseList,
 }) => {
+  const { t } = useTranslation();
+  const { adminClient } = useAdminClient();
+  const { addAlert, addError } = useAlerts();
+
+  // per-row loading (keyed by row key)
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+
   const rows = useMemo(() => {
     return (licenseList ?? []).map((lic) => {
-      const epoch =
-        typeof lic.date === "string" ? parseInt(lic.date, 10) : ((lic as any).date as number);
-      const { local, iso, ago } = formatLocal(epoch || 0);
+      const epoch = normalizeEpoch(lic.date);
+      const fmt = formatLocal(epoch);
 
-      const copyPayload = (() => {
-        try {
-          const parsed = JSON.parse(lic.licenseData);
-          return JSON.stringify(parsed, null, 2);
-        } catch {
-          return lic.licenseData;
-        }
-      })();
-
+      // Always produce a string payload for display/copy
+      const copyPayload = coerceJsonString(lic.licenseData, /*pretty=*/true);
       const displaySnippet = truncateMiddle(copyPayload, 160);
 
       return {
-        key: `${lic.status}-${epoch}-${displaySnippet.length}`,
+        key: `${lic.status}-${epoch ?? "invalid"}-${displaySnippet.length}`,
         original: lic,
         status: lic.status,
-        local,
-        iso,
-        ago,
+        hasValidDate: !!fmt,
+        local: fmt?.local ?? "—",
+        iso: fmt?.iso ?? "",
+        ago: fmt?.ago ?? "",
+        epoch,
         copyPayload,
         displaySnippet,
-        epoch
       };
     });
   }, [licenseList]);
 
-  const handleSign = (row: (typeof rows)[number]) => {
-    // TODO hook endpoint later
-    // Include helpful context in the log so you can see which item was clicked
-    // without digging through state.
-    // eslint-disable-next-line no-console
-    console.log("Sign clicked", {
-      status: row.status,
-      epoch: row.epoch,
-      local: row.local,
-      licenseData: row.original.licenseData
-    });
+  const setRowLoading = (key: string, v: boolean) =>
+    setLoading((prev) => ({ ...prev, [key]: v }));
+
+  // SIGN
+  const handleSign = async (row: (typeof rows)[number]) => {
+    try {
+      setRowLoading(row.key, true);
+      const parsed = parseLicenseData(row.original.licenseData);
+      const gvrk = parsed?.gVRK?.toString?.().trim();
+
+      const message: string | void = await adminClient.tideAdmin.licenseProvider({
+        gvrk, // optional, send if present
+      });
+
+      addAlert(
+        t(
+          "LicensingSigningReviewCreated",
+          message || "Request to sign new license created"
+        ),
+        AlertVariant.success
+      );
+    } catch (error: any) {
+      addError("signingNewLicenseError", error);
+    } finally {
+      setRowLoading(row.key, false);
+    }
   };
 
-  const handleSwitch = (row: (typeof rows)[number]) => {
-    // TODO hook endpoint later
-    // eslint-disable-next-line no-console
-    console.log("Switch clicked", {
-      status: row.status,
-      epoch: row.epoch,
-      local: row.local,
-      licenseData: row.original.licenseData
-    });
+  // SWITCH
+  const handleSwitch = async (row: (typeof rows)[number]) => {
+    try {
+      setRowLoading(row.key, true);
+
+      const parsed = parseLicenseData(row.original.licenseData);
+      const gvrk = parsed?.gVRK?.toString?.().trim();
+
+      if (!gvrk) {
+        addError("switchVrkError", new Error("No gVRK found in license data"));
+        return;
+      }
+
+      const resp = await adminClient.tideAdmin.switchVrk({ gvrk });
+
+      // Try to surface a meaningful message regardless of return type
+      let message = "";
+      if (typeof resp === "string") {
+        message = resp;
+      } else if (resp && typeof (resp as any).text === "function") {
+        try {
+          message = await (resp as any).text();
+        } catch {
+          message = "";
+        }
+      }
+
+      addAlert(
+        t("switchVrkSuccessful", message || `Switched active configuration to specified GVRK.`),
+        AlertVariant.success
+      );
+    } catch (error: any) {
+      addError("switchVrkError", error);
+    } finally {
+      setRowLoading(row.key, false);
+    }
   };
 
+  // ---- Compact EMPTY STATE (short height, no icon) ----
   if (!licenseList || licenseList.length === 0) {
     return (
       <div
         style={{
           border: "1px solid var(--pf-v5-global--BorderColor--100)",
           borderRadius: 6,
-          padding: 8
+          padding: 8,
+          minHeight: 80,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <Bullseye>
           <EmptyState>
-            <EmptyStateHeader
-              titleText="No license history"
-              icon={<EmptyStateIcon icon={InfoCircleIcon} />}
-              headingLevel="h4"
-            />
-            <EmptyStateBody>
+            <EmptyStateHeader titleText="No license history" headingLevel="h4" />
+            <EmptyStateBody style={{ marginTop: 4 }}>
               When licenses are generated, they'll appear here.
             </EmptyStateBody>
           </EmptyState>
@@ -163,7 +268,7 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
         maxHeight: 420,
         overflow: "auto",
         border: "1px solid var(--pf-v5-global--BorderColor--100)",
-        borderRadius: 6
+        borderRadius: 6,
       }}
       aria-label="License history table"
     >
@@ -178,11 +283,12 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
           <Tr>
             <Th width={40}>License</Th>
             <Th>Status</Th>
-            <Th>Date{" "}
+            <Th>
+              Date{" "}
               <Tooltip
                 content={
                   <>
-                    Displayed in your browser's timezone: <strong>{tz}</strong>
+                    Displayed in your browser&apos;s timezone: <strong>{tz}</strong>
                   </>
                 }
               >
@@ -197,6 +303,7 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
         <Tbody>
           {rows.map((r) => {
             const actionable = isActionableStatus(r.status);
+            const isBusy = !!loading[r.key];
             return (
               <Tr key={r.key}>
                 <Td dataLabel="License">
@@ -239,41 +346,62 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
                 </Td>
 
                 <Td dataLabel="Date">
-                  <Tooltip
-                    content={
-                      <>
-                        <div><strong>Local:</strong> {r.local}</div>
-                        <div><strong>ISO (UTC representation):</strong> {r.iso}</div>
-                        <div><strong>Time zone:</strong> {tz}</div>
-                      </>
-                    }
-                  >
-                    <span aria-label={`Local date ${r.local}`}>
-                      {r.local}{" "}
-                      <span
-                        style={{ opacity: 0.75, fontSize: "0.85em", marginLeft: 6 }}
-                        aria-label={`Occurred ${r.ago}`}
-                      >
-                        · {r.ago}
+                  {r.hasValidDate ? (
+                    <Tooltip
+                      content={
+                        <>
+                          <div>
+                            <strong>Local:</strong> {r.local}
+                          </div>
+                          <div>
+                            <strong>ISO (UTC representation):</strong> {r.iso}
+                          </div>
+                          <div>
+                            <strong>Time zone:</strong> {tz}
+                          </div>
+                        </>
+                      }
+                    >
+                      <span aria-label={`Local date ${r.local}`}>
+                        {r.local}{" "}
+                        <span
+                          style={{ opacity: 0.75, fontSize: "0.85em", marginLeft: 6 }}
+                          aria-label={`Occurred ${r.ago}`}
+                        >
+                          · {r.ago}
+                        </span>
                       </span>
-                    </span>
-                  </Tooltip>
+                    </Tooltip>
+                  ) : (
+                    <span style={{ opacity: 0.7 }}>—</span>
+                  )}
                 </Td>
 
                 <Td dataLabel="Actions">
                   {actionable ? (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 8,
+                        minWidth: 180,
+                      }}
+                    >
                       <Button
                         variant="primary"
                         onClick={() => handleSign(r)}
                         aria-label="Sign license"
+                        style={{ width: "100%" }}
+                        isDisabled={isBusy}
                       >
-                        Sign
+                        {isBusy ? <Spinner size="sm" /> : "Sign"}
                       </Button>
                       <Button
                         variant="secondary"
                         onClick={() => handleSwitch(r)}
                         aria-label="Switch license"
+                        style={{ width: "100%" }}
+                        isDisabled={isBusy}
                       >
                         Switch
                       </Button>

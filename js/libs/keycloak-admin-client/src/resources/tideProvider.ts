@@ -78,6 +78,13 @@ export class TideProvider extends Resource<{ realm?: string }> {
         path: "/vendorResources/rotate-vrk"
     });
 
+    public switchVrk = this.makeRequest<{ gvrk?: string }, Response>({
+    method: "POST",
+    path: "/vendorResources/switch-vrk",
+    queryParamKeys: ["gvrk"],
+    });
+
+
 
     public getScheduledTasks = this.makeRequest<void, scheduledTaskInfo[]>({
         method: "GET",
@@ -247,6 +254,11 @@ export class TideProvider extends Resource<{ realm?: string }> {
     public offboardProvider = this.makeRequest<void, string>({
         method: "POST",
         path: "/ragnarok/trigger-offboarding",
+    });
+    public licenseProvider = this.makeRequest<{ gvrk?: string }, string>({
+        method: "POST",
+        path: "/tideAdminResources/trigger-license-signing",
+        queryParamKeys: ["gvrk"],
     });
 
     constructor(client: KeycloakAdminClient) {

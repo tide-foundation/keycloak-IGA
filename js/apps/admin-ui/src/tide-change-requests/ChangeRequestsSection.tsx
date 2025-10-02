@@ -30,12 +30,10 @@ import { ChangeRequestsTab, toChangeRequests } from './routes/ChangeRequests';
 import { useRealm } from "../context/realm-context/RealmContext";
 import { RolesChangeRequestsList } from "./RolesChangeRequestsList"
 import { ClientChangeRequestsList } from './ClientChangeRequestsList';
-import { RealmSettingsChangeRequestsList } from './RealmSettingsChangeRequestsList';
 import { SettingsChangeRequestsList } from './SettingsChangeRequestsList';
 import { groupRequestsByDraftId } from './utils/bundleUtils';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { useAccess } from '../context/access/Access';
-import DraftChangeSetRequest from "@keycloak/keycloak-admin-client/lib/defs/DraftChangeSetRequest"
 import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
