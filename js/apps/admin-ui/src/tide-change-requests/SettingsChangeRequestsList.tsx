@@ -46,7 +46,7 @@ type ChangeSetItem = {
 };
 
 const SCOPE_RAGNAROK = "Offboard:1" as const;
-const SCOPE_LICENSING = "TidecloakUpdateSettings:1" as const;
+const SCOPE_LICENSING = "RotateVRK:1" as const;
 
 export const SettingsChangeRequestsList = ({
   updateCounter,
@@ -143,11 +143,10 @@ export const SettingsChangeRequestsList = ({
     const ragnarok: ChangeSetItem[] = [];
     for (const r of reqs) {
       const t = (r.changeSetType || "").toUpperCase();
-      if (t === "LICENSING") licensing.push(r);
+      if (t === "REALM_LICENSING") licensing.push(r);
       else if (t === "RAGNAROK") ragnarok.push(r);
       else {
-        // Unknown types default to Ragnarok scope for safety (or you could reject)
-        ragnarok.push(r);
+        throw new Error(`Unknown changeSetType '${r.changeSetType}' in request`);
       }
     }
     return { licensing, ragnarok };
@@ -191,7 +190,7 @@ export const SettingsChangeRequestsList = ({
           respObj.changeSetRequests,
           scope,
           respObj.expiry,
-          "base64url"
+          scope === SCOPE_LICENSING ? "base64" : "base64url"
         );
 
         // Only attach results if they match the draft we approved
