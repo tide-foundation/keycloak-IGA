@@ -3,11 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   Button,
   ToolbarItem,
-  PageSection,
-  PageSectionVariants,
   EmptyState,
-  EmptyStateVariant,
-  EmptyStateIcon,
   EmptyStateBody,
   Title,
   Spinner,
@@ -16,6 +12,8 @@ import {
   Label,
   ButtonVariant,
   AlertVariant,
+  Modal,
+  ModalVariant,
 } from "@patternfly/react-core";
 import {
   Table,
@@ -27,22 +25,32 @@ import {
 } from "@patternfly/react-table";
 import { CogIcon } from "@patternfly/react-icons";
 import { useAdminClient } from "../admin-client";
-import RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
-import { useAccess } from '../context/access/Access';
-import { useAlerts, useEnvironment } from '@keycloak/keycloak-ui-shared';
+import { useAccess } from "../context/access/Access";
+import { useAlerts, useEnvironment } from "@keycloak/keycloak-ui-shared";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
-import { groupRequestsByDraftId, BundledRequest } from './utils/bundleUtils';
-import { useCurrentUser } from '../utils/useCurrentUser';
+import { groupRequestsByDraftId, BundledRequest } from "./utils/bundleUtils";
+import { useCurrentUser } from "../utils/useCurrentUser";
 import { ApprovalEnclave } from "heimdall-tide";
-import { Modal, ModalVariant } from "@patternfly/react-core";
 
 interface SettingsChangeRequestsListProps {
   updateCounter: (count: number) => void;
 }
 
-export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequestsListProps) => {
+type ChangeSetItem = {
+  draftRecordId: string;
+  changeSetType: string;
+  actionType: string;
+  [k: string]: any;
+};
+
+const SCOPE_RAGNAROK = "Offboard:1" as const;
+const SCOPE_LICENSING = "RotateVRK:1" as const;
+
+export const SettingsChangeRequestsList = ({
+  updateCounter,
+}: SettingsChangeRequestsListProps) => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
   const { addAlert } = useAlerts();
@@ -53,7 +61,6 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const [commitRecord, setCommitRecord] = useState<boolean>(false);
   const [showEmailConfirmModal, setShowEmailConfirmModal] = useState<boolean>(false);
   const [userCount, setUserCount] = useState<number>(0);
-  // New state for email sending/loading
   const [isEmailing, setIsEmailing] = useState<boolean>(false);
 
   const { keycloak } = useEnvironment();
@@ -64,14 +71,23 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     setKey((prev: number) => prev + 1);
   };
 
-  const loader = async () => {
+  // Loader merges Ragnarok + Licensing requests
+  const loader = async (): Promise<BundledRequest[]> => {
     try {
       const requests = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
-      const bundledRequests = groupRequestsByDraftId(requests);
-      updateCounter(bundledRequests.length);
-      return bundledRequests;
+      const licensingRequests =
+        await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
+
+      const merged: any[] = [
+        ...(Array.isArray(requests) ? requests : []),
+        ...(Array.isArray(licensingRequests) ? licensingRequests : []),
+      ];
+
+      const bundled = groupRequestsByDraftId(merged);
+      updateCounter(bundled.length);
+      return bundled;
     } catch (error) {
-      console.error("Failed to load settings requests:", error);
+      console.error("Failed to load settings/licensing requests:", error);
       updateCounter(0);
       return [];
     }
@@ -85,8 +101,7 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     }
 
     const firstBundle = selectedRow[0];
-    const allRequests = firstBundle.requests;
-
+    const allRequests = firstBundle.requests as ChangeSetItem[];
     if (!allRequests || !allRequests[0]) {
       setApproveRecord(false);
       setCommitRecord(false);
@@ -95,84 +110,132 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
 
     const { status, deleteStatus } = allRequests[0];
 
-    // Disable both buttons if status is DENIED
     if (status === "DENIED" || deleteStatus === "DENIED") {
       setApproveRecord(false);
       setCommitRecord(false);
       return;
     }
 
-    // Enable Approve button if the record is PENDING or DRAFT
     if (
       status === "PENDING" ||
       status === "DRAFT" ||
-      (status === "ACTIVE" && (deleteStatus === "DRAFT" || deleteStatus === "PENDING"))
+      (status === "ACTIVE" &&
+        (deleteStatus === "DRAFT" || deleteStatus === "PENDING"))
     ) {
       setApproveRecord(true);
       setCommitRecord(false);
       return;
     }
 
-    // Enable Commit button if status or deleteStatus is APPROVED
     if (status === "APPROVED" || deleteStatus === "APPROVED") {
       setCommitRecord(true);
       setApproveRecord(false);
       return;
     }
 
-    // Default: Disable both buttons
     setApproveRecord(false);
     setCommitRecord(false);
   }, [selectedRow]);
 
+  // --- helpers: partition bundle requests into licensing vs ragnarok groups ---
+  function partitionByType(reqs: ChangeSetItem[]) {
+    const licensing: ChangeSetItem[] = [];
+    const ragnarok: ChangeSetItem[] = [];
+    for (const r of reqs) {
+      const t = (r.changeSetType || "").toUpperCase();
+      if (t === "REALM_LICENSING") licensing.push(r);
+      else if (t === "RAGNAROK") ragnarok.push(r);
+      else {
+        throw new Error(`Unknown changeSetType '${r.changeSetType}' in request`);
+      }
+    }
+    return { licensing, ragnarok };
+  }
+
+  async function runApprovalFlowForGroup(
+    group: ChangeSetItem[],
+    scope: typeof SCOPE_LICENSING | typeof SCOPE_RAGNAROK
+  ) {
+    if (group.length === 0) return;
+
+    const changeRequests = group.map((x) => ({
+      changeSetId: x.draftRecordId,
+      changeSetType: x.changeSetType,
+      actionType: x.actionType,
+    }));
+
+    const responses: string[] =
+      await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
+
+    for (const resp of responses) {
+      let respObj: any;
+      try {
+        respObj = JSON.parse(resp);
+      } catch {
+        continue;
+      }
+
+      if (respObj?.requiresApprovalPopup === "true" && respObj?.uri) {
+        const orkURL = new URL(respObj.uri);
+        const enclave = new ApprovalEnclave({
+          homeOrkOrigin: orkURL.origin,
+          voucherURL: "",
+          signed_client_origin: "",
+          vendorId: "",
+        }).init([keycloak.tokenParsed!["vuid"]], respObj.uri);
+
+        const authApproval = await enclave.getAuthorizerApproval(
+          respObj.changeSetRequests,
+          scope,
+          respObj.expiry,
+          scope === SCOPE_LICENSING ? "hex" : "base64url"
+        );
+
+        // Only attach results if they match the draft we approved
+        if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
+          if (authApproval.accepted === false) {
+            const first = group[0];
+            const formData = new FormData();
+            formData.append("changeSetId", first.draftRecordId);
+            formData.append("actionType", first.actionType);
+            formData.append("changeSetType", first.changeSetType);
+            await adminClient.tideAdmin.addRejection(formData);
+          } else {
+            const authzAuthn = await enclave.getAuthorizerAuthentication();
+            const first = group[0];
+            const formData = new FormData();
+            formData.append("changeSetId", first.draftRecordId);
+            formData.append("actionType", first.actionType);
+            formData.append("changeSetType", first.changeSetType);
+            formData.append("authorizerApproval", authApproval.data);
+            formData.append("authorizerAuthentication", authzAuthn);
+            await adminClient.tideAdmin.addAuthorization(formData);
+          }
+        }
+        enclave.close();
+      }
+    }
+  }
+
   const handleApprove = async () => {
     try {
-      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => ({
-        changeSetId: x.draftRecordId,
-        changeSetType: x.changeSetType,
-        actionType: x.actionType,
-      }));
+      if (!selectedRow[0]) return;
 
-      const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
+      const bundle = selectedRow[0];
+      const allRequests = bundle.requests as ChangeSetItem[];
 
-      if (response.length === 1) {
-        const respObj = JSON.parse(response[0]);
-        if (respObj.requiresApprovalPopup === "true") {
-          const orkURL = new URL(respObj.uri);
-          const heimdall = new ApprovalEnclave({
-            homeOrkOrigin: orkURL.origin,
-            voucherURL: "",
-            signed_client_origin: "",
-            vendorId: ""
-          }).init([keycloak.tokenParsed![
-            'vuid']
-          ], respObj.uri);
-          const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "Offboard:1", respObj.expiry, "base64url");
+      // Partition mixed bundles and run flows sequentially to avoid mixed scopes
+      const { licensing, ragnarok } = partitionByType(allRequests);
 
-          if (authApproval.draft === respObj.changeSetRequests) {
-            if (authApproval.accepted === false) {
-              const formData = new FormData();
-              formData.append("changeSetId", allRequests[0].draftRecordId)
-              formData.append("actionType", allRequests[0].actionType);
-              formData.append("changeSetType", allRequests[0].changeSetType);
-              await adminClient.tideAdmin.addRejection(formData)
-            }
-            else {
-              const authzAuthn = await heimdall.getAuthorizerAuthentication();
-              const formData = new FormData();
-              formData.append("changeSetId", allRequests[0].draftRecordId)
-              formData.append("actionType", allRequests[0].actionType);
-              formData.append("changeSetType", allRequests[0].changeSetType);
-              formData.append("authorizerApproval", authApproval.data);
-              formData.append("authorizerAuthentication", authzAuthn);
-              await adminClient.tideAdmin.addAuthorization(formData)
-            }
-          }
-          heimdall.close();
-        }
-        refresh();
-      }
+      // 1) Licensing group → TidecloakUpdateSettings:1
+      await runApprovalFlowForGroup(licensing, SCOPE_LICENSING);
+
+      // 2) Ragnarok group → Offboard:1
+      await runApprovalFlowForGroup(ragnarok, SCOPE_RAGNAROK);
+
+      refresh();
     } catch (error: any) {
       addAlert(error.responseData || "Failed to approve request", AlertVariant.danger);
     }
@@ -180,25 +243,27 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
 
   const handleCommit = async () => {
     try {
-      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-      const hasRagnarokRequest = allRequests.some(req => req.changeSetType.toLowerCase() === "ragnarok");
-      
+      const allRequests = selectedRow.flatMap((bundle) => bundle.requests) as ChangeSetItem[];
+      const hasRagnarokRequest = allRequests.some(
+        (req) => (req.changeSetType || "").toLowerCase() === "ragnarok"
+      );
+
       if (hasRagnarokRequest) {
-        // Get user count and show modal BEFORE committing
         const users = await adminClient.users.find();
         setUserCount(users.length);
         setShowEmailConfirmModal(true);
-        return; // Wait for user decision
+        return;
       }
 
-      // No Ragnarok request, proceed with normal commit
-      const changeRequests = allRequests.map(x => ({
+      const changeRequests = allRequests.map((x) => ({
         changeSetId: x.draftRecordId,
         changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
-      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      await adminClient.tideUsersExt.commitDraftChangeSet({
+        changeSets: changeRequests,
+      });
       addAlert(t("Settings change request committed"), AlertVariant.success);
       refresh();
     } catch (error: any) {
@@ -209,11 +274,11 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const handleSendEmails = async () => {
     setIsEmailing(true);
     try {
-      // Then send emails
       const users = await adminClient.users.find();
       setUserCount(users.length);
+
       await Promise.all(
-        users.map(user =>
+        users.map((user: any) =>
           adminClient.users.executeActionsEmail({
             id: user.id!,
             actions: ["UPDATE_PASSWORD"],
@@ -221,16 +286,17 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
           })
         )
       );
-      
-      // Commit the changeset after emails
-      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => ({
+
+      const allRequests = selectedRow.flatMap((bundle) => bundle.requests) as ChangeSetItem[];
+      const changeRequests = allRequests.map((x) => ({
         changeSetId: x.draftRecordId,
         changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
-      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      await adminClient.tideUsersExt.commitDraftChangeSet({
+        changeSets: changeRequests,
+      });
       addAlert(t(`Settings committed and emails sent to ${userCount} users`), AlertVariant.success);
       setShowEmailConfirmModal(false);
       refresh();
@@ -245,15 +311,16 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
   const handleSkipEmails = async () => {
     setIsEmailing(true);
     try {
-      // Commit the changeset without sending emails
-      const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => ({
+      const allRequests = selectedRow.flatMap((bundle) => bundle.requests) as ChangeSetItem[];
+      const changeRequests = allRequests.map((x) => ({
         changeSetId: x.draftRecordId,
         changeSetType: x.changeSetType,
         actionType: x.actionType,
       }));
 
-      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      await adminClient.tideUsersExt.commitDraftChangeSet({
+        changeSets: changeRequests,
+      });
       addAlert(t("Settings change request committed"), AlertVariant.success);
       setShowEmailConfirmModal(false);
       refresh();
@@ -267,24 +334,22 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
 
   const [toggleCancelDialog, CancelConfirm] = useConfirmDialog({
     titleKey: "Cancel Settings Change Request",
-    children: (
-      <>
-        {"Are you sure you want to cancel this settings change request?"}
-      </>
-    ),
+    children: <>Are you sure you want to cancel this settings change request?</>,
     continueButtonLabel: "cancel",
     cancelButtonLabel: "back",
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+        const allRequests = selectedRow.flatMap((bundle) => bundle.requests) as ChangeSetItem[];
         const changeSetArray = allRequests.map((row) => ({
           changeSetId: row.draftRecordId,
           changeSetType: row.changeSetType || "RAGNAROK",
-          actionType: row.actionType
+          actionType: row.actionType,
         }));
 
-        await adminClient.tideUsersExt.cancelDraftChangeSet({ changeSets: changeSetArray });
+        await adminClient.tideUsersExt.cancelDraftChangeSet({
+          changeSets: changeSetArray,
+        });
         addAlert(t("Settings change request cancelled"), AlertVariant.success);
         refresh();
       } catch (error) {
@@ -293,10 +358,156 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     },
   });
 
+  const typeLabel = (bundle: BundledRequest) => {
+    const types = [
+      ...new Set(
+        bundle.requests
+          .map((r: any) => (r.changeSetType || "").toUpperCase())
+          .filter(Boolean)
+      ),
+    ];
+    if (types.length === 1) {
+      const t0 = types[0];
+      const color =
+        t0 === "RAGNAROK" ? "purple" : t0 === "LICENSING" ? "blue" : "grey";
+      return (
+        <Label color={color as any} className="keycloak-admin--role-mapping__client-name">
+          {t0}
+        </Label>
+      );
+    }
+    return (
+      <Label color="gold" className="keycloak-admin--role-mapping__client-name">
+        MIXED
+      </Label>
+    );
+  };
+
+  const bundleStatusLabel = (bundle: BundledRequest) => {
+    const statuses = [
+      ...new Set(
+        bundle.requests.map((r: any) =>
+          r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status
+        )
+      ),
+    ];
+    if (statuses.length === 1) {
+      const status = statuses[0] as string;
+      const color =
+        status === "PENDING"
+          ? "orange"
+          : status === "APPROVED"
+          ? "blue"
+          : status === "DENIED"
+          ? "red"
+          : "grey";
+      return (
+        <Label color={color as any} className="keycloak-admin--role-mapping__client-name">
+          {status}
+        </Label>
+      );
+    }
+    return (
+      <Label color="purple" className="keycloak-admin--role-mapping__client-name">
+        MIXED
+      </Label>
+    );
+  };
+
+  const statusLabel = (row: any) => {
+    const status = row.status === "ACTIVE" ? row.deleteStatus || row.status : row.status;
+    const color =
+      status === "PENDING"
+        ? "orange"
+        : status === "APPROVED"
+        ? "blue"
+        : status === "DENIED"
+        ? "red"
+        : "grey";
+    return (
+      <Label color={color as any} className="keycloak-admin--role-mapping__client-name">
+        {status}
+      </Label>
+    );
+  };
+
+  const DetailCell = (bundle: BundledRequest) => (
+    <Table aria-label="Bundle details" variant="compact" borders={false} isStriped>
+      <Thead>
+        <Tr>
+          <Th width={10}>Action</Th>
+          <Th width={20} modifier="wrap">
+            Request Type
+          </Th>
+          <Th width={20} modifier="wrap">
+            Change Set Type
+          </Th>
+          <Th width={10} modifier="wrap">
+            Action Type
+          </Th>
+          <Th width={10}>Status</Th>
+          <Th width={10}>Realm ID</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {bundle.requests.map((request: any, index: number) => (
+          <Tr key={index}>
+            <Td dataLabel="Action">{request.action}</Td>
+            <Td dataLabel="Request Type">{request.requestType}</Td>
+            <Td dataLabel="Change Set Type">{request.changeSetType}</Td>
+            <Td dataLabel="Action Type">{request.actionType}</Td>
+            <Td dataLabel="Status">{statusLabel(request)}</Td>
+            <Td dataLabel="Realm ID">{request.realmId}</Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
+  );
+
+  const columns = [
+    {
+      name: "Summary",
+      displayKey: "Summary",
+      cellRenderer: (bundle: BundledRequest) => {
+        if (bundle.requests.length === 1) {
+          const request = bundle.requests[0];
+          return (
+            <div>
+              <div className="pf-v5-u-font-weight-bold">{request.action}</div>
+              <div className="pf-v5-u-color-200">
+                {request.requestType} • {request.changeSetType}
+              </div>
+            </div>
+          );
+        } else {
+          const actions = [...new Set(bundle.requests.map((r: any) => r.action))];
+          const types = [...new Set(bundle.requests.map((r: any) => r.requestType))];
+          return (
+            <div>
+              <div className="pf-v5-u-font-weight-bold">
+                {bundle.requests.length} changes: {actions.join(", ")}
+              </div>
+              <div className="pf-v5-u-color-200">{types.join(", ")}</div>
+            </div>
+          );
+        }
+      },
+    },
+    {
+      name: "Type",
+      displayKey: "Type",
+      cellRenderer: (bundle: BundledRequest) => typeLabel(bundle),
+    },
+    {
+      name: "Status",
+      displayKey: "Status",
+      cellRenderer: (bundle: BundledRequest) => bundleStatusLabel(bundle),
+    },
+  ];
+
   const ToolbarItemsComponent = () => {
     const { hasAccess } = useAccess();
     const isManager = hasAccess("manage-clients");
-
     if (!isManager) return <span />;
 
     return (
@@ -321,119 +532,13 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
     );
   };
 
-  const bundleStatusLabel = (bundle: BundledRequest) => {
-    const statuses = [...new Set(bundle.requests.map((r: any) => r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status))];
-
-    if (statuses.length === 1) {
-      const status = statuses[0] as string;
-      return (
-        <Label
-          color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
-          className="keycloak-admin--role-mapping__client-name"
-        >
-          {status}
-        </Label>
-      );
-    } else {
-      return (
-        <Label color="purple" className="keycloak-admin--role-mapping__client-name">
-          MIXED
-        </Label>
-      );
-    }
-  };
-
-  const statusLabel = (row: any) => {
-    const status = row.status === "ACTIVE" ? row.deleteStatus || row.status : row.status;
-    return (
-      <Label
-        color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
-        className="keycloak-admin--role-mapping__client-name"
-      >
-        {status}
-      </Label>
-    );
-  };
-
-  const DetailCell = (bundle: BundledRequest) => (
-    <Table
-      aria-label="Bundle details"
-      variant={'compact'}
-      borders={false}
-      isStriped
-    >
-      <Thead>
-        <Tr>
-          <Th width={10}>Action</Th>
-          <Th width={20} modifier="wrap">Request Type</Th>
-          <Th width={20} modifier="wrap">Change Set Type</Th>
-          <Th width={10} modifier="wrap">Action Type</Th>
-          <Th width={10}>Status</Th>
-          <Th width={10}>Realm ID</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {bundle.requests.map((request: any, index: number) => (
-          <Tr key={index}>
-            <Td dataLabel="Action">{request.action}</Td>
-            <Td dataLabel="Request Type">{request.requestType}</Td>
-            <Td dataLabel="Change Set Type">{request.changeSetType}</Td>
-            <Td dataLabel="Action Type">{request.actionType}</Td>
-            <Td dataLabel="Status">{statusLabel(request)}</Td>
-            <Td dataLabel="Realm ID">{request.realmId}</Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
-  );
-
-  const columns = [
-    {
-      name: 'Summary',
-      displayKey: 'Summary',
-      cellRenderer: (bundle: BundledRequest) => {
-        if (bundle.requests.length === 1) {
-          const request = bundle.requests[0];
-          return (
-            <div>
-              <div className="pf-v5-u-font-weight-bold">
-                {request.action}
-              </div>
-              <div className="pf-v5-u-color-200">
-                {request.requestType} • {request.changeSetType}
-              </div>
-            </div>
-          );
-        } else {
-          const actions = [...new Set(bundle.requests.map((r: any) => r.action))];
-          const types = [...new Set(bundle.requests.map((r: any) => r.requestType))];
-          return (
-            <div>
-              <div className="pf-v5-u-font-weight-bold">
-                {bundle.requests.length} changes: {actions.join(', ')}
-              </div>
-              <div className="pf-v5-u-color-200">
-                {types.join(', ')}
-              </div>
-            </div>
-          );
-        }
-      }
-    },
-    {
-      name: 'Status',
-      displayKey: 'Status',
-      cellRenderer: (bundle: BundledRequest) => bundleStatusLabel(bundle)
-    },
-  ];
-
   return (
     <>
       <div className="keycloak__events_table">
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={true}
+          isRadio
           loader={loader}
           ariaLabelKey="Settings Change Requests"
           detailColumns={[
@@ -447,67 +552,102 @@ export const SettingsChangeRequestsList = ({ updateCounter }: SettingsChangeRequ
           onSelect={(value: BundledRequest[]) => setSelectedRow([...value])}
           emptyState={
             <EmptyState variant="lg">
-              <EmptyStateIcon icon={CogIcon} />
               <Title headingLevel="h4" size="lg">
                 {t("noSettingsChangeRequests")}
               </Title>
               <EmptyStateBody>
                 <TextContent>
-                  <Text>No settings change requests found.</Text>
+                  <Text>No settings or licensing change requests found.</Text>
                 </TextContent>
               </EmptyStateBody>
             </EmptyState>
           }
         />
       </div>
+
       <CancelConfirm />
-      
+
       <Modal
         variant={ModalVariant.small}
         title="Send Password Reset Emails"
         isOpen={showEmailConfirmModal}
         onClose={() => setShowEmailConfirmModal(false)}
         actions={
-          !realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 
+          !realmRepresentation?.smtpServer ||
+          Object.keys(realmRepresentation.smtpServer).length === 0
             ? [
-                <Button key="send" variant="primary" onClick={handleSkipEmails} isDisabled={isEmailing}>
+                <Button
+                  key="send"
+                  variant="primary"
+                  onClick={handleSkipEmails}
+                  isDisabled={isEmailing}
+                >
                   {isEmailing ? <Spinner size="sm" /> : t("Continue with offboarding")}
                 </Button>,
-                <Button key="close" variant="primary" onClick={() => setShowEmailConfirmModal(false)} isDisabled={isEmailing}>
+                <Button
+                  key="close"
+                  variant="primary"
+                  onClick={() => setShowEmailConfirmModal(false)}
+                  isDisabled={isEmailing}
+                >
                   {t("Close")}
-                </Button>
+                </Button>,
               ]
             : [
-                <Button key="send" variant="primary" onClick={handleSendEmails} isDisabled={isEmailing}>
-                  {isEmailing ? <Spinner size="sm" /> : `Send Emails to ${userCount} Users and Offboard`}
+                <Button
+                  key="send"
+                  variant="primary"
+                  onClick={handleSendEmails}
+                  isDisabled={isEmailing}
+                >
+                  {isEmailing ? (
+                    <Spinner size="sm" />
+                  ) : (
+                    `Send Emails to ${userCount} Users and Offboard`
+                  )}
                 </Button>,
-                <Button key="skip" variant="secondary" onClick={handleSkipEmails} isDisabled={isEmailing}>
+                <Button
+                  key="skip"
+                  variant="secondary"
+                  onClick={handleSkipEmails}
+                  isDisabled={isEmailing}
+                >
                   {isEmailing ? <Spinner size="sm" /> : t("Skip Email Notification")}
                 </Button>,
               ]
         }
       >
         <TextContent>
-          {!realmRepresentation?.smtpServer || Object.keys(realmRepresentation.smtpServer).length === 0 ? (
+          {!realmRepresentation?.smtpServer ||
+          Object.keys(realmRepresentation.smtpServer).length === 0 ? (
             <>
               <Text>
-                A Ragnarok (offboarding) request is ready to be committed, which will affect <strong>{userCount}</strong> user/s in the realm.
+                A Ragnarok (offboarding) request is ready to be committed, which will affect{" "}
+                <strong>{userCount}</strong> user/s in the realm.
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-danger">
-                <strong>No SMTP server is configured for this realm.</strong> You will need to manually email user/s to reset their passwords.
-                <br/><br/>
-                <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
+                <strong>No SMTP server is configured for this realm.</strong> You will need to
+                manually email user/s to reset their passwords.
+                <br />
+                <br />
+                <strong>
+                  ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.
+                </strong>
               </Text>
             </>
           ) : (
             <>
               <Text>
-                A Ragnarok (offboarding) request has been committed. Would you like to send password reset emails to all {userCount} user/s in the realm?
+                A Ragnarok (offboarding) request has been committed. Would you like to send password
+                reset emails to all {userCount} user/s in the realm?
               </Text>
               <Text className="pf-v5-u-mt-md pf-v5-u-color-200">
                 This will require all users to reset their passwords within 12 hours.
-                <br/><br/>
-                <strong>ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.</strong>
+                <br />
+                <br />
+                <strong>
+                  ENSURE YOU HAVE SET A PASSWORD FOR YOUR OWN ADMIN ACCOUNT BEFORE CONTINUING.
+                </strong>
               </Text>
             </>
           )}

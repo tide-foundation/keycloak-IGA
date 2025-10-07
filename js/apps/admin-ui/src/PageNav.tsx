@@ -104,8 +104,9 @@ export const PageNav = () => {
       const roleRequest = await adminClient.tideUsersExt.getRequestedChangesForRoles();
       const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
       const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
+      const realmLicensingRequest = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
 
-      setClientRequestCount(userRequest.length + roleRequest.length + clientRequest.length + realmSettingsRequest.length)
+      setClientRequestCount(userRequest.length + roleRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length)
     }
 
     getCount();

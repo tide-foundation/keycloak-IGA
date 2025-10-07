@@ -156,7 +156,7 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
             }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
             const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
 
-            if (authApproval.draft === respObj.changeSetRequests) {
+            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
               if (authApproval.accepted === false) {
                 const formData = new FormData();
                 formData.append("changeSetId", allRequests[0].draftRecordId)

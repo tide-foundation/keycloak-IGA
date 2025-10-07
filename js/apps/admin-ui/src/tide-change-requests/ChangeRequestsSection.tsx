@@ -30,12 +30,10 @@ import { ChangeRequestsTab, toChangeRequests } from './routes/ChangeRequests';
 import { useRealm } from "../context/realm-context/RealmContext";
 import { RolesChangeRequestsList } from "./RolesChangeRequestsList"
 import { ClientChangeRequestsList } from './ClientChangeRequestsList';
-import { RealmSettingsChangeRequestsList } from './RealmSettingsChangeRequestsList';
 import { SettingsChangeRequestsList } from './SettingsChangeRequestsList';
 import { groupRequestsByDraftId } from './utils/bundleUtils';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { useAccess } from '../context/access/Access';
-import DraftChangeSetRequest from "@keycloak/keycloak-admin-client/lib/defs/DraftChangeSetRequest"
 import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
@@ -179,7 +177,7 @@ export default function ChangeRequestsSection() {
             }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
             const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
 
-            if (authApproval.draft === respObj.changeSetRequests) {
+            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
               if (authApproval.accepted === false) {
                 const formData = new FormData();
                 formData.append("changeSetId", selectedRow[0].draftRecordId)
