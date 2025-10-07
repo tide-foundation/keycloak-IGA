@@ -190,11 +190,11 @@ export const SettingsChangeRequestsList = ({
           respObj.changeSetRequests,
           scope,
           respObj.expiry,
-          scope === SCOPE_LICENSING ? "base64" : "base64url"
+          scope === SCOPE_LICENSING ? "hex" : "base64url"
         );
 
         // Only attach results if they match the draft we approved
-        if (authApproval.draft === respObj.changeSetRequests) {
+        if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
           if (authApproval.accepted === false) {
             const first = group[0];
             const formData = new FormData();
