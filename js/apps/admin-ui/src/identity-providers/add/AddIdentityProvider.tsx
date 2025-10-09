@@ -85,9 +85,9 @@ export default function AddIdentityProvider() {
       form.setValue("config.LogoURL", logoUrl);
       form.setValue("config.clientSecret", "null");
       form.setValue("config.changeSetEndpoint", changeSetEndpoint);
-      // const data = new FormData();
-      // data.append("isRagnarokEnabled", "true");
-      // await adminClient.tideAdmin.toggleRagnarok(data)
+      const data = new FormData();
+      data.append("isRagnarokEnabled", "true");
+      await adminClient.tideAdmin.toggleRagnarok(data)
       form.setValue("config.backupOn", "true");
     };
 

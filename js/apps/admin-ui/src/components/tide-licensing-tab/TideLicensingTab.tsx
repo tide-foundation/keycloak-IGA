@@ -23,6 +23,7 @@ import { useParams } from "../../utils/useParams.js";
 import { useAlerts, useFetch } from "@keycloak/keycloak-ui-shared";
 import { License, TideLicenseHistory } from "./TideLicenseHistory";
 import { ScheduledTaskInfo, TideScheduledTasks } from "./TideScheduledTasks.js";
+import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil.js";
 
 // TIDECLOAK IMPLEMENTATION
 type TideLicensingTabProps = {
@@ -44,10 +45,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   const [isPendingResign, setIsPendingResign] = useState<boolean>(false);
   const [isInitialCheckout, setIsInitialCheckout] = useState<boolean>(false);
 
+  const [hasTideIdpPresent, setHasTideIdpPresent] = useState(false);
+  const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
+
 
   const [key, setKey] = useState(0);
   const { realm, realmRepresentation } = useRealm();
-  const { addAlert } = useAlerts();
+  const { addAlert, addError } = useAlerts();
   const form = useForm<ComponentRepresentation>({
     mode: "onChange",
   });
@@ -69,6 +73,55 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     "config.initialSessionId",
     "config.systemHomeOrk"
   ] as const;
+
+  const signSettings = async () => {
+    const tideComponent = await findTideComponent(adminClient, realm);
+    if (tideComponent) {
+      try {
+        await adminClient.tideAdmin.signIdpSettings();
+        await refresh();
+        addAlert(t("Configurations signed successfully"), AlertVariant.success);
+      } catch (error) {
+        addError("SignSettingsError", error);
+      }
+    }
+  };
+
+  const isBlank = (v: unknown) =>
+    v == null || (typeof v === "string" && v.trim() === "");
+
+  const checkTideIdpSecurity = async () => {
+    try {
+      const idp = await adminClient.identityProviders.findOne({ alias: "tide" });
+      const present = !!idp;
+      setHasTideIdpPresent(present);
+
+      if (!present) {
+        setMissingSigKeys([]);
+        return;
+      }
+
+      const cfg = (idp as any)?.config ?? {};
+      const sigKeys = [
+        "settingsSig",
+        "loginURLSig",
+        "linkTideURLSig",
+        "changeSetURLSig"
+      ];
+
+      const missing = sigKeys.filter((k) => isBlank(cfg[k]));
+      setMissingSigKeys(missing);
+    } catch (e) {
+      console.error("Failed to check Tide IDP security", e);
+      setMissingSigKeys([]);
+      setHasTideIdpPresent(false);
+    }
+  };
+
+  useEffect(() => {
+    checkTideIdpSecurity();
+  }, [realm, key]);
+
 
   // Function to ensure each watched field is a single string
   function getSingleValue(value: string | string[]): string {
@@ -141,7 +194,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     return false;
   };
 
-
   useEffect(() => {
     const activateLicense = async () => {
       try {
@@ -155,7 +207,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         }
         // license renewed
         if (signSettingsRequired) await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: false });
-        if (signSettingsRequired) await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: false });
 
         if (signSettingsRequired) {
           await adminClient.tideAdmin.generateInitialKey();
@@ -164,15 +215,18 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
           setIsPendingResign(false);
         } else if (!isInitialCheckout) {
           setIsLoading(false);
-        } else if (!isInitialCheckout) {
-          setIsLoading(false);
         }
       } catch (err) {
         console.error(err);
-        // license renewed error
         await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: true });
         setIsLoading(false);
-        setIsInitialCheckout(false);
+        setIsInitialCheckout(true);
+        // If we reach here, it means the license is still not active after retries
+        addAlert(t("License could not be activated, please retry."), AlertVariant.danger);
+        await adminClient.tideAdmin.reAddTideKey();
+        await refresh();
+      } finally {
+        await refresh();
       }
     };
 
@@ -274,10 +328,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       window.location.href = response.redirectUrl;
 
     } catch (err) {
+      await adminClient.tideAdmin.reAddTideKey();
       setIsLoading(false);
-      setIsInitialCheckout(false);
-
-      addAlert(t("Error with checkout"), AlertVariant.danger);
+      await refresh();
+      addAlert(t("Error with checkout, try again"), AlertVariant.danger);
       throw err;
     }
   };
@@ -415,6 +469,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     getLicenseHistory()
   }, [watchConfigPendingVendorId, watchConfigPayerPub, watchConfigPendingGVRK, watchConfigVVKId, watchConfigVendorId, key]);
 
+  const isConfigUnsecured = hasTideIdpPresent && missingSigKeys.length > 0 && hasValue(watchConfigVVKId);
+  const secureStatus: "secure" | "failed" = isConfigUnsecured ? "failed" : "secure";
+  const retryVariant = secureStatus === "failed" ? "danger" : "secondary";
 
   const sections = [
     {
@@ -423,100 +480,123 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         <FormAccess role="manage-identity-providers" isHorizontal>
           {isLoading ? (
             <Spinner size="xl" />
-          ) : hasValue(watchConfigVVKId) ? (
-            <>
-              {/* Existing form groups for active license */}
-              <FormGroup
-                label={t("License Details")}
-                labelIcon={
-                  <HelpItem
-                    helpText={"This is the details of your current active license. Save a copy locally."}
-                    fieldLabelId={"LicenseDetails"}
-                  />
-                }
-                fieldId="active-license-details"
-              >
-                <ClipboardCopy isCode isReadOnly>{activeLicenseDetails}</ClipboardCopy>
-              </FormGroup>
-
-              <FormGroup
-                label={t("Expiry Date")}
-                labelIcon={
-                  <HelpItem
-                    helpText={"The expiry date of this active license"}
-                    fieldLabelId={"LicenseExpiry"}
-                  />
-                }
-                fieldId="license-expiry"
-              >
-                <Label>{licenseExpiry}</Label>
-              </FormGroup>
-
-              <FormGroup
-                label={t("Max User Accounts")}
-                labelIcon={
-                  <HelpItem
-                    helpText={"The max amount of user accounts for this license"}
-                    fieldLabelId={"LicenseMaxUserAccounts"}
-                  />
-                }
-                fieldId="license-max-user-accounts"
-              >
-                <Label>{licenseMaxUserAcc}</Label>
-              </FormGroup>
-
-              <FormGroup
-                label={t("Current User Accounts")}
-                labelIcon={
-                  <HelpItem
-                    helpText={"The current amount of user accounts on this license"}
-                    fieldLabelId={"LicenseCurrentUserAccounts"}
-                  />
-                }
-                fieldId="license-current-user-accounts"
-              >
-                <Label>{currentUsers}</Label>
-              </FormGroup>
-              <FormGroup
-                label={t("JWK")}
-                labelIcon={
-                  <HelpItem
-                    helpText={"JWK needed for client authentication"}
-                    fieldLabelId={"LicenseJWK"}
-                  />
-                }
-                fieldId="license-jwk"
-              >
-                <Button type="button" onClick={async () => await generateJWK()}>Export</Button>
-              </FormGroup>
-              <FormGroup
-                label={t("License Subscription")}
-                labelIcon={
-                  <HelpItem
-                    helpText={"Manage your subscription here."}
-                    fieldLabelId={"LicenseSubscription"}
-                  />
-                }
-                fieldId="license-subscription"
-              >
-                <Button type="button" onClick={async () => await handleManageSubscription()}>Manage</Button>
-              </FormGroup>
-            </>
           ) : (
             <>
-              {/* Show "No active license found" and "Request License" button */}
-              <FormGroup
-                fieldId="no-active-license"
-              >
-                <Text>{t("No active license found.")}</Text>
-              </FormGroup>
-              <FormGroup
-                fieldId="request-license"
-              >
-                <Button variant="primary" onClick={async () => await handleCheckout(LicensingTiers.Free)}>
-                  {t("Request License")}
-                </Button>
-              </FormGroup>
+              {hasValue(watchConfigVVKId) ? (
+                <>
+                  <FormGroup
+                    label={t("License Details")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"This is the details of your current active license. Save a copy locally."}
+                        fieldLabelId={"LicenseDetails"}
+                      />
+                    }
+                    fieldId="active-license-details"
+                  >
+                    <ClipboardCopy isCode isReadOnly>{activeLicenseDetails}</ClipboardCopy>
+                  </FormGroup>
+
+                  <FormGroup
+                    label={t("Expiry Date")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"The expiry date of this active license"}
+                        fieldLabelId={"LicenseExpiry"}
+                      />
+                    }
+                    fieldId="license-expiry"
+                  >
+                    <Label>{licenseExpiry}</Label>
+                  </FormGroup>
+
+                  <FormGroup
+                    label={t("Max User Accounts")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"The max amount of user accounts for this license"}
+                        fieldLabelId={"LicenseMaxUserAccounts"}
+                      />
+                    }
+                    fieldId="license-max-user-accounts"
+                  >
+                    <Label>{licenseMaxUserAcc}</Label>
+                  </FormGroup>
+
+                  <FormGroup
+                    label={t("Current User Accounts")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"The current amount of user accounts on this license"}
+                        fieldLabelId={"LicenseCurrentUserAccounts"}
+                      />
+                    }
+                    fieldId="license-current-user-accounts"
+                  >
+                    <Label>{currentUsers}</Label>
+                  </FormGroup>
+
+                  <FormGroup
+                    label={t("JWK")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"JWK needed for client authentication"}
+                        fieldLabelId={"LicenseJWK"}
+                      />
+                    }
+                    fieldId="license-jwk"
+                  >
+                    <Button type="button" onClick={async () => await generateJWK()}>
+                      {t("Export")}
+                    </Button>
+                  </FormGroup>
+
+                  <FormGroup
+                    label={t("License Subscription")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"Manage your subscription here."}
+                        fieldLabelId={"LicenseSubscription"}
+                      />
+                    }
+                    fieldId="license-subscription"
+                  >
+                    <Button type="button" onClick={async () => await handleManageSubscription()}>
+                      {t("Manage")}
+                    </Button>
+                  </FormGroup>
+                  <FormGroup label={t("Secure Configuration")} fieldId="secure-configuration">
+                    <div className="pf-v5-u-display-flex pf-v5-u-align-items-center pf-v5-u-gap-md">
+                      {secureStatus === "secure" ? (
+                        <Label color="green" className="pf-v5-u-mr-lg">{t("Secure")}</Label>
+                      ) : (
+                        <Label color="red" className="pf-v5-u-font-weight-bold pf-v5-u-mr-lg">
+                          {t("Failed")}
+                        </Label>
+                      )}
+                      <Button
+                        type="button"
+                        variant={retryVariant} // outlined if secure, filled red if failed
+                        data-testid="secure-config-retry"
+                        onClick={signSettings}
+                      >
+                        {t("Retry")}
+                      </Button>
+                    </div>
+                  </FormGroup>
+                </>
+              ) : (
+                <>
+                  <FormGroup fieldId="no-active-license">
+                    <Text>{t("No active license found.")}</Text>
+                  </FormGroup>
+                  <FormGroup fieldId="request-license">
+                    <Button variant="primary" onClick={async () => await handleCheckout(LicensingTiers.Free)}>
+                      {t("Request License")}
+                    </Button>
+                  </FormGroup>
+                </>
+              )}
             </>
           )}
         </FormAccess>
@@ -524,15 +604,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     },
     {
       title: t("Activity Log"),
-      panel: (
-        <TideLicenseHistory licenseList={licensingHistory} />
-      )
+      panel: <TideLicenseHistory licenseList={licensingHistory} />,
     },
     {
       title: t("Scheduled Tasks"),
-      panel: (
-        <TideScheduledTasks scheduledTasks={scheduledTasks} refresh={refresh} />
-      )
+      panel: <TideScheduledTasks scheduledTasks={scheduledTasks} refresh={refresh} />,
     },
   ];
 

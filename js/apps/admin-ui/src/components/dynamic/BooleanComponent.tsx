@@ -1,9 +1,10 @@
-import { FormGroup, Switch } from "@patternfly/react-core";
+import { FormGroup, Switch, AlertVariant } from "@patternfly/react-core";
 import { Controller, useFormContext } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-
-import { HelpItem } from "@keycloak/keycloak-ui-shared";
+import { HelpItem, useAlerts } from "@keycloak/keycloak-ui-shared";
 import type { ComponentProps } from "./components";
+import { useAdminClient } from "../../admin-client";
+
 
 export const BooleanComponent = ({
   name,
@@ -16,7 +17,9 @@ export const BooleanComponent = ({
 }: ComponentProps) => {
   const { t } = useTranslation();
   const { control } = useFormContext();
-
+  const { adminClient } = useAdminClient();
+  const { addError } = useAlerts();
+  
   return (
     <FormGroup
       hasNoPaddingTop
@@ -40,7 +43,9 @@ export const BooleanComponent = ({
               field.value === true ||
               field.value?.[0] === "true"
             }
-            onChange={(_event, value) => field.onChange("" + value)}
+            onChange={async (_event, value) => {
+              field.onChange("" + value)
+            }}
             data-testid={name}
             aria-label={t(label!)}
           />

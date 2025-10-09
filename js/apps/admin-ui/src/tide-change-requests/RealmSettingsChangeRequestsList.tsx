@@ -27,7 +27,9 @@
 //   const loadRealmSettingsRequests = async () => {
 //     try {
 //       setLoading(true);
-//       // const requests = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
+//       const requests = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
+//       const licensingRequests = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
+//       requests.append(licensingRequests);
 //       setRealmSettingsRequests(requests);
 //       const bundleCount = groupRequestsByDraftId(requests).length;
 //       updateCounter(bundleCount);

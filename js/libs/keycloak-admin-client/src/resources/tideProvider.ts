@@ -78,6 +78,13 @@ export class TideProvider extends Resource<{ realm?: string }> {
         path: "/vendorResources/rotate-vrk"
     });
 
+    public switchVrk = this.makeRequest<{ gvrk?: string }, Response>({
+    method: "POST",
+    path: "/vendorResources/switch-vrk",
+    queryParamKeys: ["gvrk"],
+    });
+
+
 
     public getScheduledTasks = this.makeRequest<void, scheduledTaskInfo[]>({
         method: "GET",
@@ -128,6 +135,10 @@ export class TideProvider extends Resource<{ realm?: string }> {
         path: "/vendorResources/generate-initial-key",
     });
 
+    public reAddTideKey = this.makeRequest<void, Response>({
+        method: "POST",
+        path: "/vendorResources/readd-tide-key",
+    });
     public signIdpSettings = this.makeRequest<void, Response>({
         method: "POST",
         path: "/vendorResources/sign-idp-settings",
@@ -240,9 +251,14 @@ export class TideProvider extends Resource<{ realm?: string }> {
         path: "/vendorResources/triggerAuthorizeEvent/{error}"
     })
 
-    public offboardProvider = this.makeRequest<void, void>({
+    public offboardProvider = this.makeRequest<void, string>({
         method: "POST",
         path: "/ragnarok/trigger-offboarding",
+    });
+    public licenseProvider = this.makeRequest<{ gvrk?: string }, string>({
+        method: "POST",
+        path: "/tideAdminResources/trigger-license-signing",
+        queryParamKeys: ["gvrk"],
     });
 
     constructor(client: KeycloakAdminClient) {
