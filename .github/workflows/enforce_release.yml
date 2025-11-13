@@ -1,0 +1,87 @@
+name: Enforce release label and template on release branches
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  enforce-label-and-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require "release" label and release template for release/* base
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const base = pr.base.ref;          // target branch, e.g. "release/1.2.3"
+            const labels = pr.labels.map(l => l.name);
+            const body = (pr.body || "").trim();
+
+            // Only enforce on release branches
+            if (!base.startsWith("release/")) {
+              core.info(`Base branch "${base}" is not release/*, skipping checks.`);
+              return;
+            }
+
+            const errors = [];
+
+            // 1) Enforce "release" label
+            const hasReleaseLabel = labels.includes("release");
+            if (!hasReleaseLabel) {
+              errors.push('PRs into release/* must have the "release" label before they can be merged.');
+            }
+
+            // 2) Enforce that the PR used the release template (checks for "# Release Notes")
+            const releaseNotesHeader = "# Release Notes";
+            const hasReleaseNotesSection = body.includes(releaseNotesHeader);
+            if (!hasReleaseNotesSection) {
+              errors.push(
+                'PRs into release/* must use the release PR template and include a "# Release Notes" section.'
+              );
+            } else {
+              // 3) Enforce that the Release Notes section has some real content
+              const startIndex = body.indexOf(releaseNotesHeader);
+              let afterHeader = body.slice(startIndex + releaseNotesHeader.length);
+
+              // Split into lines after the header
+              const lines = afterHeader.split(/\r?\n/);
+
+              const releaseNotesLines = [];
+              let started = false;
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+
+                // Skip the first blank line(s) right after the heading
+                if (!started && trimmed === "") {
+                  continue;
+                }
+
+                started = true;
+
+                // Stop when we hit a new Markdown heading or a horizontal rule (---)
+                if (/^#{1,6}\s+/.test(trimmed)) {
+                  break;
+                }
+                if (/^---\s*$/.test(trimmed)) {
+                  break;
+                }
+
+                releaseNotesLines.push(trimmed);
+              }
+
+              // Filter out placeholder-only lines (empty or just "-")
+              const meaningfulLines = releaseNotesLines.filter(l => l !== "" && l !== "-");
+
+              if (meaningfulLines.length === 0) {
+                errors.push(
+                  'The "# Release Notes" section appears empty. Please replace the placeholder "-" with actual release notes.'
+                );
+              }
+            }
+
+            if (errors.length > 0) {
+              core.setFailed(errors.join("\n"));
+            } else {
+              core.info("Release label and template checks passed.");
+            }
