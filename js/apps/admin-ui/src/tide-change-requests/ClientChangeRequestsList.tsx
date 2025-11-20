@@ -24,8 +24,10 @@ import { GenerateDefaultUserContextModal } from './GenerateDefaultUserContextMod
 import type ClientRepresentation from "@keycloak/keycloak-admin-client/lib/defs/clientRepresentation";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { useRealm } from '../context/realm-context/RealmContext';
+
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
-import { ApprovalEnclave} from "heimdall-tide";
+// import { BaseTideRequest, PolicySignRequest } from "@tidecloak/js";
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
 
 type ChangeRequestProps = {
@@ -33,7 +35,7 @@ type ChangeRequestProps = {
 };
 
 export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
-  const { keycloak } = useEnvironment();
+  const { keycloak, approveTideRequests,  } = useEnvironment();
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
   const { t } = useTranslation();
@@ -48,6 +50,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
   const [showModal, setShowModal] = useState(false);
   const { addAlert, addError } = useAlerts();
   const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true);
+
 
 
   useEffect(() => {
@@ -148,6 +151,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           changeSetId: x.draftRecordId,
           changeSetType: x.changeSetType,
           actionType: x.actionType,
+        
         }
       })
       if (!isTideEnabled) {
@@ -159,38 +163,45 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
         if (response.length === 1) {
           const respObj = JSON.parse(response[0])
+          console.log(respObj)
           if (respObj.requiresApprovalPopup === "true") {
+            const approvalResponses = await approveTideRequests([{id: "test", request: base64ToBytes(respObj.changeSetRequests)}]);
+            approvalResponses.forEach(async (approvalResp: any) => {
+              if (approvalResp.approved) {
+                console.log(approvalResp)
+              }
+            })
             const orkURL = new URL(respObj.uri);
-            const heimdall = new ApprovalEnclave({
-              homeOrkOrigin: orkURL.origin,
-              voucherURL: "",
-              signed_client_origin: "",
-              vendorId: ""
-            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
+            // const heimdall = new ApprovalEnclave({
+            //   homeOrkOrigin: orkURL.origin,
+            //   voucherURL: "",
+            //   signed_client_origin: "",
+            //   vendorId: ""
+            // }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
+            // const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
 
-            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-              if (authApproval.accepted === false) {
-                const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
-                await adminClient.tideAdmin.addRejection(formData)
-              }
+            // if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
+            //   if (authApproval.accepted === false) {
+            //     const formData = new FormData();
+            //     formData.append("changeSetId", allRequests[0].draftRecordId)
+            //     formData.append("actionType", allRequests[0].actionType);
+            //     formData.append("changeSetType", allRequests[0].changeSetType);
+            //     await adminClient.tideAdmin.addRejection(formData)
+            //   }
 
-              else {
+            //   else {
 
-                const authzAuthn = await heimdall.getAuthorizerAuthentication();
-                const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
-                formData.append("authorizerApproval", authApproval.data);
-                formData.append("authorizerAuthentication", authzAuthn);
-                await adminClient.tideAdmin.addAuthorization(formData)
-              }
-            }
-            heimdall.close();
+            //     const authzAuthn = await heimdall.getAuthorizerAuthentication();
+            //     const formData = new FormData();
+            //     formData.append("changeSetId", allRequests[0].draftRecordId)
+            //     formData.append("actionType", allRequests[0].actionType);
+            //     formData.append("changeSetType", allRequests[0].changeSetType);
+            //     formData.append("authorizerApproval", authApproval.data);
+            //     formData.append("authorizerAuthentication", authzAuthn);
+            //     await adminClient.tideAdmin.addAuthorization(formData)
+            //   }
+            // }
+            // heimdall.close();
           }
           refresh();
         }
@@ -436,3 +447,4 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     </>
   );
 };
+

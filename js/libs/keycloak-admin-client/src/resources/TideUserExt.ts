@@ -93,6 +93,14 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
   });
 
 
+public getChangeSetRequests = this.makeRequest<
+  ChangeSetRequestList,
+  { id?: string; type?: string }
+>({
+  method: "GET",
+  path: "/tide-admin/change-set/requests",
+  queryParamKeys: ["id", "type"],
+});
 
   public approveDraftChangeSet = this.makeRequest<
   ChangeSetRequestList,
