@@ -111,9 +111,9 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
 
     const kc = new TideCloak({
       // prefer JSON values, fall back to environment just in case
-      url: config["auth-server-url"] ?? environment.serverBaseUrl,
-      realm: config.realm ?? environment.realm,
-      clientId: config.resource ?? environment.clientId,
+      url: environment.serverBaseUrl,
+      realm: environment.realm,
+      clientId: environment.clientId,
       vendorId: config.vendorId,
       homeOrkUrl: config.homeOrkUrl,
       clientOriginAuth,
