@@ -1,5 +1,5 @@
 import { Spinner } from "@patternfly/react-core";
-import { TideCloak } from "@tidecloak/js";
+import { TideCloak, BaseTideRequest } from "@tidecloak/js";
 import {
   PropsWithChildren,
   createContext,
@@ -17,10 +17,14 @@ import { BaseEnvironment } from "./environment";
 export type KeycloakContext<T extends BaseEnvironment = BaseEnvironment> =
   KeycloakContextProps<T> & {
     keycloak: TideCloak;
-    initializeTideRequest: (request: any) => Promise<any>;
-    approveTideRequests: (
-      requests: { id: string; request: Uint8Array }[]
-    ) => Promise<any[]>;
+    approveTideRequests: (requests: { id: string, request: Uint8Array }[]) => Promise<{
+      id: string;
+      approved?: {
+        request: BaseTideRequest
+      },
+      denied?: boolean,
+      pending?: boolean
+    }[]>;
   };
 
 const createKeycloakEnvContext = <T extends BaseEnvironment>() =>
@@ -76,7 +80,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       try {
         setLoadingConfig(true);
 
-      const res = await fetch(`${environment.resourceUrl}/keycloak.json`);
+        const res = await fetch(`${environment.resourceUrl}/keycloak.json`);
         if (!res.ok) {
           throw new Error(
             `Failed to load security-admin-console config: ${res.statusText}`,
@@ -156,16 +160,15 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     return tc;
   };
 
-  const initializeTideRequest = async (request: any): Promise<any> => {
-    const tc = getTideClient();
-    const encoded = request.encode();
-    const created = await tc.createTideRequest(encoded);
-    return (request.constructor as any).decode(created);
-  };
-
-  const approveTideRequests = async (
-    requests: { id: string; request: Uint8Array }[]
-  ): Promise<any[]> => {
+  const approveTideRequests = async (requests: { id: string, request: Uint8Array }[]): Promise<
+    {
+      id: string;
+      approved?: {
+        request: BaseTideRequest
+      },
+      denied?: boolean,
+      pending?: boolean
+    }[]> => {
     const tc = getTideClient();
     const results = await tc.requestTideOperatorApproval(requests);
 
@@ -174,7 +177,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
         return {
           id: res.id,
           approved: {
-            request: (requests.constructor as any).decode(res.request),
+            request: BaseTideRequest.decode(res.request),
           },
         };
       }
@@ -206,7 +209,6 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       value={{
         environment,
         keycloak,
-        initializeTideRequest,
         approveTideRequests,
       }}
     >

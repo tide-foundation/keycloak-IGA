@@ -62,6 +62,10 @@ export class TideProvider extends Resource<{ realm?: string }> {
         method: "POST",
         path: "/tideAdminResources/add-rejection",
     });
+        public addReview = this.makeRequest<FormData, string>({
+        method: "POST",
+        path: "/tideAdminResources/add-review",
+    });
 
     public saveFirstAdminAuthorizer = this.makeRequest<FormData, string>({
         method: "POST",

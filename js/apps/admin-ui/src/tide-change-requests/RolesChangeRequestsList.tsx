@@ -26,6 +26,7 @@ import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil'
 import { useRealm } from '../context/realm-context/RealmContext';
 import { ApprovalEnclave } from "heimdall-tide";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 
 
 type ChangeRequestProps = {
@@ -33,7 +34,7 @@ type ChangeRequestProps = {
 };
 
 export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
-  const { keycloak } = useEnvironment();
+  const { keycloak, approveTideRequests,  } = useEnvironment();
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
 
@@ -124,67 +125,73 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
     );
   };
 
-  const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
-    try {
-      const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => {
-        return {
-          changeSetId: x.draftRecordId,
-          changeSetType: x.changeSetType,
-          actionType: x.actionType,
-        }
-      })
-
-      if (!isTideEnabled) {
-        changeRequests.forEach(async (change) => {
-          await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-          refresh();
-        })
-      } else {
-        const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
-
-        if (response.length === 1) {
-          const respObj = JSON.parse(response[0]);
-
-          if (respObj.requiresApprovalPopup === "true") {
-            const orkURL = new URL(respObj.uri);
-            const heimdall = new ApprovalEnclave({
-              homeOrkOrigin: orkURL.origin,
-              voucherURL: "",
-              signed_client_origin: "",
-              vendorId: ""
-            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
-
-            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-              if (authApproval.accepted === false) {
-                const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
-                await adminClient.tideAdmin.addRejection(formData)
-              }
-
-              else {
-                const authzAuthn = await heimdall.getAuthorizerAuthentication();
-                const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
-                formData.append("authorizerApproval", authApproval.data);
-                formData.append("authorizerAuthentication", authzAuthn);
-                await adminClient.tideAdmin.addAuthorization(formData)
-              }
-            }
-            heimdall.close();
+    const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
+      try {
+        const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
+        const changeRequests = allRequests.map(x => {
+          return {
+            changeSetId: x.draftRecordId,
+            changeSetType: x.changeSetType,
+            actionType: x.actionType,
+          
           }
-          refresh();
+        })
+        if (!isTideEnabled) {
+          changeRequests.forEach(async (change) => {
+            await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
+            refresh()
+          })
+        } else {
+          const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
+          if (response.length === 1) {
+            const respObj = JSON.parse(response[0])
+            console.log(respObj)
+            if (respObj.requiresApprovalPopup === "true") {
+              const approvalResponses = await approveTideRequests([{id: respObj.changesetId, request: base64ToBytes(respObj.changeSetRequests)}]);
+              approvalResponses.forEach(async (approvalResp: any) => {
+                if (approvalResp.approved) {
+                  console.log(approvalResp)
+                }
+              })
+              const orkURL = new URL(respObj.uri);
+              // const heimdall = new ApprovalEnclave({
+              //   homeOrkOrigin: orkURL.origin,
+              //   voucherURL: "",
+              //   signed_client_origin: "",
+              //   vendorId: ""
+              // }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
+              // const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
+  
+              // if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
+              //   if (authApproval.accepted === false) {
+              //     const formData = new FormData();
+              //     formData.append("changeSetId", allRequests[0].draftRecordId)
+              //     formData.append("actionType", allRequests[0].actionType);
+              //     formData.append("changeSetType", allRequests[0].changeSetType);
+              //     await adminClient.tideAdmin.addRejection(formData)
+              //   }
+  
+              //   else {
+  
+              //     const authzAuthn = await heimdall.getAuthorizerAuthentication();
+              //     const formData = new FormData();
+              //     formData.append("changeSetId", allRequests[0].draftRecordId)
+              //     formData.append("actionType", allRequests[0].actionType);
+              //     formData.append("changeSetType", allRequests[0].changeSetType);
+              //     formData.append("authorizerApproval", authApproval.data);
+              //     formData.append("authorizerAuthentication", authzAuthn);
+              //     await adminClient.tideAdmin.addAuthorization(formData)
+              //   }
+              // }
+              // heimdall.close();
+            }
+            refresh();
+          }
         }
+      } catch (error: any) {
+        addAlert(error.responseData, AlertVariant.danger);
       }
-    } catch (error: any) {
-      addAlert(error.responseData, AlertVariant.danger);
-    }
-  };
+    };
 
   const handleCommitButtonClick = async (selectedBundles: BundledRequest[]) => {
     try {
