@@ -186,16 +186,11 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           for (const reviewResp of reviewResponses) {
             if (reviewResp.approved) {
               const msg = reviewResp.approved.request;
-  
-  
-              const encodedBytes: Uint8Array = (msg).encode();
-              const base64 = bytesToBase64(encodedBytes);
-  
               const formData = new FormData();
               formData.append("changeSetId", reviewResp.id);
               formData.append("actionType", allRequests[0].actionType);
               formData.append("changeSetType", allRequests[0].changeSetType);
-              formData.append("requests", base64);
+              formData.append("requests", msg.ToString());
   
               await adminClient.tideAdmin.addReview(formData);
             }
