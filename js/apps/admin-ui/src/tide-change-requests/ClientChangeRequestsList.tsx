@@ -190,7 +190,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
               formData.append("changeSetId", reviewResp.id);
               formData.append("actionType", allRequests[0].actionType);
               formData.append("changeSetType", allRequests[0].changeSetType);
-              formData.append("requests", msg.ToString());
+              formData.append("requests", bytesToBase64(msg));
   
               await adminClient.tideAdmin.addReview(formData);
             }

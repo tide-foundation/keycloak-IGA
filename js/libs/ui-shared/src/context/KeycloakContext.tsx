@@ -20,7 +20,7 @@ export type KeycloakContext<T extends BaseEnvironment = BaseEnvironment> =
     approveTideRequests: (requests: { id: string, request: Uint8Array }[]) => Promise<{
       id: string;
       approved?: {
-        request: BaseTideRequest
+        request: Uint8Array
       },
       denied?: boolean,
       pending?: boolean
@@ -164,7 +164,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     {
       id: string;
       approved?: {
-        request: BaseTideRequest
+        request: Uint8Array
       },
       denied?: boolean,
       pending?: boolean
@@ -177,7 +177,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
         return {
           id: res.id,
           approved: {
-            request: BaseTideRequest.decode(res.request),
+            request: res.request,
           },
         };
       }
