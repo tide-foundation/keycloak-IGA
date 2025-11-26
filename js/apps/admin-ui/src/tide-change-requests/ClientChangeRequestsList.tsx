@@ -28,7 +28,6 @@ import { useRealm } from '../context/realm-context/RealmContext';
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
-import { TideCloak, BaseTideRequest } from "@tidecloak/js";
 
 
 type ChangeRequestProps = {
@@ -408,7 +407,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={isTideEnabled}
+          isRadio={false}
           loader={loader}
           ariaLabelKey="Client Change Requests"
           detailColumns={[

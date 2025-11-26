@@ -148,8 +148,8 @@ export default function ChangeRequestsSection() {
     );
   };
 
-const handleApproveButtonClick = async (selectedRow: RoleChangeRequest[]) => {
-    try {
+  const handleApproveButtonClick = async (selectedBundles: RoleChangeRequest[]) => {
+      try {
       const changeRequests = selectedRow.map(x => {
         return {
           changeSetId: x.draftRecordId,
@@ -158,56 +158,50 @@ const handleApproveButtonClick = async (selectedRow: RoleChangeRequest[]) => {
         }
       })
       if (!isTideEnabled) {
-          changeRequests.forEach(async (change) => {
+          // Run sequentially; use Promise.all() if you want parallel
+          for (const change of changeRequests) {
             await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-            refresh()
-          })
-        } else {
-          const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
-          if (response.length === 1) {
-            const respObj = JSON.parse(response[0])
-            console.log(respObj)
-            if (respObj.requiresApprovalPopup === "true") {
-              const approvalResponses = await approveTideRequests([{id: respObj.changesetId, request: base64ToBytes(respObj.changeSetRequests)}]);
-              approvalResponses.forEach(async (approvalResp: any) => {
-                if (approvalResp.approved) {
-                  console.log(approvalResp)
-                }
-              })
-              const orkURL = new URL(respObj.uri);
-              // const heimdall = new ApprovalEnclave({
-              //   homeOrkOrigin: orkURL.origin,
-              //   voucherURL: "",
-              //   signed_client_origin: "",
-              //   vendorId: ""
-              // }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-              // const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
-  
-              // if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-              //   if (authApproval.accepted === false) {
-              //     const formData = new FormData();
-              //     formData.append("changeSetId", allRequests[0].draftRecordId)
-              //     formData.append("actionType", allRequests[0].actionType);
-              //     formData.append("changeSetType", allRequests[0].changeSetType);
-              //     await adminClient.tideAdmin.addRejection(formData)
-              //   }
-  
-              //   else {
-  
-              //     const authzAuthn = await heimdall.getAuthorizerAuthentication();
-              //     const formData = new FormData();
-              //     formData.append("changeSetId", allRequests[0].draftRecordId)
-              //     formData.append("actionType", allRequests[0].actionType);
-              //     formData.append("changeSetType", allRequests[0].changeSetType);
-              //     formData.append("authorizerApproval", authApproval.data);
-              //     formData.append("authorizerAuthentication", authzAuthn);
-              //     await adminClient.tideAdmin.addAuthorization(formData)
-              //   }
-              // }
-              // heimdall.close();
-            }
-            refresh();
           }
+  
+          refresh();
+          return;
+        }
+  
+        // Tide-enabled path
+        const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({
+          changeSets: changeRequests,
+        });
+  
+        if (response.length === 1) {
+          const respObj = JSON.parse(response[0]);
+          const requests = JSON.parse(respObj.changeSetRequests);
+          console.log(respObj);
+  
+          if (respObj.requiresApprovalPopup === "true") {
+            const changereqs = requests.map((x: string) => {
+              return {
+                id: respObj.changesetId,
+                request: base64ToBytes(x),
+              }
+            })
+            const reviewResponses = await approveTideRequests(changereqs);
+  
+            // Process each review response sequentially; use Promise.all for parallel
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
+                const formData = new FormData();
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", changeRequests[0].actionType);
+                formData.append("changeSetType", changeRequests[0].changeSetType);
+                formData.append("requests", bytesToBase64(msg));
+    
+                await adminClient.tideAdmin.addReview(formData);
+              }
+            }
+          }
+          // Refresh after handling approvals / popup flow
+          refresh();
         }
       } catch (error: any) {
         addAlert(error.responseData, AlertVariant.danger);
@@ -476,7 +470,7 @@ const handleApproveButtonClick = async (selectedRow: RoleChangeRequest[]) => {
               <KeycloakDataTable
                 key={key}
                 toolbarItem={<ToolbarItemsComponent />}
-                isRadio={isTideEnabled}
+                isRadio={false}
                 loader={loader}
                 ariaLabelKey="Requested Changes"
                 detailColumns={[

@@ -177,7 +177,7 @@ export const SettingsChangeRequestsList = ({
         continue;
       }
 
-      if (respObj?.requiresApprovalPopup === "true" && respObj?.uri) {
+      if (respObj?.requiresApprovalPopup === "true") {
         const orkURL = new URL(respObj.uri);
         const enclave = new ApprovalEnclave({
           homeOrkOrigin: orkURL.origin,
