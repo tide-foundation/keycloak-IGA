@@ -164,7 +164,7 @@ export const SettingsChangeRequestsList = ({
       actionType: x.actionType,
     }));
 
-    const responses: string[] =
+    const responses: string =
       await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });

@@ -165,7 +165,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
       }
 
       // Tide-enabled path
-      const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({
+      const response: string = await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });
 

@@ -104,7 +104,7 @@ public getChangeSetRequests = this.makeRequest<
 
   public approveDraftChangeSet = this.makeRequest<
   ChangeSetRequestList,
-  string[]
+  string
 >({
   method: "POST",
   path: "/tide-admin/change-set/sign/batch",

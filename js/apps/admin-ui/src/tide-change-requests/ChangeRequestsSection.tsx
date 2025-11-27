@@ -49,7 +49,7 @@ export interface changeSetApprovalRequest {
 
 export default function ChangeRequestsSection() {
   const { adminClient } = useAdminClient();
-  const { keycloak, approveTideRequests,  } = useEnvironment();
+  const { keycloak, approveTideRequests, } = useEnvironment();
   const { addAlert, addError } = useAlerts();
   const { t } = useTranslation();
   const { realm } = useRealm();
@@ -149,7 +149,7 @@ export default function ChangeRequestsSection() {
   };
 
   const handleApproveButtonClick = async (selectedBundles: RoleChangeRequest[]) => {
-      try {
+    try {
       const changeRequests = selectedRow.map(x => {
         return {
           changeSetId: x.draftRecordId,
@@ -158,35 +158,38 @@ export default function ChangeRequestsSection() {
         }
       })
       if (!isTideEnabled) {
-          // Run sequentially; use Promise.all() if you want parallel
-          for (const change of changeRequests) {
-            await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-          }
-  
-          refresh();
-          return;
+        // Run sequentially; use Promise.all() if you want parallel
+        for (const change of changeRequests) {
+          await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
-  
-        // Tide-enabled path
-        const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({
-          changeSets: changeRequests,
-        });
-  
-        if (response.length === 1) {
-          const respObj = JSON.parse(response[0]);
-          const requests = JSON.parse(respObj.changeSetRequests);
-          console.log(respObj);
-  
-          if (respObj.requiresApprovalPopup === "true") {
-            const changereqs = requests.map((x: string) => {
-              return {
-                id: respObj.changesetId,
-                request: base64ToBytes(x),
-              }
-            })
+
+        refresh();
+        return;
+      }
+
+      // Tide-enabled path
+      const response: string = await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
+      const respObj = JSON.parse(response);
+      if (respObj.length > 0) {
+        try {
+          // Map through all responses to collect all change requests
+          const changereqs = respObj.map((resp: any) => {
+            console.log(resp);
+
+            return {
+              id: resp.changesetId,
+              request: base64ToBytes(resp.changeSetDraftRequests),
+            };
+          });
+
+          // Check if any require approval popup (assuming all do based on your logic)
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === "true") {
             const reviewResponses = await approveTideRequests(changereqs);
-  
-            // Process each review response sequentially; use Promise.all for parallel
+
+            // Process each review response
             for (const reviewResp of reviewResponses) {
               if (reviewResp.approved) {
                 const msg = reviewResp.approved.request;
@@ -195,18 +198,22 @@ export default function ChangeRequestsSection() {
                 formData.append("actionType", changeRequests[0].actionType);
                 formData.append("changeSetType", changeRequests[0].changeSetType);
                 formData.append("requests", bytesToBase64(msg));
-    
+
                 await adminClient.tideAdmin.addReview(formData);
               }
             }
           }
-          // Refresh after handling approvals / popup flow
+
+          // Refresh after handling all approvals
           refresh();
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
         }
-      } catch (error: any) {
-        addAlert(error.responseData, AlertVariant.danger);
       }
-    };
+    } catch (error: any) {
+      addAlert(error.responseData, AlertVariant.danger);
+    }
+  };
 
   const handleCommitButtonClick = async (selectedRow: RoleChangeRequest[]) => {
     try {
@@ -266,11 +273,11 @@ export default function ChangeRequestsSection() {
 
   const bundleStatusLabel = (bundle: any) => {
     const statuses = [...new Set(bundle.requests.map((r: any) => r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status))];
-    
+
     if (statuses.length === 1) {
       const status = statuses[0] as string;
       return (
-        <Label 
+        <Label
           color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
           className="keycloak-admin--role-mapping__client-name"
         >
@@ -289,7 +296,7 @@ export default function ChangeRequestsSection() {
   const statusLabel = (row: any) => {
     const status = row.status === "ACTIVE" ? row.deleteStatus || row.status : row.status;
     return (
-      <Label 
+      <Label
         color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
         className="keycloak-admin--role-mapping__client-name"
       >
@@ -335,7 +342,7 @@ export default function ChangeRequestsSection() {
         </Tr>
       </Thead>
       <Tbody>
-        {bundle.requests.map((request: any, index: number) => 
+        {bundle.requests.map((request: any, index: number) =>
           request.userRecord.map((userRecord: any, userIndex: number) => (
             <Tr key={`${index}-${userIndex}`}>
               <Td dataLabel="Action">{request.action}</Td>
@@ -350,7 +357,7 @@ export default function ChangeRequestsSection() {
                   {parseAndFormatJson(userRecord.accessDraft)}
                 </ClipboardCopy>
               </Td>
-            
+
             </Tr>
           ))
         )}
@@ -419,7 +426,7 @@ export default function ChangeRequestsSection() {
           }
         })
 
-        await adminClient.tideUsersExt.cancelDraftChangeSet({changeSets: changeSetArray});
+        await adminClient.tideUsersExt.cancelDraftChangeSet({ changeSets: changeSetArray });
         addAlert(t("Change request cancelled"), AlertVariant.success);
         refresh();
       } catch (error) {
@@ -475,7 +482,7 @@ export default function ChangeRequestsSection() {
                 ariaLabelKey="Requested Changes"
                 detailColumns={[
                   {
-                    name: "details", 
+                    name: "details",
                     enabled: (bundle) => bundle.requests.length > 0,
                     cellRenderer: DetailCell,
                   },

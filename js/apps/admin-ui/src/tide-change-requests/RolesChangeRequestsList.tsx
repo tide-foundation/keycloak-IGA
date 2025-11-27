@@ -147,7 +147,7 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
          }
    
          // Tide-enabled path
-         const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({
+         const response: string = await adminClient.tideUsersExt.approveDraftChangeSet({
            changeSets: changeRequests,
          });
    
