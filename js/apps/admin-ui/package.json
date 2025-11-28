@@ -105,7 +105,7 @@
     "reactflow": "^11.11.4",
     "use-react-router-breadcrumbs": "^4.0.1",
     "heimdall-tide": "^0.1.1",
-    "@tidecloak/js": "link:/home/sasha/tidecloak-js/packages/tidecloak-js"
+    "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js"
 
   },
   "devDependencies": {
