@@ -13,7 +13,6 @@ import {
   ButtonVariant
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
-import RequestChangesUserRecord from "@keycloak/keycloak-admin-client/lib/defs/RequestChangesUserRecord"
 import CompositeRoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/CompositeRoleChangeRequest"
 import RoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/RoleChangeRequest"
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
@@ -24,7 +23,6 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { useRealm } from '../context/realm-context/RealmContext';
-import { ApprovalEnclave } from "heimdall-tide";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 
@@ -125,66 +123,70 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
     );
   };
 
-   const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
-       try {
-         const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
-   
-         const changeRequests = allRequests.map(x => ({
-           changeSetId: x.draftRecordId,
-           changeSetType: x.changeSetType,
-           actionType: x.actionType,
-         }));
-   
-         // Non-Tide path
-         if (!isTideEnabled) {
-           // Run sequentially; use Promise.all() if you want parallel
-           for (const change of changeRequests) {
-             await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-           }
-   
-           refresh();
-           return;
-         }
-   
-         // Tide-enabled path
-         const response: string = await adminClient.tideUsersExt.approveDraftChangeSet({
-           changeSets: changeRequests,
-         });
-   
-         if (response.length === 1) {
-           const respObj = JSON.parse(response[0]);
-           console.log(respObj);
-   
-           if (respObj.requiresApprovalPopup === "true") {
-             const reviewResponses = await approveTideRequests([
-               {
-                 id: respObj.changesetId,
-                 request: base64ToBytes(respObj.changeSetRequests),
-               },
-             ]);
-   
-             // Process each review response sequentially; use Promise.all for parallel
-             for (const reviewResp of reviewResponses) {
-               if (reviewResp.approved) {
-                 const msg = reviewResp.approved.request;
-                 const formData = new FormData();
-                 formData.append("changeSetId", reviewResp.id);
-                 formData.append("actionType", allRequests[0].actionType);
-                 formData.append("changeSetType", allRequests[0].changeSetType);
-                 formData.append("requests", bytesToBase64(msg));
-     
-                 await adminClient.tideAdmin.addReview(formData);
-               }
-             }
-           }
-           // Refresh after handling approvals / popup flow
-           refresh();
-         }
-       } catch (error: any) {
-         addAlert(error.responseData, AlertVariant.danger);
-       }
-     };
-   
+  const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
+    try {
+      const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
+
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
+      // Non-Tide path
+      if (!isTideEnabled) {
+        // Run sequentially; use Promise.all() if you want parallel
+        for (const change of changeRequests) {
+          await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
+        }
+        refresh();
+        return;
+      }
+
+      // Tide-enabled path
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
+
+      if (respObj.length > 0) {
+        try {
+          // Map through all responses to collect all change requests
+          const changereqs = respObj.map((resp: any) => {
+            return {
+              id: resp.changesetId,
+              request: base64ToBytes(resp.changeSetDraftRequests),
+            };
+          });
+
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            const reviewResponses = await approveTideRequests(changereqs);
+
+            // Process each review response sequentially; use Promise.all for parallel
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
+                const formData = new FormData();
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", allRequests[0].actionType);
+                formData.append("changeSetType", allRequests[0].changeSetType);
+                formData.append("requests", bytesToBase64(msg));
+
+                await adminClient.tideAdmin.addReview(formData);
+              }
+            }
+          }
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
+        } finally {
+          refresh();
+        }
+      }
+    } catch (error: any) {
+      addAlert(error.responseData, AlertVariant.danger);
+    }
+  };
 
   const handleCommitButtonClick = async (selectedBundles: BundledRequest[]) => {
     try {

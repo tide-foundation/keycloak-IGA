@@ -32,7 +32,7 @@ import { useRealm } from "../context/realm-context/RealmContext";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { groupRequestsByDraftId, BundledRequest } from "./utils/bundleUtils";
 import { useCurrentUser } from "../utils/useCurrentUser";
-import { ApprovalEnclave } from "heimdall-tide";
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 
 interface SettingsChangeRequestsListProps {
   updateCounter: (count: number) => void;
@@ -44,9 +44,6 @@ type ChangeSetItem = {
   actionType: string;
   [k: string]: any;
 };
-
-const SCOPE_RAGNAROK = "Offboard:1" as const;
-const SCOPE_LICENSING = "RotateVRK:1" as const;
 
 export const SettingsChangeRequestsList = ({
   updateCounter,
@@ -63,7 +60,7 @@ export const SettingsChangeRequestsList = ({
   const [userCount, setUserCount] = useState<number>(0);
   const [isEmailing, setIsEmailing] = useState<boolean>(false);
 
-  const { keycloak } = useEnvironment();
+  const { approveTideRequests } = useEnvironment();
   const { realmRepresentation } = useRealm();
 
   const refresh = () => {
@@ -152,10 +149,7 @@ export const SettingsChangeRequestsList = ({
     return { licensing, ragnarok };
   }
 
-  async function runApprovalFlowForGroup(
-    group: ChangeSetItem[],
-    scope: typeof SCOPE_LICENSING | typeof SCOPE_RAGNAROK
-  ) {
+  async function runApprovalFlowForGroup(group: ChangeSetItem[]) {
     if (group.length === 0) return;
 
     const changeRequests = group.map((x) => ({
@@ -164,58 +158,48 @@ export const SettingsChangeRequestsList = ({
       actionType: x.actionType,
     }));
 
-    const responses: string =
-      await adminClient.tideUsersExt.approveDraftChangeSet({
-        changeSets: changeRequests,
+    // New flow: approve via backend, then (if required) go through approveTideRequests
+    const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
+      changeSets: changeRequests,
+    });
+
+    if (!respObj || respObj.length === 0) {
+      return;
+    }
+
+    try {
+      // Collect all change requests to send to the Tide approval UI
+      const changereqs = respObj.map((resp: any) => {
+        return {
+          id: resp.changesetId,
+          request: base64ToBytes(resp.changeSetDraftRequests),
+        };
       });
 
-    for (const resp of responses) {
-      let respObj: any;
-      try {
-        respObj = JSON.parse(resp);
-      } catch {
-        continue;
-      }
+      const firstRespObj = respObj[0];
+      if (
+        firstRespObj.requiresApprovalPopup === true ||
+        firstRespObj.requiresApprovalPopup === "true"
+      ) {
+        const reviewResponses = await approveTideRequests(changereqs);
 
-      if (respObj?.requiresApprovalPopup === "true") {
-        const orkURL = new URL(respObj.uri);
-        const enclave = new ApprovalEnclave({
-          homeOrkOrigin: orkURL.origin,
-          voucherURL: "",
-          signed_client_origin: "",
-          vendorId: "",
-        }).init([keycloak.tokenParsed!["vuid"]], respObj.uri);
-
-        const authApproval = await enclave.getAuthorizerApproval(
-          respObj.changeSetRequests,
-          scope,
-          respObj.expiry,
-          scope === SCOPE_LICENSING ? "hex" : "base64url"
-        );
-
-        // Only attach results if they match the draft we approved
-        if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-          if (authApproval.accepted === false) {
-            const first = group[0];
+        // Process each review response
+        for (const reviewResp of reviewResponses) {
+          if (reviewResp.approved) {
+            const msg = reviewResp.approved.request;
             const formData = new FormData();
-            formData.append("changeSetId", first.draftRecordId);
-            formData.append("actionType", first.actionType);
-            formData.append("changeSetType", first.changeSetType);
-            await adminClient.tideAdmin.addRejection(formData);
-          } else {
-            const authzAuthn = await enclave.getAuthorizerAuthentication();
-            const first = group[0];
-            const formData = new FormData();
-            formData.append("changeSetId", first.draftRecordId);
-            formData.append("actionType", first.actionType);
-            formData.append("changeSetType", first.changeSetType);
-            formData.append("authorizerApproval", authApproval.data);
-            formData.append("authorizerAuthentication", authzAuthn);
-            await adminClient.tideAdmin.addAuthorization(formData);
+            formData.append("changeSetId", reviewResp.id);
+            // We assume all items in this group share the same type/action (as per previous logic)
+            formData.append("actionType", changeRequests[0].actionType);
+            formData.append("changeSetType", changeRequests[0].changeSetType);
+            formData.append("requests", bytesToBase64(msg));
+
+            await adminClient.tideAdmin.addReview(formData);
           }
         }
-        enclave.close();
       }
+    } catch (error: any) {
+      addAlert(error.responseData || "Failed to review settings change request", AlertVariant.danger);
     }
   }
 
@@ -226,14 +210,11 @@ export const SettingsChangeRequestsList = ({
       const bundle = selectedRow[0];
       const allRequests = bundle.requests as ChangeSetItem[];
 
-      // Partition mixed bundles and run flows sequentially to avoid mixed scopes
+      // Partition mixed bundles and run flows sequentially (keeps backend semantics by type)
       const { licensing, ragnarok } = partitionByType(allRequests);
 
-      // 1) Licensing group → TidecloakUpdateSettings:1
-      await runApprovalFlowForGroup(licensing, SCOPE_LICENSING);
-
-      // 2) Ragnarok group → Offboard:1
-      await runApprovalFlowForGroup(ragnarok, SCOPE_RAGNAROK);
+      await runApprovalFlowForGroup(licensing);
+      await runApprovalFlowForGroup(ragnarok);
 
       refresh();
     } catch (error: any) {

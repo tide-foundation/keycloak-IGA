@@ -158,35 +158,30 @@ export default function ChangeRequestsSection() {
         }
       })
       if (!isTideEnabled) {
-        // Run sequentially; use Promise.all() if you want parallel
         for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
-
         refresh();
         return;
       }
 
       // Tide-enabled path
-      const response: string = await adminClient.tideUsersExt.approveDraftChangeSet({
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });
-      const respObj = JSON.parse(response);
       if (respObj.length > 0) {
         try {
           // Map through all responses to collect all change requests
           const changereqs = respObj.map((resp: any) => {
-            console.log(resp);
-
             return {
               id: resp.changesetId,
               request: base64ToBytes(resp.changeSetDraftRequests),
             };
           });
 
-          // Check if any require approval popup (assuming all do based on your logic)
           const firstRespObj = respObj[0];
-          if (firstRespObj.requiresApprovalPopup === "true") {
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
             const reviewResponses = await approveTideRequests(changereqs);
 
             // Process each review response
@@ -203,11 +198,11 @@ export default function ChangeRequestsSection() {
               }
             }
           }
-
-          // Refresh after handling all approvals
-          refresh();
         } catch (error: any) {
           addAlert(error.responseData, AlertVariant.danger);
+        }
+        finally {
+          refresh();
         }
       }
     } catch (error: any) {

@@ -13,8 +13,6 @@ import {
   ButtonVariant
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
-import RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges"
-import RequestChangesUserRecord from "@keycloak/keycloak-admin-client/lib/defs/RequestChangesUserRecord"
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { useAccess } from '../context/access/Access';
 import { useAdminClient } from "../admin-client";
@@ -35,7 +33,7 @@ type ChangeRequestProps = {
 };
 
 export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
-  const { keycloak, approveTideRequests,  } = useEnvironment();
+  const { keycloak, approveTideRequests, } = useEnvironment();
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
   const { t } = useTranslation();
@@ -159,44 +157,49 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
-
         refresh();
         return;
       }
 
       // Tide-enabled path
-      const response: string = await adminClient.tideUsersExt.approveDraftChangeSet({
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });
 
-      if (response.length === 1) {
-        const respObj = JSON.parse(response[0]);
-        console.log(respObj);
+      if (respObj.length > 0) {
+        try {
+          // Map through all responses to collect all change requests
+          const changereqs = respObj.map((resp: any) => {
+            return {
+              id: resp.changesetId,
+              request: base64ToBytes(resp.changeSetDraftRequests),
+            };
+          });
 
-        if (respObj.requiresApprovalPopup === "true") {
-          const reviewResponses = await approveTideRequests([
-            {
-              id: respObj.changesetId,
-              request: base64ToBytes(respObj.changeSetRequests),
-            },
-          ]);
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            const reviewResponses = await approveTideRequests(changereqs);
 
-          // Process each review response sequentially; use Promise.all for parallel
-          for (const reviewResp of reviewResponses) {
-            if (reviewResp.approved) {
-              const msg = reviewResp.approved.request;
-              const formData = new FormData();
-              formData.append("changeSetId", reviewResp.id);
-              formData.append("actionType", allRequests[0].actionType);
-              formData.append("changeSetType", allRequests[0].changeSetType);
-              formData.append("requests", bytesToBase64(msg));
-  
-              await adminClient.tideAdmin.addReview(formData);
+            // Process each review response sequentially; use Promise.all for parallel
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
+                const formData = new FormData();
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", allRequests[0].actionType);
+                formData.append("changeSetType", allRequests[0].changeSetType);
+                formData.append("requests", bytesToBase64(msg));
+
+                await adminClient.tideAdmin.addReview(formData);
+              }
             }
           }
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
+        } finally {
+          refresh();
         }
-        // Refresh after handling approvals / popup flow
-        refresh();
       }
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
@@ -296,11 +299,11 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
 
   const bundleStatusLabel = (bundle: BundledRequest) => {
     const statuses = [...new Set(bundle.requests.map((r: any) => r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status))];
-    
+
     if (statuses.length === 1) {
       const status = statuses[0];
       return (
-        <Label 
+        <Label
           color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
           className="keycloak-admin--role-mapping__client-name"
         >
@@ -354,7 +357,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         </Tr>
       </Thead>
       <Tbody>
-        {bundle.requests.map((request: any, index: number) => 
+        {bundle.requests.map((request: any, index: number) =>
           request.userRecord.map((userRecord: any, userIndex: number) => (
             <Tr key={`${index}-${userIndex}`}>
               <Td dataLabel="Action">{request.action}</Td>
@@ -362,7 +365,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
               <Td dataLabel="Client ID">{request.clientId}</Td>
               <Td dataLabel="Type">{request.requestType}</Td>
               <Td dataLabel="Status">
-                <Label 
+                <Label
                   color={request.status === 'APPROVED' ? 'blue' : request.status === 'PENDING' ? 'orange' : request.status === 'DENIED' ? 'red' : 'grey'}
                 >
                   {request.status === "ACTIVE" ? request.deleteStatus || request.status : request.status}
@@ -421,20 +424,20 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           isPaginated
           onSelect={(value: BundledRequest[]) => setSelectedRow([...value])}
           emptyState={
-                    <>
-                      <EmptyState variant="lg">
-                        <TextContent>
-                          <Text>No requested changes found.</Text>
-                          {isTideEnabled && (
-                            <Button variant="secondary" onClick={() => setShowModal(true)}>
-                              {t("Generate Default")}
-                            </Button>
-                          )}
-                        </TextContent>
-                      </EmptyState>
-                    </>
+            <>
+              <EmptyState variant="lg">
+                <TextContent>
+                  <Text>No requested changes found.</Text>
+                  {isTideEnabled && (
+                    <Button variant="secondary" onClick={() => setShowModal(true)}>
+                      {t("Generate Default")}
+                    </Button>
+                  )}
+                </TextContent>
+              </EmptyState>
+            </>
 
-                  }
+          }
         />
       </div>
     </>
