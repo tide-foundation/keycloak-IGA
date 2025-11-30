@@ -172,16 +172,15 @@ export default function ChangeRequestsSection() {
       });
       if (respObj.length > 0) {
         try {
-          // Map through all responses to collect all change requests
-          const changereqs = respObj.map((resp: any) => {
-            return {
-              id: resp.changesetId,
-              request: base64ToBytes(resp.changeSetDraftRequests),
-            };
-          });
-
           const firstRespObj = respObj[0];
           if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            // Map through all responses to collect all change requests
+            const changereqs = respObj.map((resp: any) => {
+              return {
+                id: resp.changesetId,
+                request: base64ToBytes(resp.changeSetDraftRequests),
+              };
+            });
             const reviewResponses = await approveTideRequests(changereqs);
 
             // Process each review response

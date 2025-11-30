@@ -168,19 +168,19 @@ export const SettingsChangeRequestsList = ({
     }
 
     try {
-      // Collect all change requests to send to the Tide approval UI
-      const changereqs = respObj.map((resp: any) => {
-        return {
-          id: resp.changesetId,
-          request: base64ToBytes(resp.changeSetDraftRequests),
-        };
-      });
-
+      
       const firstRespObj = respObj[0];
       if (
         firstRespObj.requiresApprovalPopup === true ||
         firstRespObj.requiresApprovalPopup === "true"
       ) {
+        // Collect all change requests to send to the Tide approval UI
+        const changereqs = respObj.map((resp: any) => {
+          return {
+            id: resp.changesetId,
+            request: base64ToBytes(resp.changeSetDraftRequests),
+          };
+        });
         const reviewResponses = await approveTideRequests(changereqs);
 
         // Process each review response
