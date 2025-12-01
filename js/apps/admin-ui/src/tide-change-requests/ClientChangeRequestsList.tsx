@@ -13,8 +13,6 @@ import {
   ButtonVariant
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
-import RequestedChanges from "@keycloak/keycloak-admin-client/lib/defs/RequestedChanges"
-import RequestChangesUserRecord from "@keycloak/keycloak-admin-client/lib/defs/RequestChangesUserRecord"
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { useAccess } from '../context/access/Access';
 import { useAdminClient } from "../admin-client";
@@ -24,16 +22,18 @@ import { GenerateDefaultUserContextModal } from './GenerateDefaultUserContextMod
 import type ClientRepresentation from "@keycloak/keycloak-admin-client/lib/defs/clientRepresentation";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { useRealm } from '../context/realm-context/RealmContext';
+
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
-import { ApprovalEnclave} from "heimdall-tide";
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
+
 
 type ChangeRequestProps = {
   updateCounter: (count: number) => void;
 };
 
 export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
-  const { keycloak } = useEnvironment();
+  const { keycloak, approveTideRequests, } = useEnvironment();
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
   const { t } = useTranslation();
@@ -48,6 +48,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
   const [showModal, setShowModal] = useState(false);
   const { addAlert, addError } = useAlerts();
   const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true);
+
 
 
   useEffect(() => {
@@ -143,55 +144,60 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
   const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
     try {
       const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => {
-        return {
-          changeSetId: x.draftRecordId,
-          changeSetType: x.changeSetType,
-          actionType: x.actionType,
-        }
-      })
+
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
+      // Non-Tide path
       if (!isTideEnabled) {
-        changeRequests.forEach(async (change) => {
+        // Run sequentially; use Promise.all() if you want parallel
+        for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-          refresh()
-        })
-      } else {
-        const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
-        if (response.length === 1) {
-          const respObj = JSON.parse(response[0])
-          if (respObj.requiresApprovalPopup === "true") {
-            const orkURL = new URL(respObj.uri);
-            const heimdall = new ApprovalEnclave({
-              homeOrkOrigin: orkURL.origin,
-              voucherURL: "",
-              signed_client_origin: "",
-              vendorId: ""
-            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
+        }
+        refresh();
+        return;
+      }
 
-            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-              if (authApproval.accepted === false) {
+      // Tide-enabled path
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
+
+      if (respObj.length > 0) {
+        try {
+          
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            // Map through all responses to collect all change requests
+            const changereqs = respObj.map((resp: any) => {
+              return {
+                id: resp.changesetId,
+                request: base64ToBytes(resp.changeSetDraftRequests),
+              };
+            });
+            const reviewResponses = await approveTideRequests(changereqs);
+
+            // Process each review response sequentially; use Promise.all for parallel
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
                 const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
+                formData.append("changeSetId", reviewResp.id);
                 formData.append("actionType", allRequests[0].actionType);
                 formData.append("changeSetType", allRequests[0].changeSetType);
-                await adminClient.tideAdmin.addRejection(formData)
-              }
+                formData.append("requests", bytesToBase64(msg));
 
-              else {
-
-                const authzAuthn = await heimdall.getAuthorizerAuthentication();
-                const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
-                formData.append("authorizerApproval", authApproval.data);
-                formData.append("authorizerAuthentication", authzAuthn);
-                await adminClient.tideAdmin.addAuthorization(formData)
+                await adminClient.tideAdmin.addReview(formData);
               }
             }
-            heimdall.close();
           }
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
+        } finally {
           refresh();
         }
       }
@@ -199,6 +205,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
       addAlert(error.responseData, AlertVariant.danger);
     }
   };
+
 
   const handleCommitButtonClick = async (selectedBundles: BundledRequest[]) => {
     try {
@@ -292,11 +299,11 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
 
   const bundleStatusLabel = (bundle: BundledRequest) => {
     const statuses = [...new Set(bundle.requests.map((r: any) => r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status))];
-    
+
     if (statuses.length === 1) {
       const status = statuses[0];
       return (
-        <Label 
+        <Label
           color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
           className="keycloak-admin--role-mapping__client-name"
         >
@@ -350,7 +357,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         </Tr>
       </Thead>
       <Tbody>
-        {bundle.requests.map((request: any, index: number) => 
+        {bundle.requests.map((request: any, index: number) =>
           request.userRecord.map((userRecord: any, userIndex: number) => (
             <Tr key={`${index}-${userIndex}`}>
               <Td dataLabel="Action">{request.action}</Td>
@@ -358,7 +365,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
               <Td dataLabel="Client ID">{request.clientId}</Td>
               <Td dataLabel="Type">{request.requestType}</Td>
               <Td dataLabel="Status">
-                <Label 
+                <Label
                   color={request.status === 'APPROVED' ? 'blue' : request.status === 'PENDING' ? 'orange' : request.status === 'DENIED' ? 'red' : 'grey'}
                 >
                   {request.status === "ACTIVE" ? request.deleteStatus || request.status : request.status}
@@ -403,7 +410,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={isTideEnabled}
+          isRadio={false}
           loader={loader}
           ariaLabelKey="Client Change Requests"
           detailColumns={[
@@ -417,22 +424,23 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           isPaginated
           onSelect={(value: BundledRequest[]) => setSelectedRow([...value])}
           emptyState={
-                    <>
-                      <EmptyState variant="lg">
-                        <TextContent>
-                          <Text>No requested changes found.</Text>
-                          {isTideEnabled && (
-                            <Button variant="secondary" onClick={() => setShowModal(true)}>
-                              {t("Generate Default")}
-                            </Button>
-                          )}
-                        </TextContent>
-                      </EmptyState>
-                    </>
+            <>
+              <EmptyState variant="lg">
+                <TextContent>
+                  <Text>No requested changes found.</Text>
+                  {isTideEnabled && (
+                    <Button variant="secondary" onClick={() => setShowModal(true)}>
+                      {t("Generate Default")}
+                    </Button>
+                  )}
+                </TextContent>
+              </EmptyState>
+            </>
 
-                  }
+          }
         />
       </div>
     </>
   );
 };
+

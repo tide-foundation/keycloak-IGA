@@ -37,7 +37,7 @@ import { useAccess } from '../context/access/Access';
 import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
-import { ApprovalEnclave} from "heimdall-tide";
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 
 export interface changeSetApprovalRequest {
   message: string,
@@ -49,7 +49,7 @@ export interface changeSetApprovalRequest {
 
 export default function ChangeRequestsSection() {
   const { adminClient } = useAdminClient();
-  const { keycloak } = useEnvironment();
+  const { keycloak, approveTideRequests, } = useEnvironment();
   const { addAlert, addError } = useAlerts();
   const { t } = useTranslation();
   const { realm } = useRealm();
@@ -148,7 +148,7 @@ export default function ChangeRequestsSection() {
     );
   };
 
-  const handleApproveButtonClick = async (selectedRow: RoleChangeRequest[]) => {
+  const handleApproveButtonClick = async (selectedBundles: RoleChangeRequest[]) => {
     try {
       const changeRequests = selectedRow.map(x => {
         return {
@@ -158,53 +158,55 @@ export default function ChangeRequestsSection() {
         }
       })
       if (!isTideEnabled) {
-        changeRequests.forEach(async (change) => {
+        for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-          refresh()
-        })
-      } else {
-        const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
+        }
+        refresh();
+        return;
+      }
 
-        if (response.length === 1) {
-          const respObj = JSON.parse(response[0]);
-          if (respObj.requiresApprovalPopup === "true") {
-            const orkURL = new URL(respObj.uri);
-            const heimdall = new ApprovalEnclave({
-              homeOrkOrigin: orkURL.origin,
-              voucherURL: "",
-              signed_client_origin: "",
-              vendorId: ""
-            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
+      // Tide-enabled path
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
+      if (respObj.length > 0) {
+        try {
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            // Map through all responses to collect all change requests
+            const changereqs = respObj.map((resp: any) => {
+              return {
+                id: resp.changesetId,
+                request: base64ToBytes(resp.changeSetDraftRequests),
+              };
+            });
+            const reviewResponses = await approveTideRequests(changereqs);
 
-            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-              if (authApproval.accepted === false) {
+            // Process each review response
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
                 const formData = new FormData();
-                formData.append("changeSetId", selectedRow[0].draftRecordId)
-                formData.append("actionType", selectedRow[0].actionType);
-                formData.append("changeSetType", selectedRow[0].changeSetType);
-                await adminClient.tideAdmin.addRejection(formData)
-              }
-              else {
-                const authzAuthn = await heimdall.getAuthorizerAuthentication();
-                const formData = new FormData();
-                formData.append("changeSetId", selectedRow[0].draftRecordId)
-                formData.append("actionType", selectedRow[0].actionType);
-                formData.append("changeSetType", selectedRow[0].changeSetType);
-                formData.append("authorizerApproval", authApproval.data);
-                formData.append("authorizerAuthentication", authzAuthn);
-                await adminClient.tideAdmin.addAuthorization(formData)
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", changeRequests[0].actionType);
+                formData.append("changeSetType", changeRequests[0].changeSetType);
+                formData.append("requests", bytesToBase64(msg));
+
+                await adminClient.tideAdmin.addReview(formData);
               }
             }
-            heimdall.close();
           }
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
+        }
+        finally {
           refresh();
         }
       }
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
     }
-
   };
 
   const handleCommitButtonClick = async (selectedRow: RoleChangeRequest[]) => {
@@ -265,11 +267,11 @@ export default function ChangeRequestsSection() {
 
   const bundleStatusLabel = (bundle: any) => {
     const statuses = [...new Set(bundle.requests.map((r: any) => r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status))];
-    
+
     if (statuses.length === 1) {
       const status = statuses[0] as string;
       return (
-        <Label 
+        <Label
           color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
           className="keycloak-admin--role-mapping__client-name"
         >
@@ -288,7 +290,7 @@ export default function ChangeRequestsSection() {
   const statusLabel = (row: any) => {
     const status = row.status === "ACTIVE" ? row.deleteStatus || row.status : row.status;
     return (
-      <Label 
+      <Label
         color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
         className="keycloak-admin--role-mapping__client-name"
       >
@@ -334,7 +336,7 @@ export default function ChangeRequestsSection() {
         </Tr>
       </Thead>
       <Tbody>
-        {bundle.requests.map((request: any, index: number) => 
+        {bundle.requests.map((request: any, index: number) =>
           request.userRecord.map((userRecord: any, userIndex: number) => (
             <Tr key={`${index}-${userIndex}`}>
               <Td dataLabel="Action">{request.action}</Td>
@@ -349,7 +351,7 @@ export default function ChangeRequestsSection() {
                   {parseAndFormatJson(userRecord.accessDraft)}
                 </ClipboardCopy>
               </Td>
-            
+
             </Tr>
           ))
         )}
@@ -418,7 +420,7 @@ export default function ChangeRequestsSection() {
           }
         })
 
-        await adminClient.tideUsersExt.cancelDraftChangeSet({changeSets: changeSetArray});
+        await adminClient.tideUsersExt.cancelDraftChangeSet({ changeSets: changeSetArray });
         addAlert(t("Change request cancelled"), AlertVariant.success);
         refresh();
       } catch (error) {
@@ -469,12 +471,12 @@ export default function ChangeRequestsSection() {
               <KeycloakDataTable
                 key={key}
                 toolbarItem={<ToolbarItemsComponent />}
-                isRadio={isTideEnabled}
+                isRadio={false}
                 loader={loader}
                 ariaLabelKey="Requested Changes"
                 detailColumns={[
                   {
-                    name: "details", 
+                    name: "details",
                     enabled: (bundle) => bundle.requests.length > 0,
                     cellRenderer: DetailCell,
                   },

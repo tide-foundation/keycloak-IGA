@@ -13,7 +13,6 @@ import {
   ButtonVariant
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
-import RequestChangesUserRecord from "@keycloak/keycloak-admin-client/lib/defs/RequestChangesUserRecord"
 import CompositeRoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/CompositeRoleChangeRequest"
 import RoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/RoleChangeRequest"
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
@@ -24,8 +23,8 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { useRealm } from '../context/realm-context/RealmContext';
-import { ApprovalEnclave } from "heimdall-tide";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 
 
 type ChangeRequestProps = {
@@ -33,7 +32,7 @@ type ChangeRequestProps = {
 };
 
 export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
-  const { keycloak } = useEnvironment();
+  const { keycloak, approveTideRequests,  } = useEnvironment();
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
 
@@ -127,57 +126,60 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
   const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
     try {
       const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => {
-        return {
-          changeSetId: x.draftRecordId,
-          changeSetType: x.changeSetType,
-          actionType: x.actionType,
-        }
-      })
 
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
+      // Non-Tide path
       if (!isTideEnabled) {
-        changeRequests.forEach(async (change) => {
+        // Run sequentially; use Promise.all() if you want parallel
+        for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
-          refresh();
-        })
-      } else {
-        const response: string[] = await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: changeRequests });
+        }
+        refresh();
+        return;
+      }
 
-        if (response.length === 1) {
-          const respObj = JSON.parse(response[0]);
+      // Tide-enabled path
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
 
-          if (respObj.requiresApprovalPopup === "true") {
-            const orkURL = new URL(respObj.uri);
-            const heimdall = new ApprovalEnclave({
-              homeOrkOrigin: orkURL.origin,
-              voucherURL: "",
-              signed_client_origin: "",
-              vendorId: ""
-            }).init([keycloak.tokenParsed!['vuid']], respObj.uri);
-            const authApproval = await heimdall.getAuthorizerApproval(respObj.changeSetRequests, "UserContext:1", respObj.expiry, "base64url");
+      if (respObj.length > 0) {
+        try {
+          
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            // Map through all responses to collect all change requests
+            const changereqs = respObj.map((resp: any) => {
+              return {
+                id: resp.changesetId,
+                request: base64ToBytes(resp.changeSetDraftRequests),
+              };
+            });
+            const reviewResponses = await approveTideRequests(changereqs);
 
-            if (authApproval.draft.draftToAuthorize.data === respObj.changeSetRequests) {
-              if (authApproval.accepted === false) {
+            // Process each review response sequentially; use Promise.all for parallel
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
                 const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
+                formData.append("changeSetId", reviewResp.id);
                 formData.append("actionType", allRequests[0].actionType);
                 formData.append("changeSetType", allRequests[0].changeSetType);
-                await adminClient.tideAdmin.addRejection(formData)
-              }
+                formData.append("requests", bytesToBase64(msg));
 
-              else {
-                const authzAuthn = await heimdall.getAuthorizerAuthentication();
-                const formData = new FormData();
-                formData.append("changeSetId", allRequests[0].draftRecordId)
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
-                formData.append("authorizerApproval", authApproval.data);
-                formData.append("authorizerAuthentication", authzAuthn);
-                await adminClient.tideAdmin.addAuthorization(formData)
+                await adminClient.tideAdmin.addReview(formData);
               }
             }
-            heimdall.close();
           }
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
+        } finally {
           refresh();
         }
       }
