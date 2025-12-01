@@ -11,5 +11,6 @@ export default interface RequestedChanges {
     userRecord: RequestChangesUserRecord[];
     status: string;
     deleteStatus: string;
+    requesterUserId?: string;
 }
 

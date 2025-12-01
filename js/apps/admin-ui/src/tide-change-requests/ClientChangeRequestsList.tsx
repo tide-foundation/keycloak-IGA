@@ -26,10 +26,28 @@ import { useRealm } from '../context/realm-context/RealmContext';
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
+import { useRequesterInfo } from './utils/useRequesterName';
+import { Link } from "react-router-dom";
+import { toUser } from "../user/routes/User";
 
 
 type ChangeRequestProps = {
   updateCounter: (count: number) => void;
+};
+
+const RequesterCell = ({ requesterUserId }: { requesterUserId: string }) => {
+  const { realm } = useRealm();
+  const requesterInfo = useRequesterInfo(requesterUserId);
+
+  if (requesterInfo.userId === 'Unknown') {
+    return <span>Unknown</span>;
+  }
+
+  return (
+    <Link to={toUser({ realm, id: requesterInfo.userId, tab: "settings" })}>
+      {requesterInfo.displayName}
+    </Link>
+  );
 };
 
 export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
@@ -289,6 +307,11 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
           );
         }
       }
+    },
+    {
+      name: 'Requester',
+      displayKey: 'Requester',
+      cellRenderer: (bundle: BundledRequest) => <RequesterCell requesterUserId={bundle.requesterUserId} />
     },
     {
       name: 'Status',

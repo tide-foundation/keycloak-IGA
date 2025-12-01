@@ -33,6 +33,9 @@ import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { groupRequestsByDraftId, BundledRequest } from "./utils/bundleUtils";
 import { useCurrentUser } from "../utils/useCurrentUser";
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+import { useRequesterInfo } from './utils/useRequesterName';
+import { Link } from "react-router-dom";
+import { toUser } from "../user/routes/User";
 
 interface SettingsChangeRequestsListProps {
   updateCounter: (count: number) => void;
@@ -43,6 +46,21 @@ type ChangeSetItem = {
   changeSetType: string;
   actionType: string;
   [k: string]: any;
+};
+
+const RequesterCell = ({ requesterUserId }: { requesterUserId: string }) => {
+  const { realm } = useRealm();
+  const requesterInfo = useRequesterInfo(requesterUserId);
+
+  if (requesterInfo.userId === 'Unknown') {
+    return <span>Unknown</span>;
+  }
+
+  return (
+    <Link to={toUser({ realm, id: requesterInfo.userId, tab: "settings" })}>
+      {requesterInfo.displayName}
+    </Link>
+  );
 };
 
 export const SettingsChangeRequestsList = ({
@@ -478,6 +496,11 @@ export const SettingsChangeRequestsList = ({
       name: "Type",
       displayKey: "Type",
       cellRenderer: (bundle: BundledRequest) => typeLabel(bundle),
+    },
+    {
+      name: "Requester",
+      displayKey: "Requester",
+      cellRenderer: (bundle: BundledRequest) => <RequesterCell requesterUserId={bundle.requesterUserId} />
     },
     {
       name: "Status",

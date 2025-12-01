@@ -38,6 +38,9 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+import { useRequesterInfo } from './utils/useRequesterName';
+import { Link } from "react-router-dom";
+import { toUser } from "../user/routes/User";
 
 export interface changeSetApprovalRequest {
   message: string,
@@ -46,6 +49,21 @@ export interface changeSetApprovalRequest {
   requiresApprovalPopup: string,
   expiry: string
 }
+
+const RequesterCell = ({ requesterUserId }: { requesterUserId: string }) => {
+  const { realm } = useRealm();
+  const requesterInfo = useRequesterInfo(requesterUserId);
+
+  if (requesterInfo.userId === 'Unknown') {
+    return <span>Unknown</span>;
+  }
+
+  return (
+    <Link to={toUser({ realm, id: requesterInfo.userId, tab: "settings" })}>
+      {requesterInfo.displayName}
+    </Link>
+  );
+};
 
 export default function ChangeRequestsSection() {
   const { adminClient } = useAdminClient();
@@ -257,6 +275,11 @@ export default function ChangeRequestsSection() {
           );
         }
       }
+    },
+    {
+      name: 'Requester',
+      displayKey: 'Requester',
+      cellRenderer: (bundle: any) => <RequesterCell requesterUserId={bundle.requesterUserId} />
     },
     {
       name: 'Status',

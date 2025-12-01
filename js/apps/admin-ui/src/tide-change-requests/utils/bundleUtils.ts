@@ -7,10 +7,11 @@ export interface BundledRequest<T = any> {
   requests: T[];
   status: string;
   requestedBy: string;
+  requesterUserId: string;
   count: number;
 }
 
-export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; userRecord: any[] }>(
+export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; userRecord: any[]; requesterUserId?: string }>(
   requests: T[]
 ): BundledRequest<T>[] {
   // Group requests by draftRecordId
@@ -36,6 +37,7 @@ export function groupRequestsByDraftId<T extends { draftRecordId: string; status
       requests,
       status: bundleStatus,
       requestedBy: requests[0].userRecord[0]?.username || 'Unknown',
+      requesterUserId: requests[0].requesterUserId || 'Unknown',
       count: requests.length,
     };
   });
