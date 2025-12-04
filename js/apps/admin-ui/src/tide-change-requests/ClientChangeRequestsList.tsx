@@ -410,7 +410,7 @@ export const ClientChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={false}
+          isRadio={isTideEnabled}
           loader={loader}
           ariaLabelKey="Client Change Requests"
           detailColumns={[

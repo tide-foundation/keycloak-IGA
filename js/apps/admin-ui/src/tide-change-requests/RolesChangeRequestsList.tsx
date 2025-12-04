@@ -389,7 +389,7 @@ export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) =
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={false}
+          isRadio={isTideEnabled}
           loader={loader}
           ariaLabelKey="Role Change Requests"
           detailColumns={[
