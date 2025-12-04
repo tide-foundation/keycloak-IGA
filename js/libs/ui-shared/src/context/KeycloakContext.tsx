@@ -71,7 +71,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
   const [loadingConfig, setLoadingConfig] = useState(true);
 
   // -------------------------------
-  // 1. Fetch the client adapter JSON
+  // 1. Fetch the TideCloak config from public endpoint
   // -------------------------------
   useEffect(() => {
     let cancelled = false;
@@ -80,10 +80,12 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       try {
         setLoadingConfig(true);
 
-        const res = await fetch(`${environment.resourceUrl}/keycloak.json`);
+        const res = await fetch(
+          `${environment.serverBaseUrl}/realms/${environment.realm}/public/get-tide-config?clientId=${encodeURIComponent(environment.clientId)}`,
+        );
         if (!res.ok) {
           throw new Error(
-            `Failed to load security-admin-console config: ${res.statusText}`,
+            `Failed to load TideCloak config: ${res.statusText}`,
           );
         }
 
@@ -102,7 +104,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [environment]);
 
   // -------------------------------
   // 2. Create TideCloak using JSON
