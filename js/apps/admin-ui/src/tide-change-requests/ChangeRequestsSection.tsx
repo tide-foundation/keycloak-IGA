@@ -471,7 +471,7 @@ export default function ChangeRequestsSection() {
               <KeycloakDataTable
                 key={key}
                 toolbarItem={<ToolbarItemsComponent />}
-                isRadio={false}
+                isRadio={isTideEnabled}
                 loader={loader}
                 ariaLabelKey="Requested Changes"
                 detailColumns={[
