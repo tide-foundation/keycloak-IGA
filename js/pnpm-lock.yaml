@@ -171,6 +171,9 @@ importers:
       '@patternfly/react-table':
         specifier: ^5.4.16
         version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tidecloak/js':
+        specifier: file:~/tidecloak-js/packages/tidecloak-js
+        version: file:../../../tidecloak-js/packages/tidecloak-js
       '@uiw/react-textarea-code-editor':
         specifier: ^3.1.1
         version: 3.1.1(@babel/runtime@7.28.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -183,6 +186,9 @@ importers:
       flat:
         specifier: ^6.0.1
         version: 6.0.1
+      heimdall-tide:
+        specifier: ^0.1.1
+        version: 0.1.1
       i18next:
         specifier: ^25.5.2
         version: 25.5.2(typescript@5.9.2)
@@ -377,6 +383,9 @@ importers:
       '@patternfly/react-table':
         specifier: ^5.4.16
         version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tidecloak/js':
+        specifier: file:~/tidecloak-js/packages/tidecloak-js
+        version: file:../../../tidecloak-js/packages/tidecloak-js
       i18next:
         specifier: ^25.5.2
         version: 25.5.2(typescript@5.9.2)
@@ -1538,6 +1547,9 @@ packages:
       '@types/react-dom':
         optional: true
 
+  '@tidecloak/js@file:../../../tidecloak-js/packages/tidecloak-js':
+    resolution: {directory: ../../../tidecloak-js/packages/tidecloak-js, type: directory}
+
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
 
@@ -1980,6 +1992,9 @@ packages:
   arraybuffer.prototype.slice@1.0.4:
     resolution: {integrity: sha512-BNoCY6SXXPQ7gF2opIP4GBE+Xw7U+pHMYKuzjgCN3GwiaIR09UUeKfheyIry77QtrCBlC0KK0q5/TER/tYh3PQ==}
     engines: {node: '>= 0.4'}
+
+  asgard-tide@file:../../../asgard:
+    resolution: {directory: ../../../asgard, type: directory}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -2814,6 +2829,12 @@ packages:
   he@1.2.0:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
+
+  heimdall-tide@0.1.1:
+    resolution: {integrity: sha512-+S0c+yyZFIIjcWx4wljOnvrIZmq99h5hZOyP3Dqd6sWNFAN7ejPmgnd3LM7m2aWMV1aX2vb9wmg8dknOr0CxMw==}
+
+  heimdall-tide@file:../../../heimdall:
+    resolution: {directory: ../../../heimdall, type: directory}
 
   hermes-estree@0.25.1:
     resolution: {integrity: sha512-0wUoCcLp+5Ev5pDW2OriHC2MJCbwLwuRx+gAqMTOkGKJJiBCLjtrvy4PWUGn6MIVefecRpzoOZ/UV6iGdOr+Cw==}
@@ -4959,9 +4980,11 @@ snapshots:
       '@patternfly/react-icons': 5.4.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@patternfly/react-styles': 5.4.1
       '@patternfly/react-table': 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tidecloak/js': file:../../../tidecloak-js/packages/tidecloak-js
       '@uiw/react-textarea-code-editor': 3.1.1(@babel/runtime@7.28.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       file-saver: 2.0.5
       flat: 6.0.1
+      heimdall-tide: 0.1.1
       i18next: 25.5.2(typescript@5.9.2)
       i18next-fetch-backend: 6.0.0
       jszip: 3.10.1
@@ -5517,6 +5540,10 @@ snapshots:
       '@types/react': 18.3.23
       '@types/react-dom': 18.3.7(@types/react@18.3.23)
 
+  '@tidecloak/js@file:../../../tidecloak-js/packages/tidecloak-js':
+    dependencies:
+      heimdall-tide: file:../../../heimdall
+
   '@tsconfig/node10@1.0.11': {}
 
   '@tsconfig/node12@1.0.11': {}
@@ -6056,6 +6083,8 @@ snapshots:
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
       is-array-buffer: 3.0.5
+
+  asgard-tide@file:../../../asgard: {}
 
   assertion-error@2.0.1: {}
 
@@ -6994,6 +7023,12 @@ snapshots:
       space-separated-tokens: 2.0.2
 
   he@1.2.0: {}
+
+  heimdall-tide@0.1.1: {}
+
+  heimdall-tide@file:../../../heimdall:
+    dependencies:
+      asgard-tide: file:../../../asgard
 
   hermes-estree@0.25.1: {}
 
