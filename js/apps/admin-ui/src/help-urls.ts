@@ -21,4 +21,5 @@ export default {
   community: `${keycloakHomepageURL}/community`,
   blog: `${keycloakHomepageURL}/blog`,
   workflowsUrl: `https://github.com/keycloak/keycloak/issues/39888`,
+  changeRequests: `something/to/explain/approvals` // tidecloak implementation
 };

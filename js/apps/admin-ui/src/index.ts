@@ -1,3 +1,5 @@
+import ChangeRequestsSection from "./tide-change-requests/ChangeRequestsSection";
+
 export * as AuthenticationSection from "./authentication/AuthenticationSection";
 export { AddMapperDialog } from "./client-scopes/add/MapperDialog";
 export { MapperList } from "./client-scopes/details/MapperList";
@@ -315,3 +317,13 @@ export { KeycloakProvider, useEnvironment } from "@keycloak/keycloak-ui-shared";
 export { AdminClientContext, initAdminClient } from "./admin-client";
 export { AppContexts } from "./App";
 export * as PermissionsConfigurationSection from "./permissions-configuration/PermissionsConfigurationSection";
+
+/** TIDECLOAK IMPLEMENTATION */
+export { default as ChangeRequestsSection } from "./tide-change-requests/ChangeRequestsSection";
+export { ClientChangeRequestsList } from "./tide-change-requests/ClientChangeRequestsList";
+export { GenerateDefaultUserContextModal } from "./tide-change-requests/GenerateDefaultUserContextModal";
+export { RolesChangeRequestsList } from "./tide-change-requests/RolesChangeRequestsList";
+export { TideLicenseHistory } from "./components/tide-licensing-tab/TideLicenseHistory";
+export { TideLicensingTab } from "./components/tide-licensing-tab/TideLicensingTab";
+export { TideScheduledTasks } from "./components/tide-licensing-tab/TideScheduledTasks";
+
