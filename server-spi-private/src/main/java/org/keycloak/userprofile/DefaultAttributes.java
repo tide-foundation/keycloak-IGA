@@ -261,12 +261,6 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
         Map<String, List<String>> attributes = new HashMap<>(this);
 
         for (String name : nameSet()) {
-            RealmModel realm = session.getContext().getRealm();
-
-            if ((UserModel.USERNAME.equals(name) && realm.isRegistrationEmailAsUsername())) {
-                continue;
-            }
-
             if (isReadOnly(name)) {
                 attributes.remove(name);
             }
