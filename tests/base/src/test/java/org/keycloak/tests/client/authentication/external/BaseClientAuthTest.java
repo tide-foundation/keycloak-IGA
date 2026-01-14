@@ -97,14 +97,24 @@ public class BaseClientAuthTest extends AbstractBaseClientAuthTest {
     }
 
     @Test
-    public void testDisabledIdentityProvider() {
+    public void testClientIdAllowedAsAudience() {
+        JsonWebToken jwt = createDefaultToken();
+        jwt.audience("test-client");
+        assertFailure("Invalid token audience", doClientGrant(jwt));
+        assertFailure(INTERNAL_CLIENT_ID, TOKEN_ISSUER, EXTERNAL_CLIENT_ID, jwt.getId(), events.poll());
+
         realm.updateIdentityProviderWithCleanup(IDP_ALIAS, rep -> {
-            rep.setEnabled(false);
+            rep.getConfig().put(OIDCIdentityProviderConfig.ALLOW_CLIENT_ID_AS_AUDIENCE, Boolean.TRUE.toString());
         });
 
-        JsonWebToken jwt = createDefaultToken();
-        assertFailure(doClientGrant(jwt));
-        assertFailure(null, TOKEN_ISSUER, EXTERNAL_CLIENT_ID, jwt.getId(), "client_not_found", events.poll());
+        jwt = createDefaultToken();
+        jwt.audience("test-client");
+        assertSuccess(INTERNAL_CLIENT_ID, doClientGrant(jwt));
+        assertSuccess(INTERNAL_CLIENT_ID, jwt.getId(), TOKEN_ISSUER, EXTERNAL_CLIENT_ID, events.poll());
+
+        jwt = createDefaultToken();
+        assertFailure("Invalid token audience", doClientGrant(jwt));
+        assertFailure(INTERNAL_CLIENT_ID, TOKEN_ISSUER, EXTERNAL_CLIENT_ID, jwt.getId(), events.poll());
     }
 
     @Override
@@ -112,6 +122,7 @@ public class BaseClientAuthTest extends AbstractBaseClientAuthTest {
         return identityProvider;
     }
 
+    @Override
     protected JsonWebToken createDefaultToken() {
         JsonWebToken token = new JsonWebToken();
         token.id(UUID.randomUUID().toString());
@@ -131,6 +142,7 @@ public class BaseClientAuthTest extends AbstractBaseClientAuthTest {
                     IdentityProviderBuilder.create()
                             .providerId(OIDCIdentityProviderFactory.PROVIDER_ID)
                             .alias(IDP_ALIAS)
+                            .setAttribute("clientId", "test-client")
                             .setAttribute("issuer", "http://127.0.0.1:8500")
                             .setAttribute(OIDCIdentityProviderConfig.USE_JWKS_URL, "true")
                             .setAttribute(OIDCIdentityProviderConfig.JWKS_URL, "http://127.0.0.1:8500/idp/jwks")
