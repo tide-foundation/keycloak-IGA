@@ -46,8 +46,7 @@ public class IgnoredArtifacts {
                         metrics(),
                         otelMetrics(),
                         openApi(),
-                        openApiSwagger(),
-                        hibernateValidator()
+                        openApiSwagger()
                 )
                 .flatMap(Collection::stream)
                 .collect(Collectors.toUnmodifiableSet());
@@ -212,18 +211,5 @@ public class IgnoredArtifacts {
     private static Set<String> openApiSwagger() {
         boolean isEnabled = Configuration.isTrue(OpenApiOptions.OPENAPI_UI_ENABLED);
         return !isEnabled ? OPENAPI_SWAGGER : emptySet();
-    }
-
-    // Hibernate Validator
-    public static Set<String> HIBERNATE_VALIDATOR = Set.of(
-            "io.quarkus:quarkus-hibernate-validator",
-            "io.quarkus:quarkus-hibernate-validator-deployment",
-            "io.quarkus:quarkus-hibernate-validator-spi",
-            "org.hibernate.validator:hibernate-validator"
-    );
-
-    private static Set<String> hibernateValidator() {
-        boolean isEnabled = Profile.isFeatureEnabled(Profile.Feature.CLIENT_ADMIN_API_V2);
-        return !isEnabled ? HIBERNATE_VALIDATOR : emptySet();
     }
 }
