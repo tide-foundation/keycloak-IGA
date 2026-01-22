@@ -172,6 +172,21 @@ public class IgnoredArtifactsTest extends AbstractConfigurationTest {
         assertIgnoredArtifacts(IgnoredArtifacts.OPENAPI_SWAGGER, OpenApiOptions.OPENAPI_UI_ENABLED);
     }
 
+    @Test
+    public void hibernateValidator() {
+        var profile = Profile.defaults();
+        assertThat(profile.isFeatureEnabled(Profile.Feature.CLIENT_ADMIN_API_V2), is(false));
+
+        var ignoredArtifacts = IgnoredArtifacts.getDefaultIgnoredArtifacts();
+        assertThat(IgnoredArtifacts.HIBERNATE_VALIDATOR, everyItem(in(ignoredArtifacts)));
+
+        profile = getProfileWithEnabledFeature(Profile.Feature.CLIENT_ADMIN_API_V2);
+        assertThat(profile.isFeatureEnabled(Profile.Feature.CLIENT_ADMIN_API_V2), is(true));
+
+        ignoredArtifacts = IgnoredArtifacts.getDefaultIgnoredArtifacts();
+        assertThat(IgnoredArtifacts.HIBERNATE_VALIDATOR, everyItem(not(in(ignoredArtifacts))));
+    }
+
     private void assertIgnoredArtifacts(Set<String> artifactsSet, Option<Boolean> enabledOption) {
         assertIgnoredArtifacts(artifactsSet, enabledOption, true);
     }
