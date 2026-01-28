@@ -30,6 +30,15 @@ import org.keycloak.authorization.client.resource.AuthorizationResource;
 import org.keycloak.authorization.client.resource.PolicyResource;
 import org.keycloak.authorization.client.resource.ProtectionResource;
 import org.keycloak.authorization.client.util.HttpResponseException;
+import org.keycloak.authorization.model.Policy;
+import org.keycloak.authorization.model.Resource;
+import org.keycloak.authorization.model.ResourceServer;
+import org.keycloak.authorization.store.PolicyStore;
+import org.keycloak.common.Profile.Feature;
+import org.keycloak.models.ClientModel;
+import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserModel;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
@@ -42,6 +51,7 @@ import org.keycloak.representations.idm.authorization.PermissionTicketRepresenta
 import org.keycloak.representations.idm.authorization.PolicyRepresentation;
 import org.keycloak.representations.idm.authorization.ResourceRepresentation;
 import org.keycloak.representations.idm.authorization.UmaPermissionRepresentation;
+import org.keycloak.testsuite.arquillian.annotation.EnableFeature;
 import org.keycloak.testsuite.arquillian.annotation.UncaughtServerErrorExpected;
 import org.keycloak.testsuite.util.ClientBuilder;
 import org.keycloak.testsuite.util.GroupBuilder;
@@ -60,6 +70,7 @@ import static org.junit.Assert.fail;
 /**
  * @author <a href="mailto:psilva@redhat.com">Pedro Igor</a>
  */
+@EnableFeature(Feature.SCRIPTS)
 public class UserManagedPermissionServiceTest extends AbstractResourceServerTest {
 
     @Override
