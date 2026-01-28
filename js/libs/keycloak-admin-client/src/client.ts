@@ -19,8 +19,6 @@ import { WhoAmI } from "./resources/whoAmI.js";
 import { Credentials, getToken, Settings } from "./utils/auth.js";
 import { defaultBaseUrl, defaultRealm } from "./utils/constants.js";
 import { DecodedToken, decodeToken } from "./utils/decode.js";
-import { TideProvider } from "./resources/tideProvider.js"; // TIDECLOAK IMPLEMENTATION
-import { TideUsersExt } from "./resources/TideUserExt.js"; // TIDECLOAK IMPLEMENTATION
 
 export type RequestOptions = Omit<RequestInit, "signal">;
 
