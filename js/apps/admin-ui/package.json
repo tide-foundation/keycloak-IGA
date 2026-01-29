@@ -102,7 +102,7 @@
     "jszip": "^3.10.1",
     "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js",
     "keycloak-js": "^26.2.2",
-    "lodash-es": "^4.17.22",
+    "lodash-es": "^4.17.23",
     "p-debounce": "^5.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
