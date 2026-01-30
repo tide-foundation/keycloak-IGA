@@ -143,6 +143,14 @@ class MgmtPermissions implements AdminPermissionEvaluator, AdminPermissionManage
         }
     }
 
+    @Override
+    public void requireRealmAdmin() {
+        if (isRealmAdmin()) {
+            return;
+        }
+        throw new ForbiddenException();
+    }
+
     public boolean hasAnyAdminRole() {
         return hasOneAdminRole(AdminRoles.ALL_REALM_ROLES);
     }
@@ -416,10 +424,42 @@ class MgmtPermissions implements AdminPermissionEvaluator, AdminPermissionManage
         }
     }
 
+    @Override
+    public boolean isRealmAdmin() {
+        RealmModel masterRealm = getMasterRealm();
+        UserModel admin = admin();
+        RoleModel masterAdminRole = masterRealm.getRole(AdminRoles.ADMIN);
+
+        if (admin.hasRole(masterAdminRole)) {
+            // server admin
+            return true;
+        }
+
+        ClientModel realmManagementClient = getRealmManagementClient();
+
+        if (realmManagementClient != null && !realmManagementClient.getRealm().equals(masterRealm)) {
+            RoleModel realmAdminRole = realmManagementClient.getRole(AdminRoles.REALM_ADMIN);
+
+            if (realmAdminRole != null && admin.hasRole(realmAdminRole)) {
+                // realm admin
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     RealmModel getMasterRealm() {
         return adminsRealm().getName().equals(Config.getAdminRealm()) ?
                 adminsRealm():
                 session.realms().getRealmByName(Config.getAdminRealm());
     }
 
+    ClientModel getRealmManagementClient() {
+        if (realm.getName().equals(Config.getAdminRealm())) {
+            return realm.getClientByClientId(Config.getAdminRealm() + "-realm");
+        } else {
+            return realm.getClientByClientId(Constants.REALM_MANAGEMENT_CLIENT_ID);
+        }
+    }
 }
