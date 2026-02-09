@@ -27,8 +27,6 @@ import org.infinispan.distribution.ch.ConsistentHash;
 import org.infinispan.distribution.ch.KeyPartitioner;
 import org.infinispan.notifications.cachelistener.event.TopologyChangedEvent;
 import org.infinispan.remoting.transport.Address;
-import org.infinispan.remoting.transport.jgroups.JGroupsAddress;
-import org.jgroups.util.UUID;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -38,7 +36,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 public class SessionAffinityServiceTest {
 
-    private static final Address ADDRESS = new JGroupsAddress(UUID.randomUUID());
+    private static final Address ADDRESS = Address.random();
     private static final KeyPartitioner KEY_PARTITIONER = key -> {
         Assert.assertTrue(key instanceof Integer);
         return (int) key;
