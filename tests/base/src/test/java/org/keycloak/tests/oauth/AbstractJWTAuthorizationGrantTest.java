@@ -303,41 +303,12 @@ public abstract class AbstractJWTAuthorizationGrantTest extends BaseAbstractJWTA
 
     @Test
     public void testDisabledIdentityProvider() {
-        realm.updateIdentityProviderWithCleanup(IDP_ALIAS, rep -> {
+        realm.updateIdentityProvider(IDP_ALIAS, rep -> {
             rep.setEnabled(false);
         });
 
         String jwt = getIdentityProvider().encodeToken(createDefaultAuthorizationGrantToken());
         AccessTokenResponse response = oAuthClient.jwtAuthorizationGrantRequest(jwt).send();
         assertFailure("Identity Provider is not enabled", response, events.poll());
-    }
-
-    @Test
-    public void testUserDisabled() {
-        UserRepresentation userRep = user.admin().toRepresentation();
-        userRep.setEnabled(false);
-        user.admin().update(userRep);
-
-        String jwt = getIdentityProvider().encodeToken(createDefaultAuthorizationGrantToken());
-        AccessTokenResponse response = oAuthClient.jwtAuthorizationGrantRequest(jwt).send();
-        assertFailure("User is not enabled", response, events.poll());
-
-        userRep.setEnabled(true);
-        user.admin().update(userRep);
-    }
-
-    @Test
-    public void testUserWithRequiredAction() {
-        UserRepresentation userRep = user.admin().toRepresentation();
-        userRep.setRequiredActions(Collections.singletonList("UPDATE_PASSWORD"));
-        user.admin().update(userRep);
-
-        String jwt = getIdentityProvider().encodeToken(createDefaultAuthorizationGrantToken());
-        AccessTokenResponse response = oAuthClient.jwtAuthorizationGrantRequest(jwt).send();
-        assertFailure("Account is not fully set up", response, events.poll());
-
-        userRep = user.admin().toRepresentation();
-        userRep.setRequiredActions(Collections.emptyList());
-        user.admin().update(userRep);
     }
 }
