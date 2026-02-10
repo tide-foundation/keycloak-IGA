@@ -53,11 +53,8 @@ export async function fetchWithError(
   // TIDECLOAK IMPLEMENTATION allow for redirect method
   if (!response.ok  && response.status !== 303) {
     const responseData = await parseResponse(response);
-    const problem = extractTideProblem(response, responseData);
-    // Prefer the Problem Details `detail` for Error.message so legacy
-    // `error.message` consumers still get a meaningful string.
-    const message =
-      problem?.detail ?? problem?.title ?? getErrorMessage(responseData);
+    const message = getErrorMessage(responseData);
+    console.error(message, response.status, responseData);
     throw new NetworkError(message, {
       response,
       responseData,
