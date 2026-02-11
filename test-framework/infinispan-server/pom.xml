@@ -21,15 +21,15 @@
     <parent>
         <artifactId>keycloak-test-framework-parent</artifactId>
         <groupId>org.keycloak.testframework</groupId>
-        <version>26.5.5</version>
+        <version>999.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>keycloak-test-framework-db-tidb</artifactId>
-    <name>Keycloak Test Framework - TiDB support</name>
+    <artifactId>keycloak-test-framework-infinispan-server</artifactId>
+    <name>Keycloak Test Framework - Infinispan Server Support</name>
     <packaging>jar</packaging>
-    <description>TiDB support for Keycloak Test Framework</description>
+    <description>Infinispan Server Support for Keycloak Test Framework</description>
 
     <dependencies>
         <dependency>
@@ -38,8 +38,14 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers-tidb</artifactId>
+            <groupId>org.infinispan</groupId>
+            <artifactId>testcontainers-infinispan</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 </project>
