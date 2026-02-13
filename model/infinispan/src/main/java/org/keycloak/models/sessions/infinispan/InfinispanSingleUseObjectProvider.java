@@ -99,21 +99,11 @@ public class InfinispanSingleUseObjectProvider implements SingleUseObjectProvide
     @Override
     public boolean putIfAbsent(String key, long lifespanInSeconds) {
         SingleUseObjectValueEntity tokenValue = new SingleUseObjectValueEntity(null);
-
-        try {
-            SingleUseObjectValueEntity existing = singleUseObjectCache.putIfAbsent(key, tokenValue, Time.toMillis(lifespanInSeconds), TimeUnit.MILLISECONDS);
-            if (persistRevokedTokens && key.endsWith(REVOKED_KEY)) {
-                session.getProvider(RevokedTokenPersisterProvider.class).revokeToken(key.substring(0, key.length() - REVOKED_KEY.length()), lifespanInSeconds);
-            }
-            return existing == null;
-        } catch (HotRodClientException re) {
-            // No need to retry. The hotrod (remoteCache) has some retries in itself in case of some random network error happened.
-            // In case of lock conflict, we don't want to retry anyway as there was likely an attempt to use the token from different place.
-            logger.debugf(re, "Failed when adding token %s", key);
-
-            return false;
+        SingleUseObjectValueEntity existing = singleUseObjectCache.putIfAbsent(key, tokenValue, lifespanInSeconds, TimeUnit.SECONDS);
+        if (persistRevokedTokens && key.endsWith(REVOKED_KEY)) {
+            session.getProvider(RevokedTokenPersisterProvider.class).revokeToken(key.substring(0, key.length() - REVOKED_KEY.length()), lifespanInSeconds);
         }
-
+        return existing == null;
     }
 
     @Override
