@@ -18,6 +18,7 @@
 package org.keycloak.it.cli.dist;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 import org.keycloak.it.junit5.extension.CLIResult;
@@ -73,5 +74,38 @@ public class ImportDistTest {
 
         cliResult = dist.run("import");
         cliResult.assertError("Must specify either --dir or --file options.");
+    }
+
+    @Test
+    void testImportNewRealm(KeycloakDistribution dist) throws IOException {
+        File file = new File("target/realm.json");
+
+        RealmRepresentation newRealm=new RealmRepresentation();
+        newRealm.setRealm("anotherRealm");
+        newRealm.setId("anotherRealm");
+        newRealm.setEnabled(true);
+
+        ObjectMapper mapper = new ObjectMapper();
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            mapper.writeValue(fos, newRealm);
+        }
+
+        var cliResult = dist.run("import", "--file=" + file.getAbsolutePath());
+        cliResult.assertMessage("Realm 'anotherRealm' imported");
+
+        dist.setEnvVar("MY_SECRET", "admin123");
+
+        RawKeycloakDistribution rawDist = dist.unwrap(RawKeycloakDistribution.class);
+        CLIResult result = rawDist.run("bootstrap-admin", "service", "--db=dev-file", "--client-id=admin", "--client-secret:env=MY_SECRET");
+
+        assertTrue(result.getErrorOutput().isEmpty(), result.getErrorOutput());
+
+        rawDist.setManualStop(true);
+        rawDist.run("start-dev");
+
+        CLIResult adminResult = rawDist.kcadm("get", "realms", "--server", "http://localhost:8080", "--realm", "master", "--client", "admin", "--secret", "admin123");
+
+        assertEquals(0, adminResult.exitCode());
+        assertTrue(adminResult.getOutput().contains("anotherRealm"));
     }
 }
