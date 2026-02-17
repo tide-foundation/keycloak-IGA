@@ -7,6 +7,8 @@
 :project_versionNpm: 26.5.5
 :project_versionDoc: 26.5.5
 
+:jdk_version_recommended: 25
+
 :archivebasename: keycloak
 :archivedownloadurl: https://github.com/keycloak/keycloak/releases/download/{project_version}/keycloak-{project_version}.zip
 
