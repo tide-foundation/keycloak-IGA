@@ -152,6 +152,7 @@ public class SAMLEndpoint {
     protected final KeycloakSession session;
     protected final ClientConnection clientConnection;
     protected final HttpHeaders headers;
+    protected final long maxInflatingSize;
 
 
     public SAMLEndpoint(KeycloakSession session, SAMLIdentityProvider provider, SAMLIdentityProviderConfig config, UserAuthenticationIdentityProvider.AuthenticationCallback callback, DestinationValidator destinationValidator) {
