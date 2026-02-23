@@ -1,4 +1,4 @@
-package org.keycloak.testframework.realm;
+package org.keycloak.testframework.util;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -10,12 +10,12 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-class Collections {
+public class Collections {
 
     private Collections() {
     }
 
-    static <T> List<T> combine(List<T> l1, List<T> l2) {
+    public static <T> List<T> combine(List<T> l1, List<T> l2) {
         if (l1 == null) {
             return new LinkedList<>(l2);
         } else {
@@ -25,16 +25,16 @@ class Collections {
     }
 
     @SafeVarargs
-    static <T> List<T> combine(List<T> l1, T... items) {
+    public static <T> List<T> combine(List<T> l1, T... items) {
         return combine(l1, Arrays.asList(items));
     }
 
-    static <T> List<T> combine(List<T> l1, Stream<T> items) {
+    public static <T> List<T> combine(List<T> l1, Stream<T> items) {
         return combine(l1, items.toList());
     }
 
 
-    static <T> Set<T> combine(Set<T> s1, Set<T> s2) {
+    public static <T> Set<T> combine(Set<T> s1, Set<T> s2) {
         if (s1 == null) {
             return new HashSet<>(s2);
         } else {
@@ -44,16 +44,16 @@ class Collections {
     }
 
     @SafeVarargs
-    static <T> Set<T> combine(Set<T> s1, T... items) {
+    public static <T> Set<T> combine(Set<T> s1, T... items) {
         return combine(s1, Set.of(items));
     }
 
-    static <T> Set<T> combine(Set<T> s1, Stream<T> items) {
+    public static <T> Set<T> combine(Set<T> s1, Stream<T> items) {
         return combine(s1, items.collect(Collectors.toSet()));
     }
 
 
-    static <K, V> Map<K, List<V>> combine(Map<K, List<V>> m1, Map<K, List<V>> m2) {
+    public static <K, V> Map<K, List<V>> combine(Map<K, List<V>> m1, Map<K, List<V>> m2) {
         if (m1 == null) {
             m1 = new HashMap<>();
         }
@@ -66,11 +66,11 @@ class Collections {
     }
 
     @SafeVarargs
-    static <K, V> Map<K, List<V>> combine(Map<K, List<V>> m1, K key, V... values) {
+    public static <K, V> Map<K, List<V>> combine(Map<K, List<V>> m1, K key, V... values) {
         return combine(m1, Map.of(key, List.of(values)));
     }
 
-    static <K, V> Map<K, List<V>> combine(Map<K, List<V>> m1, K key, Stream<V> values) {
+    public static <K, V> Map<K, List<V>> combine(Map<K, List<V>> m1, K key, Stream<V> values) {
         return combine(m1, Map.of(key, values.toList()));
     }
 

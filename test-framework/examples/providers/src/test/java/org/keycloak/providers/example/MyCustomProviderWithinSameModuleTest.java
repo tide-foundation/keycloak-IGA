@@ -1,4 +1,4 @@
-package org.keycloak.test.examples;
+package org.keycloak.providers.example;
 
 import java.io.IOException;
 import java.net.URL;
@@ -19,11 +19,11 @@ import org.junit.jupiter.api.Test;
 /**
  *
  * @see org.keycloak.providers.example.MyCustomRealmResourceProvider
- * @see org.keycloak.providers.example.MyCustomProviderWithinSameModuleTest
+ * @see org.keycloak.test.examples.MyCustomProviderTest
  * @author <a href="mailto:svacek@redhat.com">Simon Vacek</a>
  */
-@KeycloakIntegrationTest(config = MyCustomProviderTest.ServerConfig.class)
-public class MyCustomProviderTest {
+@KeycloakIntegrationTest(config = MyCustomProviderWithinSameModuleTest.ServerConfig.class)
+public class MyCustomProviderWithinSameModuleTest {
 
     @InjectRealm
     ManagedRealm realm;
@@ -44,7 +44,7 @@ public class MyCustomProviderTest {
 
         @Override
         public KeycloakServerConfigBuilder configure(KeycloakServerConfigBuilder config) {
-            return config.dependency("org.keycloak.testframework", "keycloak-test-framework-example-providers", true);
+            return config.dependencyCurrentProject();
         }
 
     }
