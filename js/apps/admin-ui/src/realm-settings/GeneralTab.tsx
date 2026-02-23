@@ -31,7 +31,7 @@ import { DefaultSwitchControl } from "../components/SwitchControl";
 import { FormattedLink } from "../components/external-link/FormattedLink";
 import { FixedButtonsGroup } from "../components/form/FixedButtonGroup";
 import { FormAccess } from "../components/form/FormAccess";
-import { KeyValueInput } from "../components/key-value-form/KeyValueInput";
+import { RealmLoAMapping } from "../components/realm-loa-mapping/RealmLoAMapping";
 import { useRealm } from "../context/realm-context/RealmContext";
 import {
   addTrailingSlash,
@@ -41,6 +41,7 @@ import {
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import { UIRealmRepresentation } from "./RealmSettingsTabs";
 import { SIGNATURE_ALGORITHMS } from "../clients/add/SamlSignature";
+import type { RealmLoAMappingType } from "../components/realm-loa-mapping/RealmLoAMapping";
 
 type RealmSettingsGeneralTabProps = {
   realm: UIRealmRepresentation;
@@ -125,6 +126,9 @@ function RealmSettingsGeneralTabForm({
     Feature.AdminFineGrainedAuthzV2,
   );
   const isOpenid4vciEnabled = isFeatureEnabled(Feature.OpenId4VCI);
+  const isStepUpAuthenticationSaml = isFeatureEnabled(
+    Feature.StepUpAuthenticationSaml,
+  );
 
   const { addAlert, addError } = useAlerts();
 
@@ -150,13 +154,18 @@ function RealmSettingsGeneralTabForm({
         UNMANAGED_ATTRIBUTE_POLICIES[0],
     );
     if (realm.attributes?.["acr.loa.map"]) {
-      const result = Object.entries(
+      const acrLoaMap = Object.entries(
         JSON.parse(realm.attributes["acr.loa.map"]),
-      ).flatMap(([key, value]) => ({ key, value }));
-      result.concat({ key: "", value: "" });
+      ).flatMap(([acr, loa]) => ({ acr, loa }) as RealmLoAMappingType);
+
+      if (isStepUpAuthenticationSaml && realm.attributes?.["acr.uri.map"]) {
+        const acrUriMap = JSON.parse(realm.attributes["acr.uri.map"]);
+        acrLoaMap.forEach((row) => (row.uri = acrUriMap?.[row?.acr]));
+      }
+
       setValue(
         convertAttributeNameToForm("attributes.acr.loa.map") as any,
-        result,
+        acrLoaMap,
       );
     }
   };
@@ -260,14 +269,19 @@ function RealmSettingsGeneralTabForm({
             fieldId="acrToLoAMapping"
             labelIcon={
               <HelpItem
-                helpText={t("acrToLoAMappingHelp")}
+                helpText={
+                  isStepUpAuthenticationSaml
+                    ? t("acrToLoAMappingRealmSamlHelp")
+                    : t("acrToLoAMappingHelp")
+                }
                 fieldLabelId="acrToLoAMapping"
               />
             }
           >
-            <KeyValueInput
+            <RealmLoAMapping
               label={t("acrToLoAMapping")}
               name={convertAttributeNameToForm("attributes.acr.loa.map")}
+              uri={isStepUpAuthenticationSaml}
             />
           </FormGroup>
           <DefaultSwitchControl
