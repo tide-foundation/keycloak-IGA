@@ -129,6 +129,7 @@ function RealmSettingsGeneralTabForm({
   const isStepUpAuthenticationSaml = isFeatureEnabled(
     Feature.StepUpAuthenticationSaml,
   );
+  const isScimApiEnabled = isFeatureEnabled(Feature.ScimApi);
 
   const { addAlert, addError } = useAlerts();
 
@@ -310,6 +311,13 @@ function RealmSettingsGeneralTabForm({
               labelIcon={t("verifiableCredentialsEnabledHelp")}
             />
           )}
+          {isScimApiEnabled && (
+            <DefaultSwitchControl
+              name="scimApiEnabled"
+              label={t("scimApiEnabled")}
+              labelIcon={t("scimApiEnabledHelp")}
+            />
+          )}
           <SelectControl
             name="unmanagedAttributePolicy"
             label={t("unmanagedAttributes")}
@@ -370,6 +378,16 @@ function RealmSettingsGeneralTabForm({
                       serverBaseUrl,
                     )}.well-known/openid-credential-issuer/realms/${realmName}`}
                     title={t("oid4vcIssuerMetadata")}
+                  />
+                </StackItem>
+              )}
+              {isScimApiEnabled && realm.scimApiEnabled && (
+                <StackItem>
+                  <FormattedLink
+                    href={`${addTrailingSlash(
+                      serverBaseUrl,
+                    )}realms/${realmName}/scim/v2`}
+                    title={t("SCIM Endpoint")}
                   />
                 </StackItem>
               )}
