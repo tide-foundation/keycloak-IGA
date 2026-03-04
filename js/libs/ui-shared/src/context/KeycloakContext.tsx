@@ -1,5 +1,5 @@
 import { Spinner } from "@patternfly/react-core";
-import { TideCloak, BaseTideRequest } from "@tidecloak/js";
+import { TideCloak } from "@tidecloak/js";
 import {
   PropsWithChildren,
   createContext,
@@ -142,6 +142,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
         pkceMethod: "S256",
         responseMode: "query",
         scope: environment.scope,
+        setupRequestEnclave: false,
       });
 
     init()
