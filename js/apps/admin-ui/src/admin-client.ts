@@ -1,13 +1,16 @@
 import KeycloakAdminClient from "@keycloak/keycloak-admin-client";
 import {
+  type KeycloakContext,
+  type BaseEnvironment,
   createNamedContext,
   useRequiredContext,
 } from "@keycloak/keycloak-ui-shared";
-import type Keycloak from "keycloak-js";
 import type { Environment } from "./environment";
 
+type KeycloakInstance = KeycloakContext<BaseEnvironment>["keycloak"];
+
 export type AdminClientProps = {
-  keycloak: Keycloak;
+  keycloak: KeycloakInstance;
   adminClient: KeycloakAdminClient;
 };
 
@@ -18,7 +21,7 @@ export const AdminClientContext = createNamedContext<
 export const useAdminClient = () => useRequiredContext(AdminClientContext);
 
 export async function initAdminClient(
-  keycloak: Keycloak,
+  keycloak: KeycloakInstance,
   environment: Environment,
 ) {
   const adminClient = new KeycloakAdminClient();
