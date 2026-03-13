@@ -40,6 +40,8 @@ import { RealmSettingsLoginTab } from "./LoginTab";
 import { PartialExportDialog } from "./PartialExport";
 import { PartialImportDialog } from "./PartialImport";
 import { PoliciesTab } from "./PoliciesTab";
+import { ActiveRealmPolicyTab } from "./ActiveRealmPolicyTab";
+import { PolicyTemplatesTab } from "./PolicyTemplatesTab";
 import ProfilesTab from "./ProfilesTab";
 import { RealmSettingsSessionsTab } from "./SessionsTab";
 import ThemesTab from "./themes/ThemesTab";
@@ -291,6 +293,8 @@ export const RealmSettingsTabs = () => {
   const clientPoliciesTab = useTab("client-policies");
   const userProfileTab = useTab("user-profile");
   const userRegistrationTab = useTab("user-registration");
+  const policyTemplatesTab = useTab("policy-templates");
+  const realmPolicyTab = useTab("realm-policy");
   const { hasAccess, hasSomeAccess } = useAccess();
   const canViewOrManageEvents =
     hasAccess("view-realm") && hasSomeAccess("view-events", "manage-events");
@@ -468,6 +472,22 @@ export const RealmSettingsTabs = () => {
               <UserRegistration />
             </Tab>
           )}
+          {/* Hidden for now — will re-enable when more work is done
+          <Tab
+            title={<TabTitleText>Policy Templates</TabTitleText>}
+            data-testid="rs-policyTemplates-tab"
+            {...policyTemplatesTab}
+          >
+            <PolicyTemplatesTab />
+          </Tab>
+          <Tab
+            title={<TabTitleText>Realm Policy</TabTitleText>}
+            data-testid="rs-realmPolicy-tab"
+            {...realmPolicyTab}
+          >
+            <ActiveRealmPolicyTab />
+          </Tab>
+          */}
         </RoutableTabs>
       </PageSection>
     </FormProvider>

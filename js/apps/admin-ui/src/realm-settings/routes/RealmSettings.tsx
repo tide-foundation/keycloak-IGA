@@ -16,7 +16,9 @@ export type RealmSettingsTab =
   | "tokens"
   | "client-policies"
   | "user-profile"
-  | "user-registration";
+  | "user-registration"
+  | "policy-templates"
+  | "realm-policy";
 
 export type RealmSettingsParams = {
   realm: string;
