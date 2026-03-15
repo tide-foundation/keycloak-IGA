@@ -43,7 +43,7 @@ export function groupRequestsByDraftId<T extends { draftRecordId: string; status
       draftRecordId,
       requests,
       status: bundleStatus,
-      requestedBy: first.requestedByUsername || first.userRecord[0]?.username || 'Unknown',
+      requestedBy: first.requestedByUsername || first.requestedBy || 'Unknown',
       requestedByUserId: first.requestedBy || '',
       approvalCount: first.approvalCount ?? 0,
       rejectionCount: first.rejectionCount ?? 0,

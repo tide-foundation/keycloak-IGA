@@ -472,7 +472,7 @@ export const PolicyChangeRequestsList = ({
           <Button
             variant="secondary"
             isDanger
-            isDisabled={!selectedRow.length || !selectedRow.every(b => b.requestedByUserId === whoAmI.userId)}
+            isDisabled={!selectedRow.length || !selectedRow.every(b => !b.requestedByUserId || b.requestedByUserId === whoAmI.userId)}
             onClick={() => toggleCancelDialog()}
           >
             {t("Cancel Draft")}

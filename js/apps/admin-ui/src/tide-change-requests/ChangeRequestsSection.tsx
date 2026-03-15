@@ -142,7 +142,7 @@ export default function ChangeRequestsSection() {
 
   const canCancel = hasSelection && selectedRow.every(b => {
     const s = getEffectiveStatus(b);
-    return s !== "ACTIVE" && b.requestedByUserId === whoAmI.userId;
+    return s !== "ACTIVE" && (!b.requestedByUserId || b.requestedByUserId === whoAmI.userId);
   });
 
   const ToolbarItemsComponent = () => {
