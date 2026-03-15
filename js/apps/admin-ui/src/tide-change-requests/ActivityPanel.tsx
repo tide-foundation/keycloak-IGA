@@ -12,8 +12,10 @@ import {
   Divider,
   AlertVariant,
 } from "@patternfly/react-core";
+import { PencilAltIcon, TrashIcon, CheckIcon, TimesIcon } from "@patternfly/react-icons";
 import { useAdminClient } from "../admin-client";
 import { useAlerts } from "@keycloak/keycloak-ui-shared";
+import { useWhoAmI } from "../context/whoami/WhoAmI";
 
 interface ApprovalEntry {
   userId: string;
@@ -57,10 +59,13 @@ export const ActivityPanel = ({
 }) => {
   const { adminClient } = useAdminClient();
   const { addAlert } = useAlerts();
+  const { whoAmI } = useWhoAmI();
   const [activity, setActivity] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   const loadActivity = async () => {
     try {
@@ -97,8 +102,56 @@ export const ActivityPanel = ({
     }
   };
 
+  const handleEditComment = async (commentId: string) => {
+    if (!editingText.trim()) return;
+    setSubmitting(true);
+    try {
+      await adminClient.tideUsersExt.updateChangeSetComment({
+        id: changesetRequestId,
+        commentId,
+        comment: editingText.trim(),
+      });
+      setEditingCommentId(null);
+      setEditingText("");
+      await loadActivity();
+      addAlert("Comment updated", AlertVariant.success);
+    } catch {
+      addAlert("Failed to update comment", AlertVariant.danger);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    setSubmitting(true);
+    try {
+      await adminClient.tideUsersExt.deleteChangeSetComment({
+        id: changesetRequestId,
+        commentId,
+      });
+      await loadActivity();
+      addAlert("Comment deleted", AlertVariant.success);
+    } catch {
+      addAlert("Failed to delete comment", AlertVariant.danger);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const startEditing = (c: CommentEntry) => {
+    setEditingCommentId(c.id);
+    setEditingText(c.comment);
+  };
+
+  const cancelEditing = () => {
+    setEditingCommentId(null);
+    setEditingText("");
+  };
+
   if (loading) return <Spinner size="md" />;
   if (!activity) return null;
+
+  const isMyComment = (c: CommentEntry) => c.userId === whoAmI.userId;
 
   return (
     <div className="pf-v5-u-mt-md">
@@ -122,9 +175,9 @@ export const ActivityPanel = ({
       )}
 
       {/* Approvals / Rejections */}
-      {activity.approvals.length > 0 && (
-        <div className="pf-v5-u-mb-md">
-          <strong className="pf-v5-u-font-size-sm">Reviews</strong>
+      <div id={`activity-reviews-${changesetRequestId}`} className="pf-v5-u-mb-md">
+        <strong className="pf-v5-u-font-size-sm">Reviews</strong>
+        {activity.approvals.length > 0 ? (
           <div className="pf-v5-u-mt-xs">
             {activity.approvals.map((a, i) => (
               <div
@@ -149,11 +202,15 @@ export const ActivityPanel = ({
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="pf-v5-u-color-200 pf-v5-u-mt-xs pf-v5-u-font-size-sm">
+            No reviews yet
+          </div>
+        )}
+      </div>
 
       {/* Comments */}
-      <div className="pf-v5-u-mb-md">
+      <div id={`activity-comments-${changesetRequestId}`} className="pf-v5-u-mb-md">
         <strong className="pf-v5-u-font-size-sm">Comments</strong>
         {activity.comments.length > 0 ? (
           <div className="pf-v5-u-mt-xs">
@@ -170,11 +227,68 @@ export const ActivityPanel = ({
                   <strong className="pf-v5-u-font-size-sm">
                     {c.username}
                   </strong>
-                  <span className="pf-v5-u-color-200 pf-v5-u-font-size-xs">
-                    {formatTimestamp(c.timestamp)}
-                  </span>
+                  <div className="pf-v5-u-display-flex pf-v5-u-align-items-center" style={{ gap: "8px" }}>
+                    <span className="pf-v5-u-color-200 pf-v5-u-font-size-xs">
+                      {formatTimestamp(c.timestamp)}
+                    </span>
+                    {isMyComment(c) && editingCommentId !== c.id && (
+                      <>
+                        <Button
+                          variant="plain"
+                          size="sm"
+                          onClick={() => startEditing(c)}
+                          isDisabled={submitting}
+                          style={{ padding: "2px" }}
+                        >
+                          <PencilAltIcon />
+                        </Button>
+                        <Button
+                          variant="plain"
+                          size="sm"
+                          onClick={() => handleDeleteComment(c.id)}
+                          isDisabled={submitting}
+                          style={{ padding: "2px", color: "var(--pf-v5-global--danger-color--100)" }}
+                        >
+                          <TrashIcon />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div>{c.comment}</div>
+                {editingCommentId === c.id ? (
+                  <div>
+                    <TextArea
+                      value={editingText}
+                      onChange={(_e, val) => setEditingText(val)}
+                      rows={2}
+                      isDisabled={submitting}
+                      autoFocus
+                    />
+                    <div className="pf-v5-u-mt-xs pf-v5-u-display-flex" style={{ gap: "6px" }}>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleEditComment(c.id)}
+                        isDisabled={!editingText.trim() || submitting}
+                        isLoading={submitting}
+                        icon={<CheckIcon />}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={cancelEditing}
+                        isDisabled={submitting}
+                        icon={<TimesIcon />}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>{c.comment}</div>
+                )}
               </div>
             ))}
           </div>

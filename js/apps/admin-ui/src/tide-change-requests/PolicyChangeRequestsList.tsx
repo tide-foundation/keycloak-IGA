@@ -11,6 +11,7 @@ import {
   Label,
   ButtonVariant,
   AlertVariant,
+  ExpandableSection,
 } from "@patternfly/react-core";
 import {
   Table,
@@ -24,8 +25,11 @@ import { useAdminClient } from "../admin-client";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import { useAccess } from "../context/access/Access";
 import { useAlerts, useEnvironment } from "@keycloak/keycloak-ui-shared";
+import { useWhoAmI } from "../context/whoami/WhoAmI";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+import { expandRowAndScrollTo } from "./utils/expandAndScroll";
+import { ActivityPanel } from "./ActivityPanel";
 
 interface PolicyChangeRequestsListProps {
   updateCounter: (count: number) => void;
@@ -37,6 +41,7 @@ interface PolicyBundle {
   requests: PolicyRequest[];
   status: string;
   requestedBy: string;
+  requestedByUserId: string;
   approvalCount: number;
   rejectionCount: number;
   approvedBy: string[];
@@ -65,6 +70,7 @@ export const PolicyChangeRequestsList = ({
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
   const { addAlert } = useAlerts();
+  const { whoAmI } = useWhoAmI();
   const [selectedRow, setSelectedRow] = useState<PolicyBundle[]>([]);
   const [key, setKey] = useState<number>(0);
   const [approveRecord, setApproveRecord] = useState<boolean>(false);
@@ -111,6 +117,7 @@ export const PolicyChangeRequestsList = ({
         ],
         status: changesetStatus,
         requestedBy: policy.requestedByUsername || "",
+        requestedByUserId: policy.requestedBy || "",
         approvalCount: policy.approvalCount ?? 0,
         rejectionCount: policy.rejectionCount ?? 0,
         approvedBy: policy.approvedBy ?? [],
@@ -217,6 +224,13 @@ export const PolicyChangeRequestsList = ({
               formData.append("requests", bytesToBase64(msg));
 
               await adminClient.tideAdmin.addReview(formData);
+            } else if (reviewResp.denied) {
+              const formData = new FormData();
+              formData.append("changeSetId", reviewResp.id);
+              formData.append("actionType", changeRequests[0].actionType);
+              formData.append("changeSetType", changeRequests[0].changeSetType);
+
+              await adminClient.tideAdmin.addRejection(formData);
             }
           }
         }
@@ -321,39 +335,44 @@ export const PolicyChangeRequestsList = ({
   };
 
   const DetailCell = (bundle: PolicyBundle) => (
-    <Table
-      aria-label="Policy details"
-      variant="compact"
-      borders={false}
-      isStriped
-    >
-      <Thead>
-        <Tr>
-          <Th width={20}>Action</Th>
-          <Th width={20}>Template</Th>
-          <Th width={15}>Change Set Type</Th>
-          <Th width={15}>Status</Th>
-          <Th width={30}>Created</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {bundle.requests.map((request: PolicyRequest, index: number) => (
-          <Tr key={index}>
-            <Td dataLabel="Action">{request.action}</Td>
-            <Td dataLabel="Template">
-              {request.templateName || request.templateId || "—"}
-            </Td>
-            <Td dataLabel="Change Set Type">{request.changeSetType}</Td>
-            <Td dataLabel="Status">{statusLabel(request)}</Td>
-            <Td dataLabel="Created">
-              {request.timestamp
-                ? new Date(request.timestamp).toLocaleString()
-                : "—"}
-            </Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
+    <>
+      <ExpandableSection toggleText="Change Requests" isIndented>
+        <Table
+          aria-label="Policy details"
+          variant="compact"
+          borders={false}
+          isStriped
+        >
+          <Thead>
+            <Tr>
+              <Th width={20}>Action</Th>
+              <Th width={20}>Template</Th>
+              <Th width={15}>Change Set Type</Th>
+              <Th width={15}>Status</Th>
+              <Th width={30}>Created</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {bundle.requests.map((request: PolicyRequest, index: number) => (
+              <Tr key={index}>
+                <Td dataLabel="Action">{request.action}</Td>
+                <Td dataLabel="Template">
+                  {request.templateName || request.templateId || "—"}
+                </Td>
+                <Td dataLabel="Change Set Type">{request.changeSetType}</Td>
+                <Td dataLabel="Status">{statusLabel(request)}</Td>
+                <Td dataLabel="Created">
+                  {request.timestamp
+                    ? new Date(request.timestamp).toLocaleString()
+                    : "—"}
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </ExpandableSection>
+      <ActivityPanel changesetRequestId={bundle.draftRecordId} />
+    </>
   );
 
   const columns = [
@@ -381,7 +400,13 @@ export const PolicyChangeRequestsList = ({
       name: "Reviews",
       displayKey: "Reviews",
       cellRenderer: (bundle: PolicyBundle) => (
-        <div className="pf-v5-u-display-flex pf-v5-u-align-items-center" style={{ gap: '6px', flexWrap: 'wrap' }}>
+        <div
+          className="pf-v5-u-display-flex pf-v5-u-align-items-center"
+          style={{ gap: '6px', flexWrap: 'wrap', cursor: 'pointer' }}
+          onClick={(e) => expandRowAndScrollTo(e, 'activity-reviews', bundle.draftRecordId)}
+          role="button"
+          tabIndex={0}
+        >
           {bundle.approvalCount > 0 && (
             <Label color="green" isCompact>
               {bundle.approvalCount} approved
@@ -402,7 +427,12 @@ export const PolicyChangeRequestsList = ({
       name: "Comments",
       displayKey: "Comments",
       cellRenderer: (bundle: PolicyBundle) => (
-        <span>
+        <span
+          style={{ cursor: 'pointer' }}
+          onClick={(e) => expandRowAndScrollTo(e, 'activity-comments', bundle.draftRecordId)}
+          role="button"
+          tabIndex={0}
+        >
           {bundle.commentCount > 0 ? (
             <Label color="blue" isCompact>{bundle.commentCount}</Label>
           ) : (
@@ -442,6 +472,7 @@ export const PolicyChangeRequestsList = ({
           <Button
             variant="secondary"
             isDanger
+            isDisabled={!selectedRow.length || !selectedRow.every(b => b.requestedByUserId === whoAmI.userId)}
             onClick={() => toggleCancelDialog()}
           >
             {t("Cancel Draft")}

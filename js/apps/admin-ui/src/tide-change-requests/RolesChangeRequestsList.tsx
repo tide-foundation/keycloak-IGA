@@ -10,7 +10,8 @@ import {
   Button,
   ToolbarItem,
   AlertVariant,
-  ButtonVariant
+  ButtonVariant,
+  ExpandableSection
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import CompositeRoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/CompositeRoleChangeRequest"
@@ -23,9 +24,11 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { useRealm } from '../context/realm-context/RealmContext';
+import { useWhoAmI } from '../context/whoami/WhoAmI';
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { ActivityPanel } from "./ActivityPanel";
+import { expandRowAndScrollTo } from "./utils/expandAndScroll";
 
 
 type ChangeRequestProps = {
@@ -37,6 +40,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
   const { keycloak, approveTideRequests,  } = useEnvironment();
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
+  const { whoAmI } = useWhoAmI();
 
   const { t } = useTranslation();
   const [key, setKey] = useState(0);
@@ -80,7 +84,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
 
   const canCancel = hasSelection && selectedRow.every(b => {
     const s = getEffectiveStatus(b);
-    return s !== "ACTIVE";
+    return s !== "ACTIVE" && b.requestedByUserId === whoAmI.userId;
   });
 
   const ToolbarItemsComponent = () => {
@@ -181,6 +185,14 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
                 formData.append("requests", bytesToBase64(msg));
 
                 await adminClient.tideAdmin.addReview(formData);
+              } else if (reviewResp.denied) {
+                const meta = respMetaMap[reviewResp.id] || { actionType: allRequests[0].actionType, changeSetType: allRequests[0].changeSetType };
+                const formData = new FormData();
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", meta.actionType);
+                formData.append("changeSetType", meta.changeSetType);
+
+                await adminClient.tideAdmin.addRejection(formData);
               }
             }
             addAlert(t("Change requests reviewed successfully"), AlertVariant.success);
@@ -274,7 +286,13 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
       name: 'Reviews',
       displayKey: 'Reviews',
       cellRenderer: (bundle: BundledRequest) => (
-        <div className="pf-v5-u-display-flex pf-v5-u-align-items-center" style={{ gap: '6px', flexWrap: 'wrap' }}>
+        <div
+          className="pf-v5-u-display-flex pf-v5-u-align-items-center"
+          style={{ gap: '6px', flexWrap: 'wrap', cursor: 'pointer' }}
+          onClick={(e) => expandRowAndScrollTo(e, 'activity-reviews', bundle.draftRecordId)}
+          role="button"
+          tabIndex={0}
+        >
           {bundle.approvalCount > 0 && (
             <Label color="green" isCompact>
               {bundle.approvalCount} approved
@@ -295,7 +313,12 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
       name: 'Comments',
       displayKey: 'Comments',
       cellRenderer: (bundle: BundledRequest) => (
-        <span>
+        <span
+          style={{ cursor: 'pointer' }}
+          onClick={(e) => expandRowAndScrollTo(e, 'activity-comments', bundle.draftRecordId)}
+          role="button"
+          tabIndex={0}
+        >
           {bundle.commentCount > 0 ? (
             <Label color="blue" isCompact>{bundle.commentCount}</Label>
           ) : (
@@ -347,51 +370,53 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
 
   const DetailCell = (bundle: BundledRequest) => (
     <>
-    <Table
-      aria-label="Bundle details"
-      variant={'compact'}
-      borders={false}
-      isStriped
-    >
-      <Thead>
-        <Tr>
-          <Th width={10}>Action</Th>
-          <Th width={10}>Role</Th>
-          <Th width={10}>Client ID</Th>
-          <Th width={10}>Type</Th>
-          <Th width={10}>Status</Th>
-          <Th width={15} modifier="wrap">Affected User</Th>
-          <Th width={15} modifier="wrap">Affected Client</Th>
-          <Th width={40}>Access Draft</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {bundle.requests.map((request: any, index: number) =>
-          request.userRecord.map((userRecord: any, userIndex: number) => (
-            <Tr key={`${index}-${userIndex}`}>
-              <Td dataLabel="Action">{request.action}</Td>
-              <Td dataLabel="Role">{request.role}</Td>
-              <Td dataLabel="Client ID">{request.clientId}</Td>
-              <Td dataLabel="Type">{request.requestType}</Td>
-              <Td dataLabel="Status">
-                <Label
-                  color={request.status === 'APPROVED' ? 'blue' : request.status === 'PENDING' ? 'orange' : request.status === 'DENIED' ? 'red' : 'grey'}
-                >
-                  {request.status === "ACTIVE" ? request.deleteStatus || request.status : request.status}
-                </Label>
-              </Td>
-              <Td dataLabel="Affected User">{userRecord.username}</Td>
-              <Td dataLabel="Affected Client">{userRecord.clientId}</Td>
-              <Td dataLabel={columnNames.accessDraft}>
-                <ClipboardCopy isCode isReadOnly hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
-                  {parseAndFormatJson(userRecord.accessDraft)}
-                </ClipboardCopy>
-              </Td>
-            </Tr>
-          ))
-        )}
-      </Tbody>
-    </Table>
+    <ExpandableSection toggleText="Change Requests" isIndented>
+      <Table
+        aria-label="Bundle details"
+        variant={'compact'}
+        borders={false}
+        isStriped
+      >
+        <Thead>
+          <Tr>
+            <Th width={10}>Action</Th>
+            <Th width={10}>Role</Th>
+            <Th width={10}>Client ID</Th>
+            <Th width={10}>Type</Th>
+            <Th width={10}>Status</Th>
+            <Th width={15} modifier="wrap">Affected User</Th>
+            <Th width={15} modifier="wrap">Affected Client</Th>
+            <Th width={40}>Access Draft</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {bundle.requests.map((request: any, index: number) =>
+            request.userRecord.map((userRecord: any, userIndex: number) => (
+              <Tr key={`${index}-${userIndex}`}>
+                <Td dataLabel="Action">{request.action}</Td>
+                <Td dataLabel="Role">{request.role}</Td>
+                <Td dataLabel="Client ID">{request.clientId}</Td>
+                <Td dataLabel="Type">{request.requestType}</Td>
+                <Td dataLabel="Status">
+                  <Label
+                    color={request.status === 'APPROVED' ? 'blue' : request.status === 'PENDING' ? 'orange' : request.status === 'DENIED' ? 'red' : 'grey'}
+                  >
+                    {request.status === "ACTIVE" ? request.deleteStatus || request.status : request.status}
+                  </Label>
+                </Td>
+                <Td dataLabel="Affected User">{userRecord.username}</Td>
+                <Td dataLabel="Affected Client">{userRecord.clientId}</Td>
+                <Td dataLabel={columnNames.accessDraft}>
+                  <ClipboardCopy isCode isReadOnly hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
+                    {parseAndFormatJson(userRecord.accessDraft)}
+                  </ClipboardCopy>
+                </Td>
+              </Tr>
+            ))
+          )}
+        </Tbody>
+      </Table>
+    </ExpandableSection>
     <ActivityPanel changesetRequestId={bundle.draftRecordId} />
     </>
   );

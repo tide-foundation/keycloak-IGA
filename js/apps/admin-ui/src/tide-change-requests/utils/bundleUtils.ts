@@ -7,6 +7,7 @@ export interface BundledRequest<T = any> {
   requests: T[];
   status: string;
   requestedBy: string;
+  requestedByUserId: string;
   approvalCount: number;
   rejectionCount: number;
   approvedBy: string[];
@@ -15,7 +16,7 @@ export interface BundledRequest<T = any> {
   count: number;
 }
 
-export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; deleteStatus?: string; userRecord: any[]; requestedByUsername?: string }>(
+export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; deleteStatus?: string; userRecord: any[]; requestedBy?: string; requestedByUsername?: string }>(
   requests: T[]
 ): BundledRequest<T>[] {
   // Group requests by draftRecordId
@@ -43,6 +44,7 @@ export function groupRequestsByDraftId<T extends { draftRecordId: string; status
       requests,
       status: bundleStatus,
       requestedBy: first.requestedByUsername || first.userRecord[0]?.username || 'Unknown',
+      requestedByUserId: first.requestedBy || '',
       approvalCount: first.approvalCount ?? 0,
       rejectionCount: first.rejectionCount ?? 0,
       approvedBy: first.approvedBy ?? [],

@@ -440,6 +440,30 @@ public getChangeSetRequests = this.makeRequest<
     urlParamKeys: ["id"],
   });
 
+  public updateChangeSetComment = this.makeRequest<
+    { id: string; commentId: string; comment: string },
+    {
+      id: string;
+      userId: string;
+      username: string;
+      comment: string;
+      timestamp: number;
+    }
+  >({
+    method: "PUT",
+    path: "/tide-admin/change-set/{id}/comments/{commentId}",
+    urlParamKeys: ["id", "commentId"],
+  });
+
+  public deleteChangeSetComment = this.makeRequest<
+    { id: string; commentId: string },
+    { deleted: boolean }
+  >({
+    method: "DELETE",
+    path: "/tide-admin/change-set/{id}/comments/{commentId}",
+    urlParamKeys: ["id", "commentId"],
+  });
+
   constructor(client: KeycloakAdminClient) {
     super(client, {
       path: "/admin/realms/{realm}",

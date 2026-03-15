@@ -14,6 +14,7 @@ import {
   AlertVariant,
   Modal,
   ModalVariant,
+  ExpandableSection,
 } from "@patternfly/react-core";
 import {
   Table,
@@ -29,10 +30,13 @@ import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import { useAccess } from "../context/access/Access";
 import { useAlerts, useEnvironment } from "@keycloak/keycloak-ui-shared";
 import { useRealm } from "../context/realm-context/RealmContext";
+import { useWhoAmI } from "../context/whoami/WhoAmI";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { groupRequestsByDraftId, BundledRequest } from "./utils/bundleUtils";
 import { useCurrentUser } from "../utils/useCurrentUser";
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+import { expandRowAndScrollTo } from "./utils/expandAndScroll";
+import { ActivityPanel } from "./ActivityPanel";
 
 interface SettingsChangeRequestsListProps {
   updateCounter: (count: number) => void;
@@ -53,6 +57,7 @@ export const SettingsChangeRequestsList = ({
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
   const { addAlert } = useAlerts();
+  const { whoAmI } = useWhoAmI();
   const currentUser = useCurrentUser();
   const [selectedRow, setSelectedRow] = useState<BundledRequest[]>([]);
   const [key, setKey] = useState<number>(0);
@@ -192,12 +197,18 @@ export const SettingsChangeRequestsList = ({
             const msg = reviewResp.approved.request;
             const formData = new FormData();
             formData.append("changeSetId", reviewResp.id);
-            // We assume all items in this group share the same type/action (as per previous logic)
             formData.append("actionType", changeRequests[0].actionType);
             formData.append("changeSetType", changeRequests[0].changeSetType);
             formData.append("requests", bytesToBase64(msg));
 
             await adminClient.tideAdmin.addReview(formData);
+          } else if (reviewResp.denied) {
+            const formData = new FormData();
+            formData.append("changeSetId", reviewResp.id);
+            formData.append("actionType", changeRequests[0].actionType);
+            formData.append("changeSetType", changeRequests[0].changeSetType);
+
+            await adminClient.tideAdmin.addRejection(formData);
           }
         }
       }
@@ -416,36 +427,41 @@ export const SettingsChangeRequestsList = ({
   };
 
   const DetailCell = (bundle: BundledRequest) => (
-    <Table aria-label="Bundle details" variant="compact" borders={false} isStriped>
-      <Thead>
-        <Tr>
-          <Th width={10}>Action</Th>
-          <Th width={20} modifier="wrap">
-            Request Type
-          </Th>
-          <Th width={20} modifier="wrap">
-            Change Set Type
-          </Th>
-          <Th width={10} modifier="wrap">
-            Action Type
-          </Th>
-          <Th width={10}>Status</Th>
-          <Th width={10}>Realm ID</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {bundle.requests.map((request: any, index: number) => (
-          <Tr key={index}>
-            <Td dataLabel="Action">{request.action}</Td>
-            <Td dataLabel="Request Type">{request.requestType}</Td>
-            <Td dataLabel="Change Set Type">{request.changeSetType}</Td>
-            <Td dataLabel="Action Type">{request.actionType}</Td>
-            <Td dataLabel="Status">{statusLabel(request)}</Td>
-            <Td dataLabel="Realm ID">{request.realmId}</Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
+    <>
+      <ExpandableSection toggleText="Change Requests" isIndented>
+        <Table aria-label="Bundle details" variant="compact" borders={false} isStriped>
+          <Thead>
+            <Tr>
+              <Th width={10}>Action</Th>
+              <Th width={20} modifier="wrap">
+                Request Type
+              </Th>
+              <Th width={20} modifier="wrap">
+                Change Set Type
+              </Th>
+              <Th width={10} modifier="wrap">
+                Action Type
+              </Th>
+              <Th width={10}>Status</Th>
+              <Th width={10}>Realm ID</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {bundle.requests.map((request: any, index: number) => (
+              <Tr key={index}>
+                <Td dataLabel="Action">{request.action}</Td>
+                <Td dataLabel="Request Type">{request.requestType}</Td>
+                <Td dataLabel="Change Set Type">{request.changeSetType}</Td>
+                <Td dataLabel="Action Type">{request.actionType}</Td>
+                <Td dataLabel="Status">{statusLabel(request)}</Td>
+                <Td dataLabel="Realm ID">{request.realmId}</Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </ExpandableSection>
+      <ActivityPanel changesetRequestId={bundle.draftRecordId} />
+    </>
   );
 
   const columns = [
@@ -491,7 +507,13 @@ export const SettingsChangeRequestsList = ({
       name: "Reviews",
       displayKey: "Reviews",
       cellRenderer: (bundle: BundledRequest) => (
-        <div className="pf-v5-u-display-flex pf-v5-u-align-items-center" style={{ gap: '6px', flexWrap: 'wrap' }}>
+        <div
+          className="pf-v5-u-display-flex pf-v5-u-align-items-center"
+          style={{ gap: '6px', flexWrap: 'wrap', cursor: 'pointer' }}
+          onClick={(e) => expandRowAndScrollTo(e, 'activity-reviews', bundle.draftRecordId)}
+          role="button"
+          tabIndex={0}
+        >
           {bundle.approvalCount > 0 && (
             <Label color="green" isCompact>
               {bundle.approvalCount} approved
@@ -512,7 +534,12 @@ export const SettingsChangeRequestsList = ({
       name: "Comments",
       displayKey: "Comments",
       cellRenderer: (bundle: BundledRequest) => (
-        <span>
+        <span
+          style={{ cursor: 'pointer' }}
+          onClick={(e) => expandRowAndScrollTo(e, 'activity-comments', bundle.draftRecordId)}
+          role="button"
+          tabIndex={0}
+        >
           {bundle.commentCount > 0 ? (
             <Label color="blue" isCompact>{bundle.commentCount}</Label>
           ) : (
@@ -541,7 +568,12 @@ export const SettingsChangeRequestsList = ({
           </Button>
         </ToolbarItem>
         <ToolbarItem>
-          <Button variant="secondary" isDanger onClick={() => toggleCancelDialog()}>
+          <Button
+            variant="secondary"
+            isDanger
+            isDisabled={!selectedRow.length || !selectedRow.every(b => b.requestedByUserId === whoAmI.userId)}
+            onClick={() => toggleCancelDialog()}
+          >
             {t("Cancel Draft")}
           </Button>
         </ToolbarItem>
