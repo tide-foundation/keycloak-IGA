@@ -89,6 +89,27 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
     path: "/tide-admin/change-set/groups/requests",
   });
 
+  public getChangeSetCounts = this.makeRequest<void, {
+    users: number;
+    roles: number;
+    clients: number;
+    groups: number;
+    total: number;
+  }>({
+    method: "GET",
+    path: "/tide-admin/change-set/counts",
+  });
+
+  public getAllChangeSetRequests = this.makeRequest<void, {
+    users: RequestedChanges[];
+    roles: RequestedChanges[];
+    clients: RequestedChanges[];
+    groups: RequestedChanges[];
+  }>({
+    method: "GET",
+    path: "/tide-admin/change-set/all/requests",
+  });
+
   public getRequestedChangesForRagnarokSettings = this.makeRequest<void, RequestedChanges[]>({
     method: "GET",
     path: "/ragnarok/change-set/offboarding/requests",
@@ -357,6 +378,66 @@ public getChangeSetRequests = this.makeRequest<
     method: "DELETE",
     path: "/tide-admin/ssh-policies",
     queryParamKeys: ["roleId"],
+  });
+
+  public listRolePolicies = this.makeRequest<
+    void,
+    Array<{
+      id: string;
+      roleId: string;
+      roleName: string;
+      clientRole: boolean;
+      clientId?: string;
+      timestamp: number;
+      hasSig: boolean;
+      policyDisplay?: string;
+    }>
+  >({
+    method: "GET",
+    path: "/tide-admin/role-policies",
+  });
+
+  // ── Change Request Activity & Comments ─────────────────────────
+
+  public getChangeSetActivity = this.makeRequest<
+    { id: string },
+    {
+      requestedBy: string;
+      requestedByUsername: string;
+      timestamp: number;
+      approvals: Array<{
+        userId: string;
+        username: string;
+        isApproval: boolean;
+        timestamp: number;
+      }>;
+      comments: Array<{
+        id: string;
+        userId: string;
+        username: string;
+        comment: string;
+        timestamp: number;
+      }>;
+    }
+  >({
+    method: "GET",
+    path: "/tide-admin/change-set/{id}/activity",
+    urlParamKeys: ["id"],
+  });
+
+  public addChangeSetComment = this.makeRequest<
+    { id: string; comment: string },
+    {
+      id: string;
+      userId: string;
+      username: string;
+      comment: string;
+      timestamp: number;
+    }
+  >({
+    method: "POST",
+    path: "/tide-admin/change-set/{id}/comments",
+    urlParamKeys: ["id"],
   });
 
   constructor(client: KeycloakAdminClient) {

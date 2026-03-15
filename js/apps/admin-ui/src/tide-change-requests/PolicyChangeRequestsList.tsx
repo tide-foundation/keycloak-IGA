@@ -29,6 +29,7 @@ import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerializati
 
 interface PolicyChangeRequestsListProps {
   updateCounter: (count: number) => void;
+  onActionComplete?: () => void;
 }
 
 interface PolicyBundle {
@@ -36,6 +37,11 @@ interface PolicyBundle {
   requests: PolicyRequest[];
   status: string;
   requestedBy: string;
+  approvalCount: number;
+  rejectionCount: number;
+  approvedBy: string[];
+  deniedBy: string[];
+  commentCount: number;
   count: number;
 }
 
@@ -54,6 +60,7 @@ interface PolicyRequest {
 
 export const PolicyChangeRequestsList = ({
   updateCounter,
+  onActionComplete,
 }: PolicyChangeRequestsListProps) => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
@@ -68,6 +75,7 @@ export const PolicyChangeRequestsList = ({
   const refresh = () => {
     setSelectedRow([]);
     setKey((prev: number) => prev + 1);
+    onActionComplete?.();
   };
 
   const loader = async (): Promise<PolicyBundle[]> => {
@@ -102,7 +110,12 @@ export const PolicyChangeRequestsList = ({
           },
         ],
         status: changesetStatus,
-        requestedBy: "",
+        requestedBy: policy.requestedByUsername || "",
+        approvalCount: policy.approvalCount ?? 0,
+        rejectionCount: policy.rejectionCount ?? 0,
+        approvedBy: policy.approvedBy ?? [],
+        deniedBy: policy.deniedBy ?? [],
+        commentCount: policy.commentCount ?? 0,
         count: 1,
       };
 
@@ -363,6 +376,40 @@ export const PolicyChangeRequestsList = ({
       name: "Status",
       displayKey: "Status",
       cellRenderer: (bundle: PolicyBundle) => bundleStatusLabel(bundle),
+    },
+    {
+      name: "Reviews",
+      displayKey: "Reviews",
+      cellRenderer: (bundle: PolicyBundle) => (
+        <div className="pf-v5-u-display-flex pf-v5-u-align-items-center" style={{ gap: '6px', flexWrap: 'wrap' }}>
+          {bundle.approvalCount > 0 && (
+            <Label color="green" isCompact>
+              {bundle.approvalCount} approved
+            </Label>
+          )}
+          {bundle.rejectionCount > 0 && (
+            <Label color="red" isCompact>
+              {bundle.rejectionCount} denied
+            </Label>
+          )}
+          {bundle.approvalCount === 0 && bundle.rejectionCount === 0 && (
+            <span className="pf-v5-u-color-200 pf-v5-u-font-size-sm">No reviews</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      name: "Comments",
+      displayKey: "Comments",
+      cellRenderer: (bundle: PolicyBundle) => (
+        <span>
+          {bundle.commentCount > 0 ? (
+            <Label color="blue" isCompact>{bundle.commentCount}</Label>
+          ) : (
+            <span className="pf-v5-u-color-200 pf-v5-u-font-size-sm">0</span>
+          )}
+        </span>
+      ),
     },
   ];
 

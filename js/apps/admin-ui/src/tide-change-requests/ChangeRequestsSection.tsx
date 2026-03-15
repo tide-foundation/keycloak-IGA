@@ -39,6 +39,7 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+import { ActivityPanel } from "./ActivityPanel";
 
 export interface changeSetApprovalRequest {
   message: string,
@@ -58,6 +59,7 @@ export default function ChangeRequestsSection() {
   const refresh = () => {
     setSelectedRow([])
     setKey((prev: number) => prev + 1);
+    fetchAllCounts();
   };
 
 
@@ -71,6 +73,40 @@ export default function ChangeRequestsSection() {
   const [policyRequestCount, setPolicyRequestCount] = useState(0);
   const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true)
 
+
+  const fetchAllCounts = async () => {
+    try {
+      const [counts, settings, licensing, policy] = await Promise.all([
+        adminClient.tideUsersExt.getChangeSetCounts().catch(() => null),
+        adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings().catch(() => []),
+        adminClient.tideUsersExt.getRequestedChangesForRealmLicensing().catch(() => []),
+        adminClient.tideUsersExt.getRealmPolicy().catch(() => null),
+      ]);
+
+      if (counts) {
+        setUserRequestCount(counts.users);
+        setRoleRequestCount(counts.roles);
+        setClientRequestCount(counts.clients);
+        setGroupRequestCount(counts.groups);
+      }
+
+      const mergedSettings = [
+        ...(Array.isArray(settings) ? settings : []),
+        ...(Array.isArray(licensing) ? licensing : []),
+      ];
+      setRealmSettingsRequestCount(groupRequestsByDraftId(mergedSettings as any[]).length);
+      const p = policy as any;
+      setPolicyRequestCount(
+        p && (p.status === "pending" || p.status === "delete_pending") ? 1 : 0
+      );
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchAllCounts();
+    const interval = setInterval(fetchAllCounts, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const checkTide = async () => {
@@ -276,9 +312,50 @@ export default function ChangeRequestsSection() {
       }
     },
     {
+      name: 'Requested By',
+      displayKey: 'Requested By',
+      cellRenderer: (bundle: BundledRequest) => (
+        <span>{bundle.requestedBy}</span>
+      )
+    },
+    {
       name: 'Status',
       displayKey: 'Status',
       cellRenderer: (bundle: any) => bundleStatusLabel(bundle)
+    },
+    {
+      name: 'Reviews',
+      displayKey: 'Reviews',
+      cellRenderer: (bundle: BundledRequest) => (
+        <div className="pf-v5-u-display-flex pf-v5-u-align-items-center" style={{ gap: '6px', flexWrap: 'wrap' }}>
+          {bundle.approvalCount > 0 && (
+            <Label color="green" isCompact>
+              {bundle.approvalCount} approved
+            </Label>
+          )}
+          {bundle.rejectionCount > 0 && (
+            <Label color="red" isCompact>
+              {bundle.rejectionCount} denied
+            </Label>
+          )}
+          {bundle.approvalCount === 0 && bundle.rejectionCount === 0 && (
+            <span className="pf-v5-u-color-200 pf-v5-u-font-size-sm">No reviews</span>
+          )}
+        </div>
+      )
+    },
+    {
+      name: 'Comments',
+      displayKey: 'Comments',
+      cellRenderer: (bundle: BundledRequest) => (
+        <span>
+          {bundle.commentCount > 0 ? (
+            <Label color="blue" isCompact>{bundle.commentCount}</Label>
+          ) : (
+            <span className="pf-v5-u-color-200 pf-v5-u-font-size-sm">0</span>
+          )}
+        </span>
+      )
     },
   ];
 
@@ -334,46 +411,49 @@ export default function ChangeRequestsSection() {
   };
 
   const DetailCell = (bundle: any) => (
-    <Table
-      aria-label="Bundle details"
-      variant={'compact'}
-      borders={false}
-      isStriped
-    >
-      <Thead>
-        <Tr>
-          <Th width={10}>Action</Th>
-          <Th width={10}>Role</Th>
-          <Th width={10}>Client ID</Th>
-          <Th width={10}>Type</Th>
-          <Th width={10}>Status</Th>
-          <Th width={15} modifier="wrap">Affected User</Th>
-          <Th width={15} modifier="wrap">Affected Client</Th>
-          <Th width={40}>Access Draft</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {bundle.requests.map((request: any, index: number) =>
-          request.userRecord.map((userRecord: any, userIndex: number) => (
-            <Tr key={`${index}-${userIndex}`}>
-              <Td dataLabel="Action">{request.action}</Td>
-              <Td dataLabel="Role">{request.role}</Td>
-              <Td dataLabel="Client ID">{request.clientId}</Td>
-              <Td dataLabel="Type">{request.requestType}</Td>
-              <Td dataLabel="Status">{statusLabel(request)}</Td>
-              <Td dataLabel="Affected User">{userRecord.username}</Td>
-              <Td dataLabel="Affected Client">{userRecord.clientId}</Td>
-              <Td dataLabel={columnNames.accessDraft}>
-                <ClipboardCopy isCode isReadOnly hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
-                  {parseAndFormatJson(userRecord.accessDraft)}
-                </ClipboardCopy>
-              </Td>
+    <>
+      <Table
+        aria-label="Bundle details"
+        variant={'compact'}
+        borders={false}
+        isStriped
+      >
+        <Thead>
+          <Tr>
+            <Th width={10}>Action</Th>
+            <Th width={10}>Role</Th>
+            <Th width={10}>Client ID</Th>
+            <Th width={10}>Type</Th>
+            <Th width={10}>Status</Th>
+            <Th width={15} modifier="wrap">Affected User</Th>
+            <Th width={15} modifier="wrap">Affected Client</Th>
+            <Th width={40}>Access Draft</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {bundle.requests.map((request: any, index: number) =>
+            request.userRecord.map((userRecord: any, userIndex: number) => (
+              <Tr key={`${index}-${userIndex}`}>
+                <Td dataLabel="Action">{request.action}</Td>
+                <Td dataLabel="Role">{request.role}</Td>
+                <Td dataLabel="Client ID">{request.clientId}</Td>
+                <Td dataLabel="Type">{request.requestType}</Td>
+                <Td dataLabel="Status">{statusLabel(request)}</Td>
+                <Td dataLabel="Affected User">{userRecord.username}</Td>
+                <Td dataLabel="Affected Client">{userRecord.clientId}</Td>
+                <Td dataLabel={columnNames.accessDraft}>
+                  <ClipboardCopy isCode isReadOnly hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
+                    {parseAndFormatJson(userRecord.accessDraft)}
+                  </ClipboardCopy>
+                </Td>
 
-            </Tr>
-          ))
-        )}
-      </Tbody>
-    </Table>
+              </Tr>
+            ))
+          )}
+        </Tbody>
+      </Table>
+      <ActivityPanel changesetRequestId={bundle.draftRecordId} />
+    </>
   );
 
   const updateClientCounter = (counter: number) => {
@@ -536,7 +616,7 @@ export default function ChangeRequestsSection() {
             }
             {...roleRequestsTab}
           >
-            <RolesChangeRequestsList updateCounter={updateRoleCounter} />
+            <RolesChangeRequestsList updateCounter={updateRoleCounter} onActionComplete={fetchAllCounts} />
           </Tab>
           <Tab
             title={
@@ -551,7 +631,7 @@ export default function ChangeRequestsSection() {
             }
             {...groupRequestsTab}
           >
-            <GroupsChangeRequestsList updateCounter={updateGroupCounter} />
+            <GroupsChangeRequestsList updateCounter={updateGroupCounter} onActionComplete={fetchAllCounts} />
           </Tab>
           <Tab
             title={
@@ -566,7 +646,7 @@ export default function ChangeRequestsSection() {
             }
             {...clientRequestsTab}
           >
-            <ClientChangeRequestsList updateCounter={updateClientCounter} />
+            <ClientChangeRequestsList updateCounter={updateClientCounter} onActionComplete={fetchAllCounts} />
           </Tab>
           <Tab
             title={
@@ -581,7 +661,7 @@ export default function ChangeRequestsSection() {
             }
             {...settingsRequestsTab}
           >
-            <SettingsChangeRequestsList updateCounter={updateSettingsCounter} />
+            <SettingsChangeRequestsList updateCounter={updateSettingsCounter} onActionComplete={fetchAllCounts} />
           </Tab>
           <Tab
             title={
@@ -596,7 +676,7 @@ export default function ChangeRequestsSection() {
             }
             {...policiesTab}
           >
-            <PolicyChangeRequestsList updateCounter={updatePolicyCounter} />
+            <PolicyChangeRequestsList updateCounter={updatePolicyCounter} onActionComplete={fetchAllCounts} />
           </Tab>
         </RoutableTabs>
       </PageSection>
