@@ -44,6 +44,18 @@ interface PolicyEntry {
   timestamp: number;
 }
 
+interface RolePolicyEntry {
+  id: string;
+  roleId: string;
+  roleName: string;
+  clientRole: boolean;
+  clientId?: string;
+  timestamp: number;
+  hasSig: boolean;
+  policyDisplay?: string;
+  parsed?: ParsedAdminPolicy;
+}
+
 function truncateHash(hash: string, len = 16): string {
   if (!hash) return "-";
   return hash.length > len ? hash.substring(0, len) + "..." : hash;
@@ -139,6 +151,115 @@ function PolicyDetails({ policy }: { policy: PolicyEntry }) {
   );
 }
 
+function RolePolicyDetails({ policy }: { policy: RolePolicyEntry }) {
+  if (!policy.parsed) {
+    return <code>{policy.policyDisplay || "Unable to parse policy"}</code>;
+  }
+
+  const p = policy.parsed;
+
+  return (
+    <DescriptionList
+      isHorizontal
+      columnModifier={{ default: "2Col" }}
+      className="pf-v5-u-mt-sm"
+    >
+      <DescriptionListGroup>
+        <DescriptionListTerm>Role ID</DescriptionListTerm>
+        <DescriptionListDescription>
+          <code>{policy.roleId}</code>
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      {policy.clientRole && policy.clientId && (
+        <DescriptionListGroup>
+          <DescriptionListTerm>Client</DescriptionListTerm>
+          <DescriptionListDescription>
+            <code>{policy.clientId}</code>
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      )}
+      <DescriptionListGroup>
+        <DescriptionListTerm>Contract ID</DescriptionListTerm>
+        <DescriptionListDescription>
+          <code>{p.contractId}</code>
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      <DescriptionListGroup>
+        <DescriptionListTerm>Model ID</DescriptionListTerm>
+        <DescriptionListDescription>
+          {p.modelId}
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      <DescriptionListGroup>
+        <DescriptionListTerm>Approval Type</DescriptionListTerm>
+        <DescriptionListDescription>
+          <Label color="blue">{p.approvalType}</Label>
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      <DescriptionListGroup>
+        <DescriptionListTerm>Execution Type</DescriptionListTerm>
+        <DescriptionListDescription>
+          <Label color="blue">{p.executionType}</Label>
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      <DescriptionListGroup>
+        <DescriptionListTerm>Key ID</DescriptionListTerm>
+        <DescriptionListDescription>
+          <code title={p.keyId}>{truncateHash(p.keyId, 24)}</code>
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      {p.params.threshold && (
+        <DescriptionListGroup>
+          <DescriptionListTerm>Threshold</DescriptionListTerm>
+          <DescriptionListDescription>
+            {p.params.threshold}
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      )}
+      {p.params.resource && (
+        <DescriptionListGroup>
+          <DescriptionListTerm>Resource</DescriptionListTerm>
+          <DescriptionListDescription>
+            <code>{p.params.resource}</code>
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      )}
+      {p.params.role && (
+        <DescriptionListGroup>
+          <DescriptionListTerm>Policy Role</DescriptionListTerm>
+          <DescriptionListDescription>
+            <code>{p.params.role}</code>
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      )}
+      <DescriptionListGroup>
+        <DescriptionListTerm>Signed</DescriptionListTerm>
+        <DescriptionListDescription>
+          <Label color={policy.hasSig ? "green" : "orange"}>
+            {policy.hasSig ? "Yes" : "No"}
+          </Label>
+        </DescriptionListDescription>
+      </DescriptionListGroup>
+      {p.signature && (
+        <DescriptionListGroup>
+          <DescriptionListTerm>Signature</DescriptionListTerm>
+          <DescriptionListDescription>
+            <code title={p.signature}>{truncateHash(p.signature, 24)}</code>
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      )}
+      {policy.timestamp > 0 && (
+        <DescriptionListGroup>
+          <DescriptionListTerm>Created</DescriptionListTerm>
+          <DescriptionListDescription>
+            {formatTimestamp(policy.timestamp)}
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      )}
+    </DescriptionList>
+  );
+}
+
 export const OverviewTab = () => {
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
@@ -150,6 +271,12 @@ export const OverviewTab = () => {
   const [policies, setPolicies] = useState<PolicyEntry[]>([]);
   const [policiesLoading, setPoliciesLoading] = useState(true);
   const [expandedPolicies, setExpandedPolicies] = useState<
+    Record<string, boolean>
+  >({});
+
+  const [rolePolicies, setRolePolicies] = useState<RolePolicyEntry[]>([]);
+  const [rolePoliciesLoading, setRolePoliciesLoading] = useState(true);
+  const [expandedRolePolicies, setExpandedRolePolicies] = useState<
     Record<string, boolean>
   >({});
 
@@ -183,12 +310,40 @@ export const OverviewTab = () => {
       }
     };
 
+    const loadRolePolicies = async () => {
+      setRolePoliciesLoading(true);
+      try {
+        const data = await adminClient.tideUsersExt.listRolePolicies();
+        const withParsed = data.map((rp) => {
+          let parsed: ParsedAdminPolicy | undefined;
+          if (rp.policyDisplay) {
+            try {
+              parsed = parseAdminPolicy(rp.policyDisplay);
+            } catch {
+              // leave parsed undefined
+            }
+          }
+          return { ...rp, parsed };
+        });
+        setRolePolicies(withParsed);
+      } catch {
+        setRolePolicies([]);
+      } finally {
+        setRolePoliciesLoading(false);
+      }
+    };
+
     loadAdminPolicy();
     loadPolicies();
+    loadRolePolicies();
   }, [adminClient, realm]);
 
   const togglePolicy = (id: string) => {
     setExpandedPolicies((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleRolePolicy = (id: string) => {
+    setExpandedRolePolicies((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -303,41 +458,61 @@ export const OverviewTab = () => {
         </CardBody>
       </Card>
 
-      {/* Policies */}
+      {/* Role Policies (merged: initCert + SSH/Forseti) */}
       <Card>
         <CardTitle>
           <Title headingLevel="h2" size="lg">
-            Policies ({policies.length})
+            Role Policies ({rolePolicies.length + policies.length})
           </Title>
         </CardTitle>
         <CardBody>
-          {policiesLoading ? (
+          {(rolePoliciesLoading || policiesLoading) ? (
             <Spinner size="md" />
-          ) : policies.length > 0 ? (
-            policies.map((policy) => {
-              const role = policy.roleId;
-              const approval = policy.approvalType;
-              const threshold = String(policy.threshold);
-              const contract =
-                policy.contractName ||
-                truncateHash(policy.contractHash || "", 20);
+          ) : (rolePolicies.length + policies.length) > 0 ? (
+            <>
+              {rolePolicies.map((rp) => {
+                const threshold = rp.parsed?.params.threshold || "?";
+                const scope = rp.clientRole && rp.clientId
+                  ? `${rp.clientId} / ${rp.roleName}`
+                  : rp.roleName;
 
-              return (
-                <ExpandableSection
-                  key={policy.id}
-                  toggleText={`${role}  ·  ${approval}  ·  Threshold: ${threshold}  ·  ${contract}`}
-                  isExpanded={!!expandedPolicies[policy.id]}
-                  onToggle={() => togglePolicy(policy.id)}
-                  className="pf-v5-u-mb-sm"
-                >
-                  <PolicyDetails policy={policy} />
-                </ExpandableSection>
-              );
-            })
+                return (
+                  <ExpandableSection
+                    key={rp.id}
+                    toggleText={`${scope}  ·  Threshold: ${threshold}`}
+                    isExpanded={!!expandedRolePolicies[rp.id]}
+                    onToggle={() => toggleRolePolicy(rp.id)}
+                    className="pf-v5-u-mb-sm"
+                  >
+                    <RolePolicyDetails policy={rp} />
+                  </ExpandableSection>
+                );
+              })}
+              {policies.map((policy) => {
+                const role = policy.roleId;
+                const approval = policy.approvalType;
+                const threshold = String(policy.threshold);
+                const contract =
+                  policy.contractName ||
+                  truncateHash(policy.contractHash || "", 20);
+
+                return (
+                  <ExpandableSection
+                    key={policy.id}
+                    toggleText={`${role}  ·  ${approval}  ·  Threshold: ${threshold}  ·  ${contract}`}
+                    isExpanded={!!expandedPolicies[policy.id]}
+                    onToggle={() => togglePolicy(policy.id)}
+                    className="pf-v5-u-mb-sm"
+                  >
+                    <PolicyDetails policy={policy} />
+                  </ExpandableSection>
+                );
+              })}
+            </>
           ) : (
             <EmptyState variant="xs">
               <EmptyStateHeader
-                titleText="No policies"
+                titleText="No role policies"
                 icon={<EmptyStateIcon icon={SearchIcon} />}
                 headingLevel="h3"
               />

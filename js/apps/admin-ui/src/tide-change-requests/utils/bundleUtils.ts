@@ -7,10 +7,16 @@ export interface BundledRequest<T = any> {
   requests: T[];
   status: string;
   requestedBy: string;
+  requestedByUserId: string;
+  approvalCount: number;
+  rejectionCount: number;
+  approvedBy: string[];
+  deniedBy: string[];
+  commentCount: number;
   count: number;
 }
 
-export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; deleteStatus?: string; userRecord: any[] }>(
+export function groupRequestsByDraftId<T extends { draftRecordId: string; status: string; deleteStatus?: string; userRecord: any[]; requestedBy?: string; requestedByUsername?: string }>(
   requests: T[]
 ): BundledRequest<T>[] {
   // Group requests by draftRecordId
@@ -32,11 +38,18 @@ export function groupRequestsByDraftId<T extends { draftRecordId: string; status
       bundleStatus = "MIXED";
     }
 
+    const first = requests[0] as any;
     return {
       draftRecordId,
       requests,
       status: bundleStatus,
-      requestedBy: requests[0].userRecord[0]?.username || 'Unknown',
+      requestedBy: first.requestedByUsername || first.requestedBy || 'Unknown',
+      requestedByUserId: first.requestedBy || '',
+      approvalCount: first.approvalCount ?? 0,
+      rejectionCount: first.rejectionCount ?? 0,
+      approvedBy: first.approvedBy ?? [],
+      deniedBy: first.deniedBy ?? [],
+      commentCount: first.commentCount ?? 0,
       count: requests.length,
     };
   });

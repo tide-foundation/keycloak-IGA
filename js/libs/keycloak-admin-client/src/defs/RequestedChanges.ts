@@ -11,5 +11,12 @@ export default interface RequestedChanges {
     userRecord: RequestChangesUserRecord[];
     status: string;
     deleteStatus: string;
+    requestedBy?: string;
+    requestedByUsername?: string;
+    approvalCount?: number;
+    rejectionCount?: number;
+    approvedBy?: string[];
+    deniedBy?: string[];
+    commentCount?: number;
 }
 
