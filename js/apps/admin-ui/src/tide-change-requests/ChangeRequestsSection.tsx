@@ -16,8 +16,7 @@ import {
   ButtonVariant
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
-import RoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/RoleChangeRequest"
-import RequestChangesUserRecord from "@keycloak/keycloak-admin-client/lib/defs/RequestChangesUserRecord"
+import type { BundledRequest } from './utils/bundleUtils';
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAdminClient } from "../admin-client";
 import "../events/events.css";
@@ -62,9 +61,8 @@ export default function ChangeRequestsSection() {
   };
 
 
-  const [selectedRow, setSelectedRow] = useState<RoleChangeRequest[]>([]);
-  const [commitRecord, setCommitRecord] = useState<boolean>(false);
-  const [approveRecord, setApproveRecord] = useState<boolean>(false);
+  const [selectedRow, setSelectedRow] = useState<BundledRequest[]>([]);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [userRequestCount, setUserRequestCount] = useState(0);
   const [roleRequestCount, setRoleRequestCount] = useState(0);
   const [clientRequestCount, setClientRequestCount] = useState(0);
@@ -83,45 +81,29 @@ export default function ChangeRequestsSection() {
 
   }, [adminClient, realm])
 
-  useEffect(() => {
-    if (!selectedRow || !selectedRow[0]) {
-      setApproveRecord(false);
-      setCommitRecord(false);
-      return;
-    }
+  const getEffectiveStatus = (bundle: BundledRequest): string => {
+    const statuses = [...new Set(bundle.requests.map((r: any) =>
+      r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status
+    ))];
+    return statuses.length === 1 ? statuses[0] : "MIXED";
+  };
 
-    const { status, deleteStatus } = selectedRow[0];
+  const hasSelection = selectedRow.length > 0;
 
-    // Disable both buttons if status is DENIED
-    if (status === "DENIED" || deleteStatus === "DENIED") {
-      setApproveRecord(false);
-      setCommitRecord(false);
-      return;
-    }
+  const canApprove = hasSelection && selectedRow.every(b => {
+    const s = getEffectiveStatus(b);
+    return s === "PENDING" || s === "DRAFT" || s === "MIXED";
+  });
 
-    // Enable Approve button if the record is PENDING or DRAFT
-    // Or if the record is ACTIVE and deleteStatus is DRAFT or PENDING
-    if (
-      status === "PENDING" ||
-      status === "DRAFT" ||
-      (status === "ACTIVE" && (deleteStatus === "DRAFT" || deleteStatus === "PENDING"))
-    ) {
-      setApproveRecord(true);
-      setCommitRecord(false); // Ensure commit is off when approve is on
-      return;
-    }
+  const canCommit = hasSelection && selectedRow.every(b => {
+    const s = getEffectiveStatus(b);
+    return s === "APPROVED";
+  });
 
-    // Enable Commit button if status or deleteStatus is APPROVED
-    if (status === "APPROVED" || deleteStatus === "APPROVED") {
-      setCommitRecord(true);
-      setApproveRecord(false); // Ensure approve is off when commit is on
-      return;
-    }
-
-    // Default: Disable both buttons
-    setApproveRecord(false);
-    setCommitRecord(false);
-  }, [selectedRow]);
+  const canCancel = hasSelection && selectedRow.every(b => {
+    const s = getEffectiveStatus(b);
+    return s !== "ACTIVE";
+  });
 
   const ToolbarItemsComponent = () => {
     const { t } = useTranslation();
@@ -133,17 +115,34 @@ export default function ChangeRequestsSection() {
     return (
       <>
         <ToolbarItem>
-          <Button variant="primary" isDisabled={!approveRecord} onClick={() => handleApproveButtonClick(selectedRow)}>
+          <Button
+            variant="primary"
+            isDisabled={!canApprove || isProcessing}
+            isLoading={isProcessing}
+            onClick={() => handleApproveButtonClick(selectedRow)}
+          >
             {isTideEnabled ? t("Review Draft") : t("Approve Draft")}
+            {selectedRow.length > 1 ? ` (${selectedRow.length})` : ''}
           </Button>
         </ToolbarItem>
         <ToolbarItem>
-          <Button variant="secondary" isDisabled={!commitRecord} onClick={() => handleCommitButtonClick(selectedRow)}>
+          <Button
+            variant="secondary"
+            isDisabled={!canCommit || isProcessing}
+            isLoading={isProcessing}
+            onClick={() => handleCommitButtonClick(selectedRow)}
+          >
             {t("Commit Draft")}
+            {selectedRow.length > 1 ? ` (${selectedRow.length})` : ''}
           </Button>
         </ToolbarItem>
         <ToolbarItem>
-          <Button variant="secondary" isDanger onClick={() => toggleCancelDialog()}>
+          <Button
+            variant="secondary"
+            isDanger
+            isDisabled={!canCancel || isProcessing}
+            onClick={() => toggleCancelDialog()}
+          >
             {t("Cancel Draft")}
           </Button>
         </ToolbarItem>
@@ -152,34 +151,40 @@ export default function ChangeRequestsSection() {
     );
   };
 
-  const handleApproveButtonClick = async (selectedBundles: RoleChangeRequest[]) => {
+  const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
+    setIsProcessing(true);
     try {
-      const changeRequests = selectedRow.map(x => {
-        return {
-          changeSetId: x.draftRecordId,
-          changeSetType: x.changeSetType,
-          actionType: x.actionType,
-        }
-      })
+      const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
+
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
       if (!isTideEnabled) {
         for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
+        addAlert(t("Change requests approved successfully"), AlertVariant.success);
         refresh();
         return;
       }
 
-      // Tide-enabled path
-      // TODO: type response properly
       const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });
+
       if (respObj.length > 0) {
         try {
           const firstRespObj = respObj[0];
           if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
-            // Map through all responses to collect all change requests
+            const respMetaMap: Record<string, { actionType: string; changeSetType: string }> = {};
             const changereqs = respObj.map((resp: any) => {
+              respMetaMap[resp.changesetId] = {
+                actionType: resp.actionType || allRequests[0].actionType,
+                changeSetType: resp.changeSetType || allRequests[0].changeSetType,
+              };
               return {
                 id: resp.changesetId,
                 request: base64ToBytes(resp.changeSetDraftRequests),
@@ -187,45 +192,53 @@ export default function ChangeRequestsSection() {
             });
             const reviewResponses = await approveTideRequests(changereqs);
 
-            // Process each review response
             for (const reviewResp of reviewResponses) {
               if (reviewResp.approved) {
+                const meta = respMetaMap[reviewResp.id] || { actionType: allRequests[0].actionType, changeSetType: allRequests[0].changeSetType };
                 const msg = reviewResp.approved.request;
                 const formData = new FormData();
                 formData.append("changeSetId", reviewResp.id);
-                formData.append("actionType", changeRequests[0].actionType);
-                formData.append("changeSetType", changeRequests[0].changeSetType);
+                formData.append("actionType", meta.actionType);
+                formData.append("changeSetType", meta.changeSetType);
                 formData.append("requests", bytesToBase64(msg));
 
                 await adminClient.tideAdmin.addReview(formData);
               }
             }
+            addAlert(t("Change requests reviewed successfully"), AlertVariant.success);
+          } else {
+            addAlert(t("Change requests approved successfully"), AlertVariant.success);
           }
         } catch (error: any) {
           addAlert(error.responseData, AlertVariant.danger);
-        }
-        finally {
+        } finally {
           refresh();
         }
       }
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const handleCommitButtonClick = async (selectedRow: RoleChangeRequest[]) => {
+  const handleCommitButtonClick = async (selectedBundles: BundledRequest[]) => {
+    setIsProcessing(true);
     try {
-      const changeRequests = selectedRow.map(x => {
-        return {
-          changeSetId: x.draftRecordId,
-          changeSetType: x.changeSetType,
-          actionType: x.actionType,
-        }
-      })
+      const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
+
       await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      addAlert(t("Change requests committed successfully"), AlertVariant.success);
       refresh();
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -415,21 +428,22 @@ export default function ChangeRequestsSection() {
     titleKey: "Cancel Change Request",
     children: (
       <>
-        {"Are you sure you want to cancel this change request?"}
+        {selectedRow.length > 1
+          ? `Are you sure you want to cancel these ${selectedRow.length} change requests?`
+          : "Are you sure you want to cancel this change request?"}
       </>
     ),
     continueButtonLabel: "cancel",
-    cancelButtonLabel: "back",
     continueButtonVariant: ButtonVariant.danger,
+    cancelButtonLabel: "back",
     onConfirm: async () => {
       try {
-        const changeSetArray = selectedRow.map((row: { draftRecordId: any; changeSetType: any; actionType: any; }) => {
-          return {
-            changeSetId: row.draftRecordId,
-            changeSetType: row.changeSetType,
-            actionType: row.actionType
-          }
-        })
+        const allRequests = selectedRow.flatMap(bundle => bundle.requests);
+        const changeSetArray = allRequests.map((row) => ({
+          changeSetId: row.draftRecordId,
+          changeSetType: row.changeSetType,
+          actionType: row.actionType
+        }));
 
         await adminClient.tideUsersExt.cancelDraftChangeSet({ changeSets: changeSetArray });
         addAlert(t("Change request cancelled"), AlertVariant.success);
@@ -487,7 +501,6 @@ export default function ChangeRequestsSection() {
               <KeycloakDataTable
                 key={key}
                 toolbarItem={<ToolbarItemsComponent />}
-                isRadio={isTideEnabled}
                 loader={loader}
                 ariaLabelKey="Requested Changes"
                 detailColumns={[
@@ -499,11 +512,7 @@ export default function ChangeRequestsSection() {
                 ]}
                 columns={columns}
                 isPaginated
-                onSelect={(value: any[]) => {
-                  // Flatten the selected bundles into individual requests for the toolbar
-                  const flattenedRequests = value.flatMap(bundle => bundle.requests);
-                  setSelectedRow(flattenedRequests);
-                }}
+                onSelect={(value: BundledRequest[]) => setSelectedRow([...value])}
                 emptyState={
                   <EmptyState variant="lg">
                     <TextContent>

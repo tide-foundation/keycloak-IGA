@@ -29,6 +29,13 @@ type ChangeRequestProps = {
   updateCounter: (count: number) => void;
 };
 
+const getEffectiveStatus = (bundle: BundledRequest): string => {
+  const statuses = [...new Set(bundle.requests.map((r: any) =>
+    r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status
+  ))];
+  return statuses.length === 1 ? statuses[0] : "MIXED";
+};
+
 export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
   const { keycloak, approveTideRequests, } = useEnvironment();
   const { adminClient } = useAdminClient();
@@ -41,8 +48,7 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     setKey((prev: number) => prev + 1);
   };
   const [selectedRow, setSelectedRow] = useState<BundledRequest[]>([]);
-  const [commitRecord, setCommitRecord] = useState<boolean>(false);
-  const [approveRecord, setApproveRecord] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const { addAlert, addError } = useAlerts();
   const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true);
 
@@ -55,38 +61,22 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     checkTide();
   }, [adminClient, realm])
 
+  const hasSelection = selectedRow.length > 0;
 
-  useEffect(() => {
-    if (!selectedRow || !selectedRow[0]) {
-      setApproveRecord(false);
-      setCommitRecord(false);
-      return;
-    }
+  const canApprove = hasSelection && selectedRow.every(b => {
+    const s = getEffectiveStatus(b);
+    return s === "PENDING" || s === "DRAFT" || s === "MIXED";
+  });
 
-    const bundle = selectedRow[0];
-    const { status } = bundle;
+  const canCommit = hasSelection && selectedRow.every(b => {
+    const s = getEffectiveStatus(b);
+    return s === "APPROVED";
+  });
 
-    if (status === "DENIED") {
-      setApproveRecord(false);
-      setCommitRecord(false);
-      return;
-    }
-
-    if (status === "PENDING" || status === "DRAFT" || status === "MIXED") {
-      setApproveRecord(true);
-      setCommitRecord(false);
-      return;
-    }
-
-    if (status === "APPROVED") {
-      setCommitRecord(true);
-      setApproveRecord(false);
-      return;
-    }
-
-    setApproveRecord(false);
-    setCommitRecord(false);
-  }, [selectedRow]);
+  const canCancel = hasSelection && selectedRow.every(b => {
+    const s = getEffectiveStatus(b);
+    return s !== "ACTIVE";
+  });
 
   const ToolbarItemsComponent = () => {
     const { t } = useTranslation();
@@ -98,17 +88,34 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     return (
       <>
         <ToolbarItem>
-          <Button variant="primary" isDisabled={!approveRecord} onClick={() => handleApproveButtonClick(selectedRow)}>
+          <Button
+            variant="primary"
+            isDisabled={!canApprove || isProcessing}
+            isLoading={isProcessing}
+            onClick={() => handleApproveButtonClick(selectedRow)}
+          >
             {isTideEnabled ? t("Review Draft") : t("Approve Draft")}
+            {selectedRow.length > 1 ? ` (${selectedRow.length})` : ''}
           </Button>
         </ToolbarItem>
         <ToolbarItem>
-          <Button variant="secondary" isDisabled={!commitRecord} onClick={() => handleCommitButtonClick(selectedRow)}>
+          <Button
+            variant="secondary"
+            isDisabled={!canCommit || isProcessing}
+            isLoading={isProcessing}
+            onClick={() => handleCommitButtonClick(selectedRow)}
+          >
             {t("Commit Draft")}
+            {selectedRow.length > 1 ? ` (${selectedRow.length})` : ''}
           </Button>
         </ToolbarItem>
         <ToolbarItem>
-          <Button variant="secondary" isDanger onClick={() => toggleCancelDialog()}>
+          <Button
+            variant="secondary"
+            isDanger
+            isDisabled={!canCancel || isProcessing}
+            onClick={() => toggleCancelDialog()}
+          >
             {t("Cancel Draft")}
           </Button>
         </ToolbarItem>
@@ -118,6 +125,7 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
   };
 
   const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
+    setIsProcessing(true);
     try {
       const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
 
@@ -131,6 +139,7 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
+        addAlert(t("Change requests approved successfully"), AlertVariant.success);
         refresh();
         return;
       }
@@ -143,7 +152,12 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         try {
           const firstRespObj = respObj[0];
           if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            const respMetaMap: Record<string, { actionType: string; changeSetType: string }> = {};
             const changereqs = respObj.map((resp: any) => {
+              respMetaMap[resp.changesetId] = {
+                actionType: resp.actionType || allRequests[0].actionType,
+                changeSetType: resp.changeSetType || allRequests[0].changeSetType,
+              };
               return {
                 id: resp.changesetId,
                 request: base64ToBytes(resp.changeSetDraftRequests),
@@ -153,16 +167,20 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
 
             for (const reviewResp of reviewResponses) {
               if (reviewResp.approved) {
+                const meta = respMetaMap[reviewResp.id] || { actionType: allRequests[0].actionType, changeSetType: allRequests[0].changeSetType };
                 const msg = reviewResp.approved.request;
                 const formData = new FormData();
                 formData.append("changeSetId", reviewResp.id);
-                formData.append("actionType", allRequests[0].actionType);
-                formData.append("changeSetType", allRequests[0].changeSetType);
+                formData.append("actionType", meta.actionType);
+                formData.append("changeSetType", meta.changeSetType);
                 formData.append("requests", bytesToBase64(msg));
 
                 await adminClient.tideAdmin.addReview(formData);
               }
             }
+            addAlert(t("Change requests reviewed successfully"), AlertVariant.success);
+          } else {
+            addAlert(t("Change requests approved successfully"), AlertVariant.success);
           }
         } catch (error: any) {
           addAlert(error.responseData, AlertVariant.danger);
@@ -172,25 +190,28 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
       }
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleCommitButtonClick = async (selectedBundles: BundledRequest[]) => {
+    setIsProcessing(true);
     try {
       const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
-      const changeRequests = allRequests.map(x => {
-        return {
-          changeSetId: x.draftRecordId,
-          changeSetType: x.changeSetType,
-          actionType: x.actionType,
-        }
-      })
+      const changeRequests = allRequests.map(x => ({
+        changeSetId: x.draftRecordId,
+        changeSetType: x.changeSetType,
+        actionType: x.actionType,
+      }));
 
       await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      addAlert(t("Change requests committed successfully"), AlertVariant.success);
       refresh();
-      return;
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -237,25 +258,17 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
   ];
 
   const bundleStatusLabel = (bundle: BundledRequest) => {
-    const statuses = [...new Set(bundle.requests.map((r: any) => r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status))];
-
-    if (statuses.length === 1) {
-      const status = statuses[0];
-      return (
-        <Label
-          color={status === 'PENDING' ? 'orange' : status === 'APPROVED' ? 'blue' : status === 'DENIED' ? 'red' : 'grey'}
-          className="keycloak-admin--role-mapping__client-name"
-        >
-          {status}
-        </Label>
-      );
-    } else {
-      return (
-        <Label color="purple" className="keycloak-admin--role-mapping__client-name">
-          MIXED
-        </Label>
-      );
-    }
+    const status = getEffectiveStatus(bundle);
+    const color = status === 'PENDING' ? 'orange'
+      : status === 'APPROVED' ? 'blue'
+      : status === 'DENIED' ? 'red'
+      : status === 'MIXED' ? 'purple'
+      : 'grey';
+    return (
+      <Label color={color} className="keycloak-admin--role-mapping__client-name">
+        {status}
+      </Label>
+    );
   };
 
   const parseAndFormatJson = (str: string) => {
@@ -334,7 +347,9 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     titleKey: "Cancel Change Request",
     children: (
       <>
-        {"Are you sure you want to cancel this change request?"}
+        {selectedRow.length > 1
+          ? `Are you sure you want to cancel these ${selectedRow.length} change requests?`
+          : "Are you sure you want to cancel this change request?"}
       </>
     ),
     continueButtonLabel: "cancel",
@@ -344,13 +359,11 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
     onConfirm: async () => {
       try {
         const allRequests = selectedRow.flatMap(bundle => bundle.requests);
-        const changeSetArray = allRequests.map((row) => {
-          return {
-            changeSetId: row.draftRecordId,
-            changeSetType: row.changeSetType,
-            actionType: row.actionType
-          }
-        })
+        const changeSetArray = allRequests.map((row) => ({
+          changeSetId: row.draftRecordId,
+          changeSetType: row.changeSetType,
+          actionType: row.actionType
+        }));
 
         await adminClient.tideUsersExt.cancelDraftChangeSet({ changeSets: changeSetArray });
         addAlert(t("Change request cancelled"), AlertVariant.success);
@@ -367,7 +380,6 @@ export const GroupsChangeRequestsList = ({ updateCounter }: ChangeRequestProps) 
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
-          isRadio={isTideEnabled}
           loader={loader}
           ariaLabelKey="Group Change Requests"
           detailColumns={[
