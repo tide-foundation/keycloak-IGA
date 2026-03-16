@@ -46,6 +46,7 @@ export const useEnvironment = <
 
 interface KeycloakContextProps<T extends BaseEnvironment> {
   environment: T;
+  keycloak?: Keycloak;
 }
 
 // Shape of the adapter JSON you're fetching for security-admin-console
@@ -60,12 +61,13 @@ type TideKeycloakConfig = {
 
 export const KeycloakProvider = <T extends BaseEnvironment>({
   environment,
+  keycloak: externalKeycloak,
   children,
 }: PropsWithChildren<KeycloakContextProps<T>>) => {
   KeycloakEnvContext = createKeycloakEnvContext<T>();
 
   const calledOnce = useRef(false);
-  const [init, setInit] = useState(false);
+  const [init, setInit] = useState(!!externalKeycloak);
   const [error, setError] = useState<unknown>();
 
   const [config, setConfig] = useState<TideKeycloakConfig | null>(null);
@@ -111,13 +113,10 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
   // 2. Create TideCloak using JSON
   // -------------------------------
   const keycloak = useMemo(() => {
-    if (!config) return null;
-
-    const originKey = `client-origin-auth-${window.location.origin}`;
-    const clientOriginAuth = config[originKey];
-
-    const kc = new TideCloak({
-      // prefer JSON values, fall back to environment just in case
+    if (externalKeycloak) {
+      return externalKeycloak;
+    }
+    const keycloak = new Keycloak({
       url: environment.serverBaseUrl,
       realm: environment.realm,
       clientId: environment.clientId,
@@ -126,16 +125,24 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       clientOriginAuth,
     });
 
-    kc.onAuthLogout = () => kc.login();
-    return kc;
-  }, [config, environment]);
+    keycloak.onAuthLogout = () => keycloak.login();
+
+    return keycloak;
+  }, [environment, externalKeycloak]);
 
   // -------------------------------
   // 3. Initialise TideCloak
   // -------------------------------
   useEffect(() => {
-    if (!keycloak) return;
-    if (calledOnce.current) return;
+    // Skip initialization if using external keycloak (already initialized)
+    if (externalKeycloak) {
+      return;
+    }
+
+    // only needed in dev mode
+    if (calledOnce.current) {
+      return;
+    }
 
     const init = () =>
       keycloak.init({
@@ -151,7 +158,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       .catch((err: any) => setError(err));
 
     calledOnce.current = true;
-  }, [keycloak, environment]);
+  }, [keycloak, externalKeycloak]);
 
   // -------------------------------
   // Tide Methods
