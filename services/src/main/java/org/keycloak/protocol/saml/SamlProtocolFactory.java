@@ -17,6 +17,12 @@
 
 package org.keycloak.protocol.saml;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.xml.crypto.dsig.CanonicalizationMethod;
+
 import org.keycloak.Config;
 import org.keycloak.common.Profile;
 import org.keycloak.common.Profile.Feature;
@@ -27,25 +33,22 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ProtocolMapperModel;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.utils.KeycloakModelUtils;
+import org.keycloak.organization.protocol.mappers.saml.OrganizationMembershipMapper;
 import org.keycloak.protocol.AbstractLoginProtocolFactory;
 import org.keycloak.protocol.LoginProtocol;
 import org.keycloak.protocol.oidc.OIDCLoginProtocolFactory;
 import org.keycloak.protocol.saml.mappers.AttributeStatementHelper;
-import org.keycloak.organization.protocol.mappers.saml.OrganizationMembershipMapper;
 import org.keycloak.protocol.saml.mappers.RoleListMapper;
 import org.keycloak.protocol.saml.mappers.UserPropertyAttributeStatementMapper;
+import org.keycloak.provider.ProviderConfigProperty;
+import org.keycloak.provider.ProviderConfigurationBuilder;
 import org.keycloak.representations.idm.CertificateRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.saml.SignatureAlgorithm;
 import org.keycloak.saml.common.constants.JBossSAMLURIConstants;
+import org.keycloak.saml.processing.api.util.DeflateUtil;
 import org.keycloak.saml.processing.core.saml.v2.constants.X500SAMLProfileConstants;
 import org.keycloak.saml.validators.DestinationValidator;
-
-import javax.xml.crypto.dsig.CanonicalizationMethod;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
@@ -57,10 +60,11 @@ public class SamlProtocolFactory extends AbstractLoginProtocolFactory {
     private static final String ROLE_LIST_CONSENT_TEXT = "${samlRoleListScopeConsentText}";
 
     private DestinationValidator destinationValidator;
+    private long maxInflatingSize;
 
     @Override
     public Object createProtocolEndpoint(KeycloakSession session, EventBuilder event) {
-        return new SamlService(session, event, destinationValidator);
+        return new SamlService(session, event, maxInflatingSize, destinationValidator);
     }
 
     @Override
@@ -103,6 +107,7 @@ public class SamlProtocolFactory extends AbstractLoginProtocolFactory {
             defaultBuiltins.add(model);
         }
         this.destinationValidator = DestinationValidator.forProtocolMap(config.getArray("knownProtocols"));
+        this.maxInflatingSize = config.getLong("maxInflatingSize", DeflateUtil.DEFAULT_MAX_INFLATING_SIZE);
     }
 
     @Override
@@ -201,5 +206,25 @@ public class SamlProtocolFactory extends AbstractLoginProtocolFactory {
     @Override
     public int order() {
         return OIDCLoginProtocolFactory.UI_ORDER - 10;
+    }
+
+    /**
+     * Getter for the max inflating size
+     * @return
+     */
+    public long getMaxInflatingSize() {
+        return maxInflatingSize;
+    }
+
+    @Override
+    public List<ProviderConfigProperty> getConfigMetadata() {
+        return ProviderConfigurationBuilder.create()
+                .property()
+                .name("maxInflatingSize")
+                .type("long")
+                .helpText("The maximum inflating size in bytes for the REDIRECT binding.")
+                .defaultValue(DeflateUtil.DEFAULT_MAX_INFLATING_SIZE)
+                .add()
+                .build();
     }
 }

@@ -17,7 +17,14 @@
 
 package org.keycloak.authentication;
 
-import org.jboss.logging.Logger;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Optional;
+
+import jakarta.ws.rs.core.Response;
+
 import org.keycloak.events.Details;
 import org.keycloak.events.Errors;
 import org.keycloak.models.AuthenticationExecutionModel;
@@ -26,13 +33,7 @@ import org.keycloak.models.ClientModel;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.services.ServicesLogger;
 
-import jakarta.ws.rs.core.Response;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Optional;
+import org.jboss.logging.Logger;
 
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
@@ -142,7 +143,7 @@ public class ClientAuthenticationFlow implements AuthenticationFlow {
         AuthenticationExecutionModel execution = result.getExecution();
         FlowStatus status = result.getStatus();
 
-        logger.debugv("client authenticator {0}: {1}", status.toString(), execution.getAuthenticator());
+        logger.debugv("client authenticator {0}: {1}", status, execution.getAuthenticator());
 
         if (status == FlowStatus.SUCCESS) {
             return null;
@@ -165,6 +166,9 @@ public class ClientAuthenticationFlow implements AuthenticationFlow {
             return sendChallenge(result, execution);
         } else if (status == FlowStatus.FAILURE_CHALLENGE) {
             return sendChallenge(result, execution);
+        } else if (status == FlowStatus.ATTEMPTED) {
+            logger.warnv("Client authentication was attempted did not complete for {0}", execution.getAuthenticator());
+            throw new AuthenticationFlowException(AuthenticationFlowError.GENERIC_AUTHENTICATION_ERROR);
         } else {
             ServicesLogger.LOGGER.unknownResultStatus();
             throw new AuthenticationFlowException(AuthenticationFlowError.INTERNAL_ERROR);

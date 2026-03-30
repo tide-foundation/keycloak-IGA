@@ -17,23 +17,23 @@
 
 package org.keycloak.it.cli.dist;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.keycloak.quarkus.runtime.cli.command.AbstractAutoBuildCommand.OPTIMIZED_BUILD_OPTION_LONG;
-import static org.keycloak.quarkus.runtime.cli.command.Main.CONFIG_FILE_LONG_NAME;
+import java.nio.file.Paths;
 
-import org.junit.jupiter.api.Test;
 import org.keycloak.config.database.Database;
 import org.keycloak.it.junit5.extension.CLIResult;
 import org.keycloak.it.junit5.extension.DistributionTest;
-
-import io.quarkus.test.junit.main.Launch;
-
 import org.keycloak.it.junit5.extension.RawDistOnly;
 import org.keycloak.it.junit5.extension.WithEnvVars;
 import org.keycloak.it.utils.KeycloakDistribution;
 
-import java.nio.file.Paths;
+import io.quarkus.test.junit.main.Launch;
+import org.junit.jupiter.api.Test;
+
+import static org.keycloak.quarkus.runtime.cli.command.AbstractAutoBuildCommand.OPTIMIZED_BUILD_OPTION_LONG;
+import static org.keycloak.quarkus.runtime.cli.command.Main.CONFIG_FILE_LONG_NAME;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DistributionTest
 class BuildCommandDistTest {
@@ -65,8 +65,9 @@ class BuildCommandDistTest {
 
     @Test
     @Launch({ "build", "--db=postgres", "--db-username=myuser", "--db-password=mypassword", "--http-enabled=true" })
-    void testFailRuntimeOptions(CLIResult cliResult) {
-        cliResult.assertError("Run time option: '--db-username' not usable with build");
+    void testIgnoreRuntimeOptions(CLIResult cliResult) {
+        cliResult.assertMessage("The following run time options were found, but will be ignored during build time: kc.db-username, kc.http-enabled, kc.db-password");
+        cliResult.assertBuild();
     }
 
     @Test
@@ -120,4 +121,21 @@ class BuildCommandDistTest {
     void forceRebuild(CLIResult cliResult) {
         cliResult.getOutput().contains("Quarkus augmentation completed");
     }
+<<<<<<< HEAD
+
+    @Test
+    @RawDistOnly(reason = "Containers are immutable")
+    @Launch({"build", "--features=clusterless"})
+    void clusterlessDoesNotRequireRuntimeOptions(CLIResult cliResult) {
+        cliResult.assertBuild();
+    }
+
+    @Test
+    @RawDistOnly(reason = "Containers are immutable")
+    @Launch({"build", "--features=multi-site"})
+    void multiSiteDoesNotRequireRuntimeOptions(CLIResult cliResult) {
+        cliResult.assertBuild();
+    }
+=======
+>>>>>>> origin/release/0.13.26
 }

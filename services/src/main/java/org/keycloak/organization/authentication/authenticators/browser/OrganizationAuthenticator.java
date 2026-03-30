@@ -17,24 +17,16 @@
 
 package org.keycloak.organization.authentication.authenticators.browser;
 
-import static org.keycloak.authentication.AuthenticatorUtil.isSSOAuthentication;
-import static org.keycloak.models.OrganizationDomainModel.ANY_DOMAIN;
-import static org.keycloak.models.utils.KeycloakModelUtils.findUserByNameOrEmail;
-import static org.keycloak.organization.utils.Organizations.getEmailDomain;
-import static org.keycloak.organization.utils.Organizations.isEnabledAndOrganizationsPresent;
-import static org.keycloak.organization.utils.Organizations.resolveHomeBroker;
-import static org.keycloak.utils.StringUtil.isNotBlank;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
+
 import org.keycloak.WebAuthnConstants;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
@@ -66,11 +58,17 @@ import org.keycloak.organization.utils.Organizations;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.services.messages.Messages;
 import org.keycloak.sessions.AuthenticationSessionModel;
-import org.keycloak.utils.StringUtil;
+import org.keycloak.util.Booleans;
+
+import static org.keycloak.authentication.AuthenticatorUtil.isSSOAuthentication;
+import static org.keycloak.models.OrganizationDomainModel.ANY_DOMAIN;
+import static org.keycloak.models.utils.KeycloakModelUtils.findUserByNameOrEmail;
+import static org.keycloak.organization.utils.Organizations.getEmailDomain;
+import static org.keycloak.organization.utils.Organizations.isEnabledAndOrganizationsPresent;
+import static org.keycloak.organization.utils.Organizations.resolveHomeBroker;
+import static org.keycloak.utils.StringUtil.isBlank;
 
 public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
-
-    private static final String LOGIN_HINT_ALREADY_HANDLED = "loginHintAlreadyHandled";
 
     private final KeycloakSession session;
     private final WebAuthnConditionalUIAuthenticator webauthnAuth;
@@ -89,36 +87,28 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
             return;
         }
 
-        String loginHint = session.getContext().getAuthenticationSession().getClientNote(OIDCLoginProtocol.LOGIN_HINT_PARAM);
-
-        if (isNotBlank(loginHint) && !"true".equals(context.getAuthenticationSession().getClientNote(LOGIN_HINT_ALREADY_HANDLED))) {
-            UserModel user = resolveUser(context, loginHint);
-            context.setUser(user);
-
-            // set auth note to true to handle login_hint only once, we don't want to handle it again after a flow restart
-            context.getAuthenticationSession().setClientNote(LOGIN_HINT_ALREADY_HANDLED, "true");
-        }
-
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        String loginHint = authSession.getClientNote(OIDCLoginProtocol.LOGIN_HINT_PARAM);
         OrganizationModel organization = Organizations.resolveOrganization(session);
 
-        if (organization == null) {
+        if (loginHint == null && organization == null) {
             initialChallenge(context);
-        } else {
-            // make sure the organization is set to the auth session to remember it when processing subsequent requests
-            AuthenticationSessionModel authSession = context.getAuthenticationSession();
-            authSession.setAuthNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
-            action(context, false);
+            return;
         }
+
+        if (organization != null) {
+            // make sure the organization is set to the auth session to remember it when processing subsequent requests
+            authSession.setAuthNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
+        }
+
+        action(context, loginHint);
     }
 
     @Override
     public void action(AuthenticationFlowContext context) {
-        action(context, true);
-    }
-
-    private void action(AuthenticationFlowContext context, boolean formSubmitted) {
         HttpRequest request = context.getHttpRequest();
         MultivaluedMap<String, String> parameters = request.getDecodedFormParameters();
+        String username = parameters.getFirst(UserModel.USERNAME);
 
         // check if it's a webauthn submission and perform the webauth login
         if (webauthnAuth.isPasskeysEnabled() && (parameters.containsKey(WebAuthnConstants.AUTHENTICATOR_DATA)
@@ -130,10 +120,9 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
             }
         }
 
-        String username = parameters.getFirst(UserModel.USERNAME);
         UserModel user = context.getUser();
 
-        if (formSubmitted && user == null && StringUtil.isBlank(username)) {
+        if (user == null && isBlank(username)) {
             initialChallenge(context, form -> {
                 form.addError(new FormMessage(UserModel.USERNAME, Messages.INVALID_USERNAME));
                 return form.createLoginUsername();
@@ -141,8 +130,12 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
             return;
         }
 
+        action(context, username);
+    }
+
+    private void action(AuthenticationFlowContext context, String username) {
+        UserModel user = resolveUser(context, username);
         RealmModel realm = context.getRealm();
-        user = resolveUser(context, username);
         String domain = getEmailDomain(username);
         OrganizationModel organization = resolveOrganization(user, domain);
 
@@ -162,8 +155,8 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         }
 
         // remember the organization during the lifetime of the authentication session
-        AuthenticationSessionModel authenticationSession = context.getAuthenticationSession();
-        authenticationSession.setAuthNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        authSession.setAuthNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
         // make sure the organization is set to the session to make it available to templates
         session.getContext().setOrganization(organization);
 
@@ -186,11 +179,11 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
             return;
         }
 
-        if (isSSOAuthentication(authenticationSession)) {
+        if (isSSOAuthentication(authSession)) {
             // if re-authenticating in the scope of an organization
             context.success();
         } else {
-            attempted(context);
+            attempted(context, username);
         }
     }
 
@@ -206,27 +199,27 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         MultivaluedMap<String, String> parameters = request.getDecodedFormParameters();
         // parameter from the organization selection page
         List<String> alias = parameters.getOrDefault(OrganizationModel.ORGANIZATION_ATTRIBUTE, List.of());
+        OrganizationModel organization;
 
         if (alias.isEmpty()) {
-            OrganizationModel organization = Organizations.resolveOrganization(session, user, domain);
-
-            if (isSSOAuthentication(authSession) && organization != null) {
+            organization = Organizations.resolveOrganization(session, user, domain);
+            if (organization != null && isSSOAuthentication(authSession)) {
                 // make sure the organization selected by the user is available from the client session when running mappers and issuing tokens
                 authSession.setClientNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
             }
-
-            return organization;
+        } else {
+            OrganizationProvider provider = getOrganizationProvider();
+            organization = provider.getByAlias(alias.get(0));
         }
 
-        OrganizationProvider provider = getOrganizationProvider();
-        OrganizationModel organization = provider.getByAlias(alias.get(0));
-
-        if (organization == null) {
+        if (organization == null || !organization.isEnabled()) {
             return null;
         }
 
-        // make sure the organization selected by the user is available from the client session when running mappers and issuing tokens
-        authSession.setClientNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
+        if (!alias.isEmpty() || isSSOAuthentication(authSession)) {
+            // make sure the organization selected by the user is available from the client session when running mappers and issuing tokens
+            authSession.setClientNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
+        }
 
         return organization;
     }
@@ -244,7 +237,7 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         }
 
         OrganizationProvider provider = getOrganizationProvider();
-        Stream<OrganizationModel> organizations = provider.getByMember(user);
+        Stream<OrganizationModel> organizations = provider.getByMember(user).filter(OrganizationModel::isEnabled);
 
         if (organizations.count() > 1) {
             LoginFormsProvider form = context.form();
@@ -364,6 +357,10 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
             form.addError(new FormMessage("Your email domain matches the " + organization.getName() + " organization but you don't have an account yet."));
         }
 
+        // user is null, setup webauthn data if enabled
+        if (webauthnAuth.isPasskeysEnabled()) {
+            webauthnAuth.fillContextForm(context);
+        }
         context.challenge(form.createLoginUsername());
     }
 
@@ -437,7 +434,7 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
     }
 
     private boolean hasPublicBrokers(OrganizationModel organization) {
-        return organization.getIdentityProviders().anyMatch(Predicate.not(IdentityProviderModel::isHideOnLogin));
+        return organization.getIdentityProviders().anyMatch(i -> Booleans.isFalse(i.isHideOnLogin()));
     }
 
     private OrganizationProvider getOrganizationProvider() {

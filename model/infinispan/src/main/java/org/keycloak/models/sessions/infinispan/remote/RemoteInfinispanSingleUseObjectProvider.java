@@ -23,13 +23,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
+import org.keycloak.models.SingleUseObjectProvider;
+import org.keycloak.models.sessions.infinispan.entities.SingleUseObjectValueEntity;
+import org.keycloak.models.sessions.infinispan.remote.transaction.SingleUseObjectTransaction;
+
 import org.infinispan.client.hotrod.Flag;
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.exceptions.HotRodClientException;
 import org.jboss.logging.Logger;
-import org.keycloak.models.SingleUseObjectProvider;
-import org.keycloak.models.sessions.infinispan.entities.SingleUseObjectValueEntity;
-import org.keycloak.models.sessions.infinispan.remote.transaction.SingleUseObjectTransaction;
 
 public class RemoteInfinispanSingleUseObjectProvider implements SingleUseObjectProvider {
 
@@ -62,7 +63,16 @@ public class RemoteInfinispanSingleUseObjectProvider implements SingleUseObjectP
     @Override
     public Map<String, String> remove(String key) {
         try {
-            return unwrap(withReturnValue().remove(key));
+            // Using a get-before-remove allows us to return the value even in cases when a state transfer happens in Infinispan
+            // where it might not return the value in all cases.
+            // This workaround can be removed once https://github.com/infinispan/infinispan/issues/16703 is implemented.
+            var data = transaction.getCache().getWithMetadata(key);
+            if (data == null) {
+                return null;
+            }
+            return transaction.getCache().removeWithVersion(key, data.getVersion()) ?
+                    unwrap(data.getValue()) :
+                    null;
         } catch (HotRodClientException re) {
             // No need to retry. The hotrod (remoteCache) has some retries in itself in case of some random network error happened.
             // In case of lock conflict, we don't want to retry anyway as there was likely an attempt to remove the code from different place.

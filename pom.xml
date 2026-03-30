@@ -31,7 +31,11 @@
     </description>
     <groupId>org.keycloak</groupId>
     <artifactId>keycloak-parent</artifactId>
+<<<<<<< HEAD
+    <version>26.5.5</version>
+=======
     <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
     <packaging>pom</packaging>
 
     <properties>
@@ -41,12 +45,21 @@
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
 
+<<<<<<< HEAD
+        <project.version.npm>26.5.5</project.version.npm>
+
+        <asciidoctor.plugin.version>1.5.8</asciidoctor.plugin.version>
+
+        <quarkus.version>3.27.2</quarkus.version>
+        <quarkus.build.version>3.27.2</quarkus.build.version>
+=======
         <project.version.npm>26.4.7</project.version.npm>
 
         <asciidoctor.plugin.version>1.5.8</asciidoctor.plugin.version>
 
         <quarkus.version>3.27.1</quarkus.version>
         <quarkus.build.version>3.27.1</quarkus.build.version>
+>>>>>>> origin/release/0.13.26
         <jboss-logging-annotations.version>3.0.4.Final</jboss-logging-annotations.version> <!-- keep in sync with the version used by quarkus -->
 
         <project.build-time>${timestamp}</project.build-time>
@@ -92,6 +105,7 @@
         <hibernate-orm.plugin.version>6.2.13.Final</hibernate-orm.plugin.version>
         <hibernate.c3p0.version>6.2.13.Final</hibernate.c3p0.version>
         <infinispan.version>15.0.19.Final</infinispan.version>
+        <hibernate-validator.version>9.0.1.Final</hibernate-validator.version>
         <protostream.version>5.0.14.Final</protostream.version> <!-- For the annotation processor: keep in sync with the version shipped with Infinispan -->
         <protostream.plugin.version>${protostream.version}</protostream.plugin.version>
 
@@ -106,11 +120,10 @@
         <jboss-servlet-api_4.0_spec>2.0.0.Final</jboss-servlet-api_4.0_spec>
         <jboss.spec.javax.xml.bind.jboss-jaxb-api_2.3_spec.version>2.0.1.Final</jboss.spec.javax.xml.bind.jboss-jaxb-api_2.3_spec.version>
         <jboss.spec.javax.servlet.jsp.jboss-jsp-api_2.3_spec.version>2.0.0.Final</jboss.spec.javax.servlet.jsp.jboss-jsp-api_2.3_spec.version>
-        <log4j.version>1.2.17</log4j.version>
         <log4j2-api.version>2.25.1</log4j2-api.version> <!-- Odd name needs to align with Quarkus -->
         <resteasy.version>6.2.12.Final</resteasy.version>
         <resteasy.undertow.version>${resteasy.version}</resteasy.undertow.version>
-        <owasp.html.sanitizer.version>20240325.1</owasp.html.sanitizer.version>
+        <owasp.html.sanitizer.version>20260101.1</owasp.html.sanitizer.version>
         <slf4j.version>2.0.6</slf4j.version>
         <sun.istack.version>3.0.10</sun.istack.version>
         <sun.saaj.version>2.0.1</sun.saaj.version>
@@ -118,15 +131,13 @@
         <sun.xml.ws.version>4.0.0</sun.xml.ws.version>
         <sun.activation.version>1.2.2</sun.activation.version>
         <org.glassfish.jaxb.xsom.version>2.3.3-b02</org.glassfish.jaxb.xsom.version>
-        <undertow.version>${undertow-legacy.version}</undertow.version>
-        <undertow-legacy.version>2.2.24.Final</undertow-legacy.version>
-        <undertow-jakarta.version>2.3.2.Final</undertow-jakarta.version>
+        <undertow.version>2.3.20.Final</undertow.version>
         <wildfly-elytron.version>2.6.5.Final</wildfly-elytron.version>
         <elytron.undertow-server.version>1.9.0.Final</elytron.undertow-server.version>
         <woodstox.version>6.0.3</woodstox.version>
         <wildfly.common.quarkus.aligned.version>1.5.4.Final-format-001</wildfly.common.quarkus.aligned.version>
         <wildfly.common.wildfly.aligned.version>1.6.0.Final</wildfly.common.wildfly.aligned.version>
-        <xmlsec.version>2.2.6</xmlsec.version>
+        <xmlsec.version>3.0.6</xmlsec.version>
         <nashorn.version>15.4</nashorn.version>
         <ua-parser.version>1.6.1</ua-parser.version>
         <org.yaml.snakeyaml.version>2.0</org.yaml.snakeyaml.version>
@@ -157,7 +168,7 @@
         <mysql.version>8.4</mysql.version>
         <mysql.container>mirror.gcr.io/mysql:${mysql.version}</mysql.container>
         <mysql-jdbc.version>8.3.0</mysql-jdbc.version>
-        <postgresql.version>17</postgresql.version>
+        <postgresql.version>18</postgresql.version>
         <postgresql.container>mirror.gcr.io/postgres:${postgresql.version}</postgresql.container>
         <aurora-postgresql.version>17.5</aurora-postgresql.version>
         <aws-jdbc-wrapper.version>2.5.6</aws-jdbc-wrapper.version>
@@ -175,7 +186,7 @@
         <oracle-jdbc.version>23.6.0.24.10</oracle-jdbc.version>
         <!-- Custom image, lives in test-framework/db-edb/container -->
         <edb.container>quay.io/keycloakqe/enterprisedb:${edb.version}</edb.container>
-        <edb.version>17</edb.version>
+        <edb.version>18</edb.version>
 
         <!-- Infinispan Server Container -->
         <infinispan.container>quay.io/infinispan/server:${infinispan.version}</infinispan.container>
@@ -201,12 +212,13 @@
         <central.publishing.plugin.version>0.7.0</central.publishing.plugin.version>
         <nexus3.staging.plugin.version>1.0.7</nexus3.staging.plugin.version>
         <frontend.plugin.version>1.15.0</frontend.plugin.version>
-        <docker.maven.plugin.version>0.40.3</docker.maven.plugin.version>
+        <docker.maven.plugin.version>0.48.1</docker.maven.plugin.version>
         <verifier.plugin.version>1.1</verifier.plugin.version>
         <shade.plugin.version>3.4.1</shade.plugin.version>
         <smallrye.openapi.generator.plugin.version>3.6.2</smallrye.openapi.generator.plugin.version>
         <openapi.generator.plugin.version>6.3.0</openapi.generator.plugin.version>
         <build-helper-maven-plugin.version>3.2.0</build-helper-maven-plugin.version>
+        <spotless-plugin.version>3.0.0</spotless-plugin.version>
 
         <!-- Surefire Settings -->
         <surefire.memory.Xms>512m</surefire.memory.Xms>
@@ -226,6 +238,8 @@
 
         <!-- Used to test SAML Galleon feature-pack layers discovery -->
         <version.org.wildfly.glow>1.0.0.Alpha8</version.org.wildfly.glow>
+
+        <org.mapstruct.version>1.6.3</org.mapstruct.version>
 
         <!-- Galleon -->
         <galleon.fork.embedded>true</galleon.fork.embedded>
@@ -398,6 +412,11 @@
                 <artifactId>xsom</artifactId>
                 <version>${org.glassfish.jaxb.xsom.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>${org.mapstruct.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.bouncycastle</groupId>
@@ -550,11 +569,6 @@
                 <scope>test</scope>
             </dependency>
             <dependency>
-                <groupId>log4j</groupId>
-                <artifactId>log4j</artifactId>
-                <version>${log4j.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-core</artifactId>
                 <version>${log4j2-api.version}</version>
@@ -589,6 +603,11 @@
                 <groupId>com.h2database</groupId>
                 <artifactId>h2</artifactId>
                 <version>${h2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.hibernate.validator</groupId>
+                <artifactId>hibernate-validator</artifactId>
+                <version>${hibernate-validator.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.hibernate.orm</groupId>
@@ -1128,6 +1147,16 @@
             </dependency>
             <dependency>
                 <groupId>org.keycloak</groupId>
+                <artifactId>keycloak-admin-v2-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.keycloak</groupId>
+                <artifactId>keycloak-admin-v2-rest</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.keycloak</groupId>
                 <artifactId>keycloak-saml-wildfly-modules</artifactId>
                 <version>${project.version}</version>
                 <type>zip</type>
@@ -1518,8 +1547,23 @@
                         <skip>${skipProtoLock}</skip>
                     </configuration>
                 </plugin>
+                <plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                    <version>${spotless-plugin.version}</version>
+                    <configuration>
+                        <java>
+                            <removeUnusedImports />
+                            <forbidWildcardImports />
+                            <importOrder>
+                                <order>java|javax,jakarta,org.keycloak,,\#java|javax,\#jakarta,\#org.keycloak,\#</order>
+                            </importOrder>
+                        </java>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
+
     </build>
 
     <profiles>

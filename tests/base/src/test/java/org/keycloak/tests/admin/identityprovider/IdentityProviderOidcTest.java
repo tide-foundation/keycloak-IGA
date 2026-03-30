@@ -17,6 +17,46 @@
 
 package org.keycloak.tests.admin.identityprovider;
 
+import java.util.UUID;
+
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.core.Response;
+
+import org.keycloak.admin.client.resource.IdentityProviderResource;
+import org.keycloak.broker.oidc.OAuth2IdentityProviderConfig;
+import org.keycloak.broker.oidc.OIDCIdentityProviderConfig;
+import org.keycloak.common.enums.SslRequired;
+import org.keycloak.events.Errors;
+import org.keycloak.events.EventType;
+import org.keycloak.events.admin.OperationType;
+import org.keycloak.events.admin.ResourceType;
+import org.keycloak.models.IdentityProviderMapperModel;
+import org.keycloak.models.IdentityProviderModel;
+import org.keycloak.protocol.oidc.OIDCLoginProtocol;
+import org.keycloak.representations.idm.AdminEventRepresentation;
+import org.keycloak.representations.idm.ComponentRepresentation;
+import org.keycloak.representations.idm.ErrorRepresentation;
+import org.keycloak.representations.idm.IdentityProviderRepresentation;
+import org.keycloak.testframework.annotations.InjectEvents;
+import org.keycloak.testframework.annotations.InjectRealm;
+import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
+import org.keycloak.testframework.events.AdminEventAssertion;
+import org.keycloak.testframework.events.EventAssertion;
+import org.keycloak.testframework.events.Events;
+import org.keycloak.testframework.oauth.OAuthClient;
+import org.keycloak.testframework.oauth.annotations.InjectOAuthClient;
+import org.keycloak.testframework.realm.ManagedRealm;
+import org.keycloak.testframework.realm.RealmConfig;
+import org.keycloak.testframework.realm.RealmConfigBuilder;
+import org.keycloak.testframework.ui.annotations.InjectPage;
+import org.keycloak.testframework.ui.page.LoginPage;
+import org.keycloak.tests.utils.admin.AdminEventPaths;
+import org.keycloak.testsuite.util.broker.OIDCIdentityProviderConfigRep;
+import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasEntry;
@@ -28,34 +68,23 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import java.util.UUID;
-
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.resource.IdentityProviderResource;
-import org.keycloak.common.enums.SslRequired;
-import org.keycloak.events.admin.OperationType;
-import org.keycloak.events.admin.ResourceType;
-import org.keycloak.models.IdentityProviderMapperModel;
-import org.keycloak.models.IdentityProviderModel;
-import org.keycloak.protocol.oidc.OIDCLoginProtocol;
-import org.keycloak.representations.idm.AdminEventRepresentation;
-import org.keycloak.representations.idm.ComponentRepresentation;
-import org.keycloak.representations.idm.ErrorRepresentation;
-import org.keycloak.representations.idm.IdentityProviderRepresentation;
-import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.events.AdminEventAssertion;
-import org.keycloak.tests.utils.admin.AdminEventPaths;
-
-import jakarta.ws.rs.ClientErrorException;
-import jakarta.ws.rs.core.Response;
-import org.keycloak.testsuite.util.broker.OIDCIdentityProviderConfigRep;
-
 /**
  * @author <a href="mailto:sthorger@redhat.com">Stian Thorgersen</a>
  */
 @KeycloakIntegrationTest
 public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
+
+    @InjectRealm(ref = "external-realm", config = ExternalRealmConfig.class)
+    ManagedRealm externalRealm;
+
+    @InjectOAuthClient
+    OAuthClient oauth;
+
+    @InjectPage
+    LoginPage loginPage;
+
+    @InjectEvents
+    Events events;
 
     @Test
     public void testCreateWithReservedCharacterForAlias() {
@@ -93,8 +122,8 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
         assertEquals("clientId", representation.getConfig().get("clientId"));
         assertEquals(ComponentRepresentation.SECRET_VALUE, representation.getConfig().get("clientSecret"));
         assertTrue(representation.isEnabled());
-        assertFalse(representation.isStoreToken());
-        assertFalse(representation.isTrustEmail());
+        assertNull(representation.isStoreToken());
+        assertNull(representation.isTrustEmail());
         assertNull(representation.getFirstBrokerLoginFlowAlias());
 
         assertEquals("some secret value", runOnServer.fetch(s -> s.identityProviders().getByAlias("new-identity-provider").getConfig().get("clientSecret"), String.class));
@@ -211,8 +240,8 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
         assertEquals(OIDCLoginProtocol.CLIENT_SECRET_BASIC, representation.getConfig().get("clientAuthMethod"));
 
         assertTrue(representation.isEnabled());
-        assertFalse(representation.isStoreToken());
-        assertFalse(representation.isTrustEmail());
+        assertNull(representation.isStoreToken());
+        assertNull(representation.isTrustEmail());
 
         assertEquals("some secret value", runOnServer.fetch(s -> s.identityProviders().getByAlias("new-identity-provider").getConfig().get("clientSecret"), String.class));
 
@@ -249,8 +278,8 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
         assertEquals(OIDCLoginProtocol.PRIVATE_KEY_JWT, representation.getConfig().get("clientAuthMethod"));
         assertNull(representation.getConfig().get("jwtX509HeadersEnabled"));
         assertTrue(representation.isEnabled());
-        assertFalse(representation.isStoreToken());
-        assertFalse(representation.isTrustEmail());
+        assertNull(representation.isStoreToken());
+        assertNull(representation.isTrustEmail());
 
         managedRealm.cleanup().add(r -> r.identityProviders().get(id).remove());
     }
@@ -283,8 +312,8 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
         assertEquals(OIDCLoginProtocol.PRIVATE_KEY_JWT, representation.getConfig().get("clientAuthMethod"));
         assertEquals("true", representation.getConfig().get("jwtX509HeadersEnabled"));
         assertTrue(representation.isEnabled());
-        assertFalse(representation.isStoreToken());
-        assertFalse(representation.isTrustEmail());
+        assertNull(representation.isStoreToken());
+        assertNull(representation.isTrustEmail());
 
         managedRealm.cleanup().add(r -> r.identityProviders().get(id).remove());
     }
@@ -364,11 +393,7 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
             resource.update(representation);
             fail("Invalid URL");
         } catch (Exception e) {
-            assertTrue(e instanceof  ClientErrorException);
-            Response response = ClientErrorException.class.cast(e).getResponse();
-            assertEquals( Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-            ErrorRepresentation error = ((ClientErrorException) e).getResponse().readEntity(ErrorRepresentation.class);
-            assertEquals("The url [authorization_url] is malformed", error.getErrorMessage());
+            assertError(e, "The url [authorization_url] is malformed");
         }
 
         oidcConfig.setAuthorizationUrl(null);
@@ -378,11 +403,7 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
             resource.update(representation);
             fail("Invalid URL");
         } catch (Exception e) {
-            assertTrue(e instanceof  ClientErrorException);
-            Response response = ClientErrorException.class.cast(e).getResponse();
-            assertEquals( Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-            ErrorRepresentation error = ((ClientErrorException) e).getResponse().readEntity(ErrorRepresentation.class);
-            assertEquals("The url [token_url] requires secure connections", error.getErrorMessage());
+            assertError(e, "The url [token_url] requires secure connections");
         }
 
         oidcConfig.setAuthorizationUrl(null);
@@ -392,11 +413,7 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
             resource.update(representation);
             fail("Invalid URL");
         } catch (Exception e) {
-            assertTrue(e instanceof  ClientErrorException);
-            Response response = ClientErrorException.class.cast(e).getResponse();
-            assertEquals( Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-            ErrorRepresentation error = ((ClientErrorException) e).getResponse().readEntity(ErrorRepresentation.class);
-            assertEquals("The url [jwks_url] requires secure connections", error.getErrorMessage());
+            assertError(e, "The url [jwks_url] requires secure connections");
         }
 
         oidcConfig.setAuthorizationUrl(null);
@@ -407,11 +424,7 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
             resource.update(representation);
             fail("Invalid URL");
         } catch (Exception e) {
-            assertTrue(e instanceof  ClientErrorException);
-            Response response = ClientErrorException.class.cast(e).getResponse();
-            assertEquals( Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-            ErrorRepresentation error = ((ClientErrorException) e).getResponse().readEntity(ErrorRepresentation.class);
-            assertEquals("The url [logout_url] requires secure connections", error.getErrorMessage());
+            assertError(e, "The url [logout_url] requires secure connections");
         }
 
         oidcConfig.setAuthorizationUrl(null);
@@ -424,17 +437,74 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
             resource.update(representation);
             fail("Invalid URL");
         } catch (Exception e) {
-            assertTrue(e instanceof  ClientErrorException);
-            Response response = ClientErrorException.class.cast(e).getResponse();
-            assertEquals( Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-            ErrorRepresentation error = ((ClientErrorException) e).getResponse().readEntity(ErrorRepresentation.class);
-            assertEquals("The url [userinfo_url] requires secure connections", error.getErrorMessage());
+            assertError(e, "The url [userinfo_url] requires secure connections");
         }
 
         managedRealm.updateWithCleanup(r -> r.sslRequired(SslRequired.EXTERNAL.name()));
         resource.update(representation);
 
         managedRealm.cleanup().add(r -> r.identityProviders().get(id).remove());
+    }
+
+    @Test
+    public void testOIDCKeysRequiredForVariousConfigs() {
+        String id = create(createRep("keycloak-oidc", "keycloak-oidc"));
+
+        IdentityProviderResource resource = this.managedRealm.admin().identityProviders().get("keycloak-oidc");
+        IdentityProviderRepresentation representation = resource.toRepresentation();
+        OIDCIdentityProviderConfigRep oidcConfig = new OIDCIdentityProviderConfigRep(representation);
+
+        // OIDC Keys required when "validate signature" is ON
+        oidcConfig.setValidateSignature(true);
+        try {
+            resource.update(representation);
+            fail("Not expected to update identity provider");
+        } catch (Exception e) {
+            assertError(e, "The 'Validating public key' is required when 'Validate signatures' enabled and 'Use JWKS URL' disabled");
+        }
+
+        // OIDC Keys (set by JWKS URL) required when "validate signature" is ON
+        oidcConfig.setUseJwksUrl(true);
+        try {
+            resource.update(representation);
+            fail("JWKS URL is required when 'Validate signatures' enabled and 'Use JWKS URL' enabled");
+        } catch (Exception e) {
+            assertError(e, "JWKS URL is required when 'Validate signatures' enabled and 'Use JWKS URL' enabled");
+        }
+
+        // OIDC Keys (set by JWKS URL) required when "authorization grant" is ON
+        oidcConfig.setValidateSignature(false);
+        oidcConfig.setJWTAuthorizationGrantEnabled(true);
+        try {
+            resource.update(representation);
+            fail("JWKS URL is required when 'Validate signatures' enabled and 'Use JWKS URL' enabled");
+        } catch (Exception e) {
+            assertError(e, "JWKS URL is required when 'JWT Authorization Grant' enabled and 'Use JWKS URL' enabled");
+        }
+
+        // OIDC Keys (set by JWKS URL) required when "federated client authentication" is ON
+        oidcConfig.setJWTAuthorizationGrantEnabled(false);
+        oidcConfig.setSupportsClientAssertions(true);
+        try {
+            resource.update(representation);
+            fail("JWKS URL is required when 'Validate signatures' enabled and 'Use JWKS URL' enabled");
+        } catch (Exception e) {
+            assertError(e, "JWKS URL is required when 'Supports client assertions' enabled and 'Use JWKS URL' enabled");
+        }
+
+        // Successful update when JWKS URL set
+        oidcConfig.setJwksUrl("https://foo");
+        resource.update(representation);
+
+        managedRealm.cleanup().add(r -> r.identityProviders().get(id).remove());
+    }
+
+    private void assertError(Exception e, String expectedError) {
+        assertTrue(e instanceof  ClientErrorException);
+        Response response = ClientErrorException.class.cast(e).getResponse();
+        assertEquals( Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
+        ErrorRepresentation error = ((ClientErrorException) e).getResponse().readEntity(ErrorRepresentation.class);
+        assertEquals(expectedError, error.getErrorMessage());
     }
 
     @Test
@@ -449,4 +519,62 @@ public class IdentityProviderOidcTest extends AbstractIdentityProviderTest {
 
         managedRealm.cleanup().add(r -> r.identityProviders().get(id).remove());
     }
+
+    @Test
+    public void testOIDCIdentityProviderLoginIssuerValidation() {
+        IdentityProviderRepresentation newIdentityProvider = createRep("external-idp", "oidc");
+        newIdentityProvider.getConfig().put(OIDCIdentityProviderConfig.ISSUER, "bad-issuer");
+        newIdentityProvider.getConfig().put("clientId", "test-client");
+        newIdentityProvider.getConfig().put("clientSecret", "password");
+        newIdentityProvider.getConfig().put(IdentityProviderModel.SYNC_MODE, "IMPORT");
+        newIdentityProvider.getConfig().put(OAuth2IdentityProviderConfig.TOKEN_ENDPOINT_URL, "http://localhost:8080/realms/external-realm/protocol/openid-connect/token");
+        newIdentityProvider.getConfig().put("authorizationUrl", "http://localhost:8080/realms/external-realm/protocol/openid-connect/auth");
+        newIdentityProvider.getConfig().put(OIDCIdentityProviderConfig.JWKS_URL, "http://localhost:8080/realms/external-realm/protocol/openid-connect/certs");
+        newIdentityProvider.getConfig().put(OIDCIdentityProviderConfig.USE_JWKS_URL, "true");
+        create(newIdentityProvider);
+
+        events.skipAll();
+        oauth.openLoginForm();
+        loginPage.clickSocial("external-idp");
+        loginPage.fillLogin("testuser", "password");
+        loginPage.submit();
+        EventAssertion.assertError(events.poll())
+                .type(EventType.IDENTITY_PROVIDER_LOGIN_ERROR)
+                .sessionId(null)
+                .error(Errors.IDENTITY_PROVIDER_LOGIN_FAILURE);
+
+        //test correct issuer
+        managedRealm.updateIdentityProviderWithCleanup("external-idp", rep -> {
+            rep.getConfig().put(OIDCIdentityProviderConfig.ISSUER, "http://localhost:8080/realms/external-realm");
+        });
+
+        oauth.openLoginForm();
+        loginPage.clickSocial("external-idp");
+        AccessTokenResponse tokenResponse = oauth.doAccessTokenRequest(oauth.parseLoginResponse().getCode());
+        Assertions.assertTrue(tokenResponse.isSuccess());
+
+        oauth.logoutRequest().idTokenHint(tokenResponse.getIdToken()).send();
+        oauth.logoutRequest().send();
+    }
+
+    public static class ExternalRealmConfig implements RealmConfig {
+
+        @Override
+        public RealmConfigBuilder configure(RealmConfigBuilder realm) {
+            realm.name("external-realm");
+
+            realm.addClient("test-client")
+                    .secret("password")
+                    .redirectUris("*");
+
+            realm.addUser("testuser")
+                    .name("Test", "User")
+                    .email("test@localhost")
+                    .emailVerified(Boolean.TRUE)
+                    .password("password");
+
+            return realm;
+        }
+    }
+
 }

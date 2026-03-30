@@ -1,8 +1,11 @@
 package org.keycloak.tests.client.authentication.external;
 
+<<<<<<< HEAD
+=======
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.broker.spiffe.SpiffeConstants;
 import org.keycloak.common.util.Time;
 import org.keycloak.representations.JsonWebToken;
@@ -14,6 +17,13 @@ import org.keycloak.testframework.oauth.OAuthIdentityProviderConfigBuilder;
 import org.keycloak.testframework.oauth.annotations.InjectOAuthIdentityProvider;
 import org.keycloak.testframework.realm.ManagedRealm;
 
+<<<<<<< HEAD
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+=======
+>>>>>>> origin/release/0.13.26
 @KeycloakIntegrationTest(config = SpiffeClientAuthTest.SpiffeServerConfig.class)
 @TestMethodOrder(MethodOrderer.MethodName.class)
 public class SpiffeClientAuthWithOIDCPluginTest extends AbstractClientAuthTest {

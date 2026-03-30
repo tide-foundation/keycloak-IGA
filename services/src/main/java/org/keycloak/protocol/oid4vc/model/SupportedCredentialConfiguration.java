@@ -16,17 +16,18 @@
  */
 package org.keycloak.protocol.oid4vc.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.apache.commons.collections4.ListUtils;
-import org.keycloak.models.oid4vci.CredentialScopeModel;
-import org.keycloak.models.KeycloakSession;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+
+import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.oid4vci.CredentialScopeModel;
+import org.keycloak.utils.StringUtil;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * A supported credential, as used in the Credentials Issuer Metadata in OID4VCI
@@ -113,15 +114,16 @@ public class SupportedCredentialConfiguration {
         CredentialDefinition credentialDefinition = CredentialDefinition.parse(credentialScope);
         credentialConfiguration.setCredentialDefinition(credentialDefinition);
 
-         ProofTypesSupported proofTypesSupported = ProofTypesSupported.parse(keycloakSession,
-                                                                             globalSupportedSigningAlgorithms);
-         credentialConfiguration.setProofTypesSupported(proofTypesSupported);
+        KeyAttestationsRequired keyAttestationsRequired = KeyAttestationsRequired.parse(credentialScope);
+        ProofTypesSupported proofTypesSupported = ProofTypesSupported.parse(keycloakSession,
+                                                                            keyAttestationsRequired,
+                                                                            globalSupportedSigningAlgorithms);
+        credentialConfiguration.setProofTypesSupported(proofTypesSupported);
 
-        List<String> signingAlgsSupported = credentialScope.getSigningAlgsSupported();
-        signingAlgsSupported = signingAlgsSupported.isEmpty() ? globalSupportedSigningAlgorithms :
-                // if the config has listed different algorithms than supported by keycloak we must use the
-                // intersection of the configuration with the actual supported algorithms.
-                ListUtils.intersection(signingAlgsSupported, globalSupportedSigningAlgorithms);
+        // Return single configured value for the signature algorithm if any
+        String signingAlgSupported = credentialScope.getSigningAlg();
+        List<String> signingAlgsSupported = StringUtil.isBlank(signingAlgSupported) ? globalSupportedSigningAlgorithms :
+                Collections.singletonList(signingAlgSupported);
         credentialConfiguration.setCredentialSigningAlgValuesSupported(signingAlgsSupported);
 
         // TODO resolve value dynamically from provider implementations?
@@ -159,7 +161,7 @@ public class SupportedCredentialConfiguration {
         return null;
     }
 
-    public CredentialConfigId deriveConfiId() {
+    public CredentialConfigId deriveConfigId() {
         return CredentialConfigId.from(id);
     }
 

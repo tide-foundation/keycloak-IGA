@@ -16,6 +16,8 @@
  */
 package org.keycloak.testsuite.actions;
 
+<<<<<<< HEAD
+=======
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -23,15 +25,20 @@ import static org.junit.Assert.assertTrue;
 import static org.keycloak.userprofile.UserProfileConstants.ROLE_USER;
 import static org.keycloak.userprofile.UserProfileConstants.ROLE_ADMIN;
 
+>>>>>>> origin/release/0.13.26
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+<<<<<<< HEAD
+
+=======
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Test;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.admin.client.resource.AuthenticationManagementResource;
 import org.keycloak.admin.client.resource.UserProfileResource;
 import org.keycloak.admin.client.resource.UserResource;
@@ -49,6 +56,19 @@ import org.keycloak.representations.userprofile.config.UPAttributePermissions;
 import org.keycloak.representations.userprofile.config.UPConfig;
 import org.keycloak.testsuite.pages.AppPage;
 import org.keycloak.testsuite.util.oauth.OAuthClient;
+
+import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
+import org.junit.Assert;
+import org.junit.Test;
+
+import static org.keycloak.userprofile.UserProfileConstants.ROLE_ADMIN;
+import static org.keycloak.userprofile.UserProfileConstants.ROLE_USER;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class RequiredActionUpdateEmailTest extends AbstractRequiredActionUpdateEmailTest {
 

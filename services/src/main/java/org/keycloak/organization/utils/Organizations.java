@@ -17,12 +17,6 @@
 
 package org.keycloak.organization.utils;
 
-import static java.util.Optional.of;
-import static java.util.Optional.ofNullable;
-
-import jakarta.ws.rs.core.MultivaluedMap;
-import jakarta.ws.rs.core.Response;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -30,11 +24,16 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.Response;
+
 import org.keycloak.TokenVerifier;
 import org.keycloak.authentication.actiontoken.inviteorg.InviteOrgActionToken;
 import org.keycloak.common.Profile;
 import org.keycloak.common.Profile.Feature;
 import org.keycloak.common.VerificationException;
+import org.keycloak.crypto.SignatureProvider;
+import org.keycloak.crypto.SignatureVerifierContext;
 import org.keycloak.http.HttpRequest;
 import org.keycloak.models.Constants;
 import org.keycloak.models.FederatedIdentityModel;
@@ -50,7 +49,11 @@ import org.keycloak.models.UserModel;
 import org.keycloak.organization.OrganizationProvider;
 import org.keycloak.organization.protocol.mappers.oidc.OrganizationScope;
 import org.keycloak.services.ErrorResponse;
+import org.keycloak.services.Urls;
 import org.keycloak.sessions.AuthenticationSessionModel;
+
+import static java.util.Optional.of;
+import static java.util.Optional.ofNullable;
 
 public class Organizations {
 
@@ -148,7 +151,7 @@ public class Organizations {
         }
     }
 
-    public static InviteOrgActionToken parseInvitationToken(HttpRequest request) throws VerificationException {
+    public static InviteOrgActionToken parseInvitationToken(KeycloakSession session, HttpRequest request) throws VerificationException {
         MultivaluedMap<String, String> queryParameters = request.getUri().getQueryParameters();
         String tokenFromQuery = queryParameters.getFirst(Constants.TOKEN);
 
@@ -156,7 +159,16 @@ public class Organizations {
             return null;
         }
 
-        return TokenVerifier.create(tokenFromQuery, InviteOrgActionToken.class).getToken();
+        KeycloakContext context = session.getContext();
+        RealmModel realm = session.getContext().getRealm();
+        TokenVerifier<InviteOrgActionToken> verifier = TokenVerifier.create(tokenFromQuery, InviteOrgActionToken.class)
+                .withChecks(TokenVerifier.IS_ACTIVE,
+                        new TokenVerifier.RealmUrlCheck(Urls.realmIssuer(context.getUri().getBaseUri(), realm.getName())));
+
+        SignatureVerifierContext verifierContext = session.getProvider(SignatureProvider.class, verifier.getHeader().getAlgorithm().name()).verifier(verifier.getHeader().getKeyId());
+        verifier.verifierContext(verifierContext);
+
+        return verifier.verify().getToken();
     }
 
     public static String getEmailDomain(String email) {

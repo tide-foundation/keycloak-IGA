@@ -50,7 +50,11 @@ export const DownloadDialog = ({
   const [snippet, setSnippet] = useState<string | ArrayBuffer>();
   const [openType, setOpenType] = useState(false);
   const [isTidecloak, setIsTidecloak] = useState(false);
+<<<<<<< HEAD
+
+=======
   
+>>>>>>> origin/release/0.13.26
   const selectedConfig = useMemo(
     () => configFormats.find((config) => config.id === selected) ?? null,
     [selected],
@@ -66,7 +70,11 @@ export const DownloadDialog = ({
     const hasTideIdp = await adminClient.identityProviders.findOne({ alias: "tide" });
     return hasTideIdp ? true : false;
   }, [adminClient, realm]);
+<<<<<<< HEAD
+
+=======
   
+>>>>>>> origin/release/0.13.26
   useEffect(() => {
     const updateStatus = async () => {
       const hasTideIdp = await checkTidecloakStatus();
@@ -74,7 +82,11 @@ export const DownloadDialog = ({
     };
     updateStatus();
   }, [checkTidecloakStatus]);
+<<<<<<< HEAD
+
+=======
   
+>>>>>>> origin/release/0.13.26
   useFetch(
     async () => {
       if (selectedConfig?.mediaType === "application/zip") {

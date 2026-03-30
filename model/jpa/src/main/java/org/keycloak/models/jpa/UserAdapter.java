@@ -17,18 +17,37 @@
 
 package org.keycloak.models.jpa;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+
 import org.keycloak.common.Profile;
 import org.keycloak.common.Profile.Feature;
 import org.keycloak.common.util.CollectionUtil;
 import org.keycloak.common.util.MultivaluedHashMap;
 import org.keycloak.common.util.ObjectUtil;
-import org.keycloak.credential.UserCredentialManager;
+import org.keycloak.connections.jpa.support.EntityManagers;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.GroupModel;
 import org.keycloak.models.GroupModel.GroupMemberJoinEvent;
 import org.keycloak.models.GroupModel.GroupMemberLeaveEvent;
-import org.keycloak.models.MembershipMetadata;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.MembershipMetadata;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.models.RoleModel.RoleGrantedEvent;
@@ -42,26 +61,7 @@ import org.keycloak.models.jpa.entities.UserRequiredActionEntity;
 import org.keycloak.models.jpa.entities.UserRoleMappingEntity;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.models.utils.RoleUtils;
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
-import jakarta.persistence.Query;
-import jakarta.persistence.TypedQuery;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import org.keycloak.organization.OrganizationProvider;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.keycloak.representations.idm.MembershipType;
 
 import static org.keycloak.utils.StreamsUtil.closing;
@@ -458,8 +458,10 @@ public class UserAdapter implements UserModel, JpaModel<UserEntity> {
         entity.setGroupId(group.getId());
         entity.setMembershipType(metadata == null ? MembershipType.UNMANAGED : metadata.getMembershipType());
         em.persist(entity);
-        em.flush();
-        em.detach(entity);
+        if (!EntityManagers.isBatchMode()) {
+            em.flush();
+            em.detach(entity);
+        }
         GroupMemberJoinEvent.fire(group, this, session);
     }
 
@@ -475,7 +477,7 @@ public class UserAdapter implements UserModel, JpaModel<UserEntity> {
             em.remove(entity);
         }
         em.flush();
-        GroupMemberLeaveEvent.fire(group, session);
+        GroupMemberLeaveEvent.fire(group, this, session);
     }
 
     @Override
@@ -516,8 +518,10 @@ public class UserAdapter implements UserModel, JpaModel<UserEntity> {
         entity.setUser(getEntity());
         entity.setRoleId(role.getId());
         em.persist(entity);
-        em.flush();
-        em.detach(entity);
+        if (!EntityManagers.isBatchMode()) {
+            em.flush();
+            em.detach(entity);
+        }
     }
 
     @Override
@@ -577,7 +581,7 @@ public class UserAdapter implements UserModel, JpaModel<UserEntity> {
 
     @Override
     public SubjectCredentialManager credentialManager() {
-        return new UserCredentialManager(session, realm, this);
+        return session.users().getUserCredentialManager(this);
     }
 
     @Override

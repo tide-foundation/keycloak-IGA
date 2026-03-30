@@ -19,9 +19,7 @@ package org.keycloak.testsuite.webauthn.passwordless;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
-import org.hamcrest.MatcherAssert;
-import org.hamcrest.Matchers;
-import org.junit.Test;
+
 import org.keycloak.WebAuthnConstants;
 import org.keycloak.authentication.authenticators.browser.UsernamePasswordFormFactory;
 import org.keycloak.events.Details;
@@ -38,13 +36,17 @@ import org.keycloak.representations.idm.OrganizationDomainRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
-import org.keycloak.testsuite.Assert;
 import org.keycloak.testsuite.AbstractAdminTest;
+import org.keycloak.testsuite.Assert;
 import org.keycloak.testsuite.admin.ApiUtil;
 import org.keycloak.testsuite.arquillian.annotation.IgnoreBrowserDriver;
 import org.keycloak.testsuite.util.WaitUtils;
 import org.keycloak.testsuite.webauthn.AbstractWebAuthnVirtualTest;
 import org.keycloak.testsuite.webauthn.authenticators.DefaultVirtualAuthOptions;
+
+import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
+import org.junit.Test;
 import org.openqa.selenium.By;
 import org.openqa.selenium.firefox.FirefoxDriver;
 
@@ -102,6 +104,23 @@ public class PasskeysOrganizationAuthenticationTest extends AbstractWebAuthnVirt
             events.clear();
 
             // the user should be automatically logged in using the discoverable key
+            oauth.openLoginForm();
+            WaitUtils.waitForPageToLoad();
+
+            appPage.assertCurrent();
+
+            events.expectLogin()
+                    .user(user.getId())
+                    .detail(Details.USERNAME, user.getUsername())
+                    .detail(Details.CREDENTIAL_TYPE, WebAuthnCredentialModel.TYPE_PASSWORDLESS)
+                    .detail(WebAuthnConstants.USER_VERIFICATION_CHECKED, "true")
+                    .assertEvent();
+
+            logout();
+            events.clear();
+
+            // login forcing the organization
+            oauth.scope("organization:email");
             oauth.openLoginForm();
             WaitUtils.waitForPageToLoad();
 
@@ -192,7 +211,7 @@ public class PasskeysOrganizationAuthenticationTest extends AbstractWebAuthnVirt
 
             // now the passkeys username password page should be presented with username selected. Passkeys still enabled
             loginPage.assertCurrent();
-            MatcherAssert.assertThat(loginPage.getAttemptedUsername(), Matchers.is("userwebauthn"));
+            MatcherAssert.assertThat(loginPage.getAttemptedUsername(), Matchers.is("UserWebAuthn"));
             MatcherAssert.assertThat(driver.findElement(By.xpath("//form[@id='webauth']")), Matchers.notNullValue());
             loginPage.login("invalid-password");
             loginPage.assertCurrent();
@@ -203,13 +222,13 @@ public class PasskeysOrganizationAuthenticationTest extends AbstractWebAuthnVirt
                     .assertEvent();
 
             // correct login now
-            MatcherAssert.assertThat(loginPage.getAttemptedUsername(), Matchers.is("userwebauthn"));
+            MatcherAssert.assertThat(loginPage.getAttemptedUsername(), Matchers.is("UserWebAuthn"));
             MatcherAssert.assertThat(driver.findElement(By.xpath("//form[@id='webauth']")), Matchers.notNullValue());
             loginPage.login(getPassword(USERNAME));
             appPage.assertCurrent();
             events.expectLogin()
                     .user(user.getId())
-                    .detail(Details.USERNAME, "userwebauthn")
+                    .detail(Details.USERNAME, "UserWebAuthn")
                     .detail(Details.CREDENTIAL_TYPE, Matchers.nullValue())
                     .assertEvent();
         }

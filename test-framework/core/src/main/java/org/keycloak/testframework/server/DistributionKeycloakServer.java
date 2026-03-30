@@ -1,20 +1,20 @@
 package org.keycloak.testframework.server;
 
-import io.quarkus.maven.dependency.Dependency;
-import org.jboss.logging.Logger;
-import org.keycloak.it.utils.OutputConsumer;
-import org.keycloak.it.utils.RawKeycloakDistribution;
-
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.keycloak.it.utils.OutputConsumer;
+import org.keycloak.it.utils.RawKeycloakDistribution;
+
+import io.quarkus.maven.dependency.Dependency;
+import org.jboss.logging.Logger;
+
 public class DistributionKeycloakServer implements KeycloakServer {
 
     private static final boolean MANUAL_STOP = true;
-    private static final boolean ENABLE_TLS = false;
     private static final boolean RE_CREATE = false;
     private static final boolean REMOVE_BUILD_OPTIONS_AFTER_BUILD = false;
     private static final int REQUEST_PORT = 8080;
@@ -22,14 +22,16 @@ public class DistributionKeycloakServer implements KeycloakServer {
     private RawKeycloakDistribution keycloak;
 
     private final boolean debug;
+    private boolean tlsEnabled = false;
 
     public DistributionKeycloakServer(boolean debug) {
         this.debug = debug;
     }
 
     @Override
-    public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder) {
-        keycloak = new RawKeycloakDistribution(false, MANUAL_STOP, ENABLE_TLS, RE_CREATE, REMOVE_BUILD_OPTIONS_AFTER_BUILD, REQUEST_PORT, new LoggingOutputConsumer());
+    public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder, boolean tlsEnabled) {
+        this.tlsEnabled = tlsEnabled;
+        keycloak = new RawKeycloakDistribution(false, MANUAL_STOP, false, RE_CREATE, REMOVE_BUILD_OPTIONS_AFTER_BUILD, REQUEST_PORT, new LoggingOutputConsumer());
 
         // RawKeycloakDistribution sets "DEBUG_SUSPEND", not "DEBUG" when debug is passed to constructor
         if (debug) {
@@ -54,12 +56,20 @@ public class DistributionKeycloakServer implements KeycloakServer {
 
     @Override
     public String getBaseUrl() {
-        return "http://localhost:8080";
+        if (tlsEnabled) {
+            return "https://localhost:8443";
+        } else {
+            return "http://localhost:8080";
+        }
     }
 
     @Override
     public String getManagementBaseUrl() {
-        return "http://localhost:9000";
+        if (tlsEnabled) {
+            return "https://localhost:9000";
+        } else {
+            return "http://localhost:9000";
+        }
     }
 
     private static final class LoggingOutputConsumer implements OutputConsumer {

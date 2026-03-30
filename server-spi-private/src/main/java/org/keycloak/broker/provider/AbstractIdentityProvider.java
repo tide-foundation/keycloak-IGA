@@ -16,7 +16,17 @@
  */
 package org.keycloak.broker.provider;
 
-import org.jboss.logging.Logger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
+
 import org.keycloak.common.util.Base64Url;
 import org.keycloak.common.util.KeycloakUriBuilder;
 import org.keycloak.events.EventBuilder;
@@ -28,22 +38,14 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.sessions.AuthenticationSessionModel;
+import org.keycloak.util.Booleans;
 
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import org.jboss.logging.Logger;
 
 /**
  * @author Pedro Igor
  */
-public abstract class AbstractIdentityProvider<C extends IdentityProviderModel> implements IdentityProvider<C> {
+public abstract class AbstractIdentityProvider<C extends IdentityProviderModel> implements UserAuthenticationIdentityProvider<C> {
 
     protected static final Logger logger = Logger.getLogger(AbstractIdentityProvider.class);
 
@@ -65,11 +67,6 @@ public abstract class AbstractIdentityProvider<C extends IdentityProviderModel> 
 
     public C getConfig() {
         return this.config;
-    }
-
-    @Override
-    public Response export(UriInfo uriInfo, RealmModel realm, String format) {
-        return Response.noContent().build();
     }
 
     @Override
@@ -211,7 +208,7 @@ public abstract class AbstractIdentityProvider<C extends IdentityProviderModel> 
 
         if (isNewUser || federatedEmail != null && !federatedEmail.equalsIgnoreCase(localEmail)) {
             IdentityProviderModel config = context.getIdpConfig();
-            boolean trustEmail = config.isTrustEmail();
+            boolean trustEmail = Booleans.isTrue(config.isTrustEmail());
 
             if (logger.isTraceEnabled()) {
                 logger.tracef("Email %s verified automatically after updating user '%s' through Identity provider '%s' ", trustEmail ? "" : "not", user.getUsername(), config.getAlias());

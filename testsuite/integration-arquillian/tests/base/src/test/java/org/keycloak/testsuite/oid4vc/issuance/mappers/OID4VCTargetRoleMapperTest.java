@@ -17,14 +17,17 @@
 
 package org.keycloak.testsuite.oid4vc.issuance.mappers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.Test;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
 import org.keycloak.models.ProtocolMapperModel;
 import org.keycloak.models.UserSessionModel;
-import org.keycloak.protocol.oid4vc.issuance.credentialbuilder.LDCredentialBody;
 import org.keycloak.protocol.oid4vc.issuance.mappers.OID4VCTargetRoleMapper;
-import org.keycloak.protocol.oid4vc.issuance.signing.JwtCredentialSigner;
-import org.keycloak.protocol.oid4vc.model.CredentialBuildConfig;
 import org.keycloak.protocol.oid4vc.model.Role;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
@@ -34,18 +37,14 @@ import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.testsuite.oid4vc.issuance.signing.OID4VCTest;
 import org.keycloak.testsuite.runonserver.RunOnServerException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Test;
+
+import static org.keycloak.testsuite.forms.PassThroughClientAuthenticator.clientId;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.keycloak.testsuite.forms.PassThroughClientAuthenticator.clientId;
 
 public class OID4VCTargetRoleMapperTest extends OID4VCTest {
 
@@ -64,8 +63,8 @@ public class OID4VCTargetRoleMapperTest extends OID4VCTest {
 						roleMapper.setMapperModel(pmm, "jwt_vc");
 						AppAuthManager.BearerTokenAuthenticator authenticator = new AppAuthManager.BearerTokenAuthenticator(session);
 						authenticator.setTokenString(token);
-						UserSessionModel userSessionModel = authenticator.authenticate().getSession();
-						roleMapper.setClaimsForSubject(claimsMap, userSessionModel);
+						UserSessionModel userSessionModel = authenticator.authenticate().session();
+						roleMapper.setClaim(claimsMap, userSessionModel);
 						assertTrue("The roles should be included as a claim.", claimsMap.containsKey("roles"));
 						if (claimsMap.get("roles") instanceof HashSet roles) {
 							List<Role> rolesList = roles.stream().map(ro -> new ObjectMapper().convertValue(ro, Role.class)).toList();
@@ -116,15 +115,12 @@ public class OID4VCTargetRoleMapperTest extends OID4VCTest {
 						return mergedRoles;
 					}
 			);
-		} else {
-			testRealm.getRoles()
-					.setClient(Map.of(existingClient.getClientId(),
-							List.of(getRoleRepresentation("testRole", existingClient.getClientId()))));
 		}
 
 		List<UserRepresentation> realmUsers = Optional.ofNullable(testRealm.getUsers()).map(ArrayList::new)
 				.orElse(new ArrayList<>());
-		realmUsers.add(getUserRepresentation(Map.of(existingClient.getClientId(), List.of("testRole"), "newClient", List.of("newRole"))));
+		realmUsers.add(getUserRepresentation("John Doe", List.of(),
+                Map.of(clientId, List.of("testRole"), "newClient", List.of("newRole"))));
 		testRealm.setUsers(realmUsers);
 	}
 }

@@ -17,7 +17,10 @@ import { toPage } from "./page/routes";
 import { routes } from "./routes";
 import useIsFeatureEnabled, { Feature } from "./utils/useIsFeatureEnabled";
 import { useAdminClient } from "./admin-client";
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/release/0.13.26
 
 import "./page-nav.css";
 
@@ -25,7 +28,11 @@ type LeftNavProps = {
   title: string;
   path: string;
   id?: string;
+<<<<<<< HEAD
+  label?: string // TIDECLOAK IMPLEMENTATION
+=======
   label?: string // tidecloak implementation
+>>>>>>> origin/release/0.13.26
 };
 
 const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
@@ -64,8 +71,13 @@ const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
       {label && (
         <span
           style={{
+<<<<<<< HEAD
+            backgroundColor: '#0066cc',
+            color: '#fff',
+=======
             backgroundColor: '#0066cc',      // Blue background for visibility
             color: '#fff',                   // White text
+>>>>>>> origin/release/0.13.26
             padding: '2px 8px',
             borderRadius: '12px',
             fontSize: '12px',
@@ -85,11 +97,16 @@ const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
 };
 
 export const PageNav = () => {
+<<<<<<< HEAD
+  const { adminClient } = useAdminClient();
+
+=======
     const { adminClient } = useAdminClient();
   
+>>>>>>> origin/release/0.13.26
   const { t } = useTranslation();
   const { environment } = useEnvironment<Environment>();
-  const { hasSomeAccess } = useAccess();
+  const { hasAccess, hasSomeAccess } = useAccess();
   const { componentTypes } = useServerInfo();
   const isFeatureEnabled = useIsFeatureEnabled();
   const pages =
@@ -102,11 +119,25 @@ export const PageNav = () => {
     const getCount = async () => {
       const userRequest = await adminClient.tideUsersExt.getRequestedChangesForUsers();
       const roleRequest = await adminClient.tideUsersExt.getRequestedChangesForRoles();
+<<<<<<< HEAD
+      const groupRequest = await adminClient.tideUsersExt.getRequestedChangesForGroups();
+      const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
+      const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
+      const realmLicensingRequest = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
+      let policyCount = 0;
+      try {
+        const realmPolicy: any = await adminClient.tideUsersExt.getRealmPolicy();
+        if (realmPolicy && realmPolicy.status === "pending") policyCount = 1;
+      } catch (_) { /* ignore */ }
+
+      setClientRequestCount(userRequest.length + roleRequest.length + groupRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length + policyCount)
+=======
       const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
       const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
       const realmLicensingRequest = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
 
       setClientRequestCount(userRequest.length + roleRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length)
+>>>>>>> origin/release/0.13.26
     }
 
     getCount();
@@ -139,6 +170,9 @@ export const PageNav = () => {
     "query-clients",
     "view-identity-providers",
   );
+
+  const showWorkflows =
+    hasAccess("manage-realm") && isFeatureEnabled(Feature.Workflows);
 
   const showManageRealm = environment.masterRealm === environment.realm;
 
@@ -179,6 +213,11 @@ export const PageNav = () => {
                 path="/change-requests"
                 label={changeRequestsCount > 0 ? changeRequestsCount.toString() : undefined}
               />
+<<<<<<< HEAD
+              {/** TIDECLOAK IMPLEMENTATION */}
+              <LeftNav title="Policies" path="/tide-policies" />
+=======
+>>>>>>> origin/release/0.13.26
             </NavGroup>
           )}
 
@@ -192,9 +231,7 @@ export const PageNav = () => {
                 )}
               <LeftNav title="identityProviders" path="/identity-providers" />
               <LeftNav title="userFederation" path="/user-federation" />
-              {isFeatureEnabled(Feature.Workflows) && (
-                <LeftNav title="workflows" path="/workflows" />
-              )}
+              {showWorkflows && <LeftNav title="workflows" path="/workflows" />}
               {isFeatureEnabled(Feature.DeclarativeUI) &&
                 pages?.map((p) => (
                   <LeftNav

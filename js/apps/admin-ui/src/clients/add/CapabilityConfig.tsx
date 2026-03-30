@@ -16,6 +16,9 @@ import { FormAccess } from "../../components/form/FormAccess";
 import { convertAttributeNameToForm } from "../../util";
 import useIsFeatureEnabled, { Feature } from "../../utils/useIsFeatureEnabled";
 import { FormFields } from "../ClientDetails";
+import { IdentityProviderSelect } from "../../components/identity-provider/IdentityProviderSelect";
+import { IdentityProviderType } from "@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation";
+import { useAccess } from "../../context/access/Access";
 
 type CapabilityConfigProps = {
   unWrap?: boolean;
@@ -31,8 +34,15 @@ export const CapabilityConfig = ({
   const protocol = type || watch("protocol");
   const clientAuthentication = watch("publicClient");
   const authorization = watch("authorizationServicesEnabled");
+  const jwtAuthorizationGrantEnabled = watch(
+    convertAttributeNameToForm<FormFields>(
+      "attributes.oauth2.jwt.authorization.grant.enabled",
+    ),
+    false,
+  );
   const isFeatureEnabled = useIsFeatureEnabled();
-
+  const { hasSomeAccess } = useAccess();
+  const showIdentityProviders = hasSomeAccess("view-identity-providers");
   return (
     <FormAccess
       isHorizontal
@@ -79,6 +89,12 @@ export const CapabilityConfig = ({
                       setValue(
                         convertAttributeNameToForm<FormFields>(
                           "attributes.standard.token.exchange.enabled",
+                        ),
+                        false,
+                      );
+                      setValue(
+                        convertAttributeNameToForm<FormFields>(
+                          "attributes.oauth2.jwt.authorization.grant.enabled",
                         ),
                         false,
                       );
@@ -275,6 +291,41 @@ export const CapabilityConfig = ({
                   />
                 </GridItem>
               )}
+              {isFeatureEnabled(Feature.JWTAuthorizationGrant) && (
+                <GridItem lg={8} sm={6}>
+                  <Controller
+                    name={convertAttributeNameToForm<
+                      Required<ClientRepresentation["attributes"]>
+                    >("attributes.oauth2.jwt.authorization.grant.enabled")}
+                    defaultValue={false}
+                    control={control}
+                    render={({ field }) => (
+                      <InputGroup>
+                        <InputGroupItem>
+                          <Checkbox
+                            data-testid="jwt-authorization-grant-enabled"
+                            label={t("jwtAuthorizationGrantEnabled")}
+                            id="kc-jwt-authorization-grant-enabled"
+                            name="jwt-authorization-grant-enabled"
+                            isChecked={
+                              field.value.toString() === "true" &&
+                              !clientAuthentication
+                            }
+                            onChange={field.onChange}
+                            isDisabled={clientAuthentication}
+                          />
+                        </InputGroupItem>
+                        <InputGroupItem>
+                          <HelpItem
+                            helpText={t("jwtAuthorizationGrantEnabledHelp")}
+                            fieldLabelId="jwtAuthorizationGrantEnabled"
+                          />
+                        </InputGroupItem>
+                      </InputGroup>
+                    )}
+                  />
+                </GridItem>
+              )}
               {isFeatureEnabled(Feature.DeviceFlow) && (
                 <GridItem lg={8} sm={6}>
                   <Controller
@@ -352,6 +403,24 @@ export const CapabilityConfig = ({
               { key: "plain", value: "plain" },
             ]}
           />
+          {isFeatureEnabled(Feature.JWTAuthorizationGrant) &&
+            showIdentityProviders &&
+            jwtAuthorizationGrantEnabled.toString() === "true" && (
+              <IdentityProviderSelect
+                name={convertAttributeNameToForm<FormFields>(
+                  "attributes.oauth2.jwt.authorization.grant.idp",
+                )}
+                label={t("jwtAuthorizationGrantIdp")}
+                helpText={t("jwtAuthorizationGrantIdpHelp")}
+                convertToName={convertAttributeNameToForm}
+                identityProviderType={
+                  IdentityProviderType.JWT_AUTHORIZATION_GRANT
+                }
+                isDisabled={clientAuthentication}
+                realmOnly
+                stringify
+              />
+            )}
           {isFeatureEnabled(Feature.DPoP) && (
             <DefaultSwitchControl
               name={convertAttributeNameToForm<FormFields>(

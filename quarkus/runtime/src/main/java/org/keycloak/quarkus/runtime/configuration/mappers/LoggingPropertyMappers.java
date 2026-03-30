@@ -1,13 +1,5 @@
 package org.keycloak.quarkus.runtime.configuration.mappers;
 
-import static org.keycloak.config.LoggingOptions.DEFAULT_LOG_FORMAT;
-import static org.keycloak.config.LoggingOptions.LOG_CONSOLE_ENABLED;
-import static org.keycloak.config.LoggingOptions.LOG_FILE_ENABLED;
-import static org.keycloak.config.LoggingOptions.LOG_SYSLOG_ENABLED;
-import static org.keycloak.quarkus.runtime.configuration.Configuration.isSet;
-import static org.keycloak.quarkus.runtime.configuration.Configuration.isTrue;
-import static org.keycloak.quarkus.runtime.configuration.mappers.PropertyMapper.fromOption;
-
 import java.io.File;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -16,22 +8,32 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import io.quarkus.runtime.configuration.MemorySizeConverter;
-import org.jboss.logmanager.LogContext;
 import org.keycloak.common.Profile;
 import org.keycloak.config.LoggingOptions;
 import org.keycloak.config.Option;
 import org.keycloak.quarkus.runtime.Messages;
+import org.keycloak.quarkus.runtime.cli.Picocli;
 import org.keycloak.quarkus.runtime.cli.PropertyException;
 import org.keycloak.quarkus.runtime.configuration.Configuration;
 
+import io.quarkus.runtime.configuration.MemorySizeConverter;
 import io.smallrye.config.ConfigSourceInterceptorContext;
+import org.jboss.logmanager.LogContext;
+
+import static org.keycloak.config.LoggingOptions.DEFAULT_LOG_FORMAT;
+import static org.keycloak.config.LoggingOptions.LOG_CONSOLE_ENABLED;
+import static org.keycloak.config.LoggingOptions.LOG_FILE_ENABLED;
+import static org.keycloak.config.LoggingOptions.LOG_SYSLOG_ENABLED;
+import static org.keycloak.quarkus.runtime.configuration.Configuration.isSet;
+import static org.keycloak.quarkus.runtime.configuration.Configuration.isTrue;
+import static org.keycloak.quarkus.runtime.configuration.mappers.PropertyMapper.fromOption;
 
 public final class LoggingPropertyMappers implements PropertyMapperGrouping {
 
@@ -87,6 +89,7 @@ public final class LoggingPropertyMappers implements PropertyMapperGrouping {
                 fromOption(LoggingOptions.LOG_CONSOLE_COLOR)
                         .isEnabled(LoggingPropertyMappers::isConsoleEnabled, CONSOLE_ENABLED_MSG)
                         .to("quarkus.console.color")
+                        .transformer(this::transformConsoleColor)
                         .build(),
                 fromOption(LoggingOptions.LOG_CONSOLE_ENABLED)
                         .mapFrom(LoggingOptions.LOG, LoggingPropertyMappers.resolveLogHandler(LoggingOptions.DEFAULT_LOG_HANDLER.name()))
@@ -263,6 +266,10 @@ public final class LoggingPropertyMappers implements PropertyMapperGrouping {
         );
     }
 
+    private String transformConsoleColor(String value, ConfigSourceInterceptorContext context) {
+        return Optional.ofNullable(value).orElseGet(() -> Boolean.toString(Picocli.hasColorSupport()));
+    }
+
     public static boolean isConsoleEnabled() {
         return isHandlerEnabled(LoggingOptions.Handler.console);
     }
@@ -424,7 +431,7 @@ public final class LoggingPropertyMappers implements PropertyMapperGrouping {
         return LoggingOptions.DEFAULT_LOG_FORMAT;
     }
 
-    private static String upperCase(String value, ConfigSourceInterceptorContext context) {
+    static String upperCase(String value, ConfigSourceInterceptorContext context) {
         return value.toUpperCase(Locale.ROOT);
     }
 

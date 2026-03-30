@@ -22,7 +22,11 @@ import { CapabilityConfig } from "./CapabilityConfig";
 import { GeneralSettings } from "./GeneralSettings";
 import { LoginSettings } from "./LoginSettings";
 import { useState } from "react";
+<<<<<<< HEAD
+import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil"; // TIDECLOAK IMPLEMENTATION
+=======
 import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil";
+>>>>>>> origin/release/0.13.26
 
 const NewClientFooter = (newClientForm: any) => {
   const { t } = useTranslation();
@@ -91,10 +95,17 @@ export default function NewClientForm() {
       });
       addAlert(t("createClientSuccess"), AlertVariant.success);
 
+<<<<<<< HEAD
+      // TIDECLOAK IMPLEMENTATION
+      const signSettings = async () => {
+        const tideComponent = await findTideComponent(adminClient, realm);
+
+=======
       // TIDE IMPLEMENTATION
       const signSettings = async () => {
         const tideComponent = await findTideComponent(adminClient, realm);
   
+>>>>>>> origin/release/0.13.26
         if (tideComponent) {
           try {
             await adminClient.tideAdmin.signIdpSettings();
@@ -102,9 +113,15 @@ export default function NewClientForm() {
             addError("SignSettingsError", error);
           }
         }
+<<<<<<< HEAD
+
+      }
+
+=======
   
       }
     
+>>>>>>> origin/release/0.13.26
       signSettings();
 
       navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
@@ -125,6 +142,7 @@ export default function NewClientForm() {
             onClose={() => navigate(toClients({ realm }))}
             navAriaLabel={`${title} steps`}
             onSave={save}
+            isProgressive
             footer={<NewClientFooter {...form} />}
           >
             <WizardStep

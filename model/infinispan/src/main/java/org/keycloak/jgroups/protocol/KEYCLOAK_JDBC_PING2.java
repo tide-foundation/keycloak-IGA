@@ -17,6 +17,15 @@
 
 package org.keycloak.jgroups.protocol;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+import org.keycloak.connections.jpa.JpaConnectionProviderFactory;
+
 import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.PhysicalAddress;
@@ -28,14 +37,6 @@ import org.jgroups.util.ExtendedUUID;
 import org.jgroups.util.NameCache;
 import org.jgroups.util.Responses;
 import org.jgroups.util.UUID;
-import org.keycloak.connections.jpa.JpaConnectionProviderFactory;
-
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * Enhanced JDBC_PING2 to handle entries transactionally.
@@ -239,8 +240,18 @@ public class KEYCLOAK_JDBC_PING2 extends JDBC_PING2 {
     }
 
     @Override
-    protected Connection getConnection() {
-        return factory.getConnection();
+    protected Connection getConnection() throws SQLException {
+        try {
+            return factory.getConnection();
+        } catch (Exception e) {
+            var cause = e.getCause();
+            if (cause instanceof SQLException sql) {
+                // it should hit this branch 100% of the time
+                throw sql;
+            }
+            //... but to be future proof ...
+            throw new SQLException(e);
+        }
     }
 
     public void setJpaConnectionProviderFactory(JpaConnectionProviderFactory factory) {

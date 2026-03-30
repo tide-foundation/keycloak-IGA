@@ -9,7 +9,10 @@ type DynamicComponentProps = {
   isNew?: boolean;
   convertToName?: (name: string) => string;
   isTideProvider?: boolean; //TIDECLOAK IMPLEMENTATION
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/release/0.13.26
 };
 const tideProviderShowComponentList = [
   "ImageURL",

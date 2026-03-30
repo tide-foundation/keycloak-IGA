@@ -17,7 +17,24 @@
 
 package org.keycloak.storage.datastore;
 
-import org.jboss.logging.Logger;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import jakarta.ws.rs.core.MediaType;
+
 import org.keycloak.common.Profile;
 import org.keycloak.common.Profile.Feature;
 import org.keycloak.common.enums.SslRequired;
@@ -110,26 +127,12 @@ import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.UserStorageProviderModel;
 import org.keycloak.storage.UserStorageUtil;
 import org.keycloak.storage.federated.UserFederatedStorageProvider;
+import org.keycloak.util.Booleans;
 import org.keycloak.util.JsonSerialization;
 import org.keycloak.utils.StringUtil;
 import org.keycloak.validation.ValidationUtil;
 
-import jakarta.ws.rs.core.MediaType;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import org.jboss.logging.Logger;
 
 import static org.keycloak.models.utils.DefaultRequiredActions.getDefaultRequiredActionCaseInsensitively;
 import static org.keycloak.models.utils.ModelToRepresentation.stripRealmAttributesIncludedAsFields;
@@ -897,6 +900,7 @@ public class DefaultExportImportManager implements ExportImportManager {
 
         updateCibaSettings(rep, realm);
         updateParSettings(rep, realm);
+        validateClientAndRealmTimeouts(realm);
         session.clientPolicy().updateRealmModelFromRepresentation(realm, rep);
 
         if (rep.getSmtpServer() != null) {
@@ -974,7 +978,9 @@ public class DefaultExportImportManager implements ExportImportManager {
         // Import users just to user storage. Don't federate
         UserModel user = UserStoragePrivateUtil.userLocalStorage(session).addUser(newRealm, userRep.getId(), userRep.getUsername(), false, false);
         user.setEnabled(userRep.isEnabled() != null && userRep.isEnabled());
-        user.setCreatedTimestamp(userRep.getCreatedTimestamp());
+        if (userRep.getCreatedTimestamp() != null) {
+            user.setCreatedTimestamp(userRep.getCreatedTimestamp());
+        }
         user.setEmail(userRep.getEmail());
         if (userRep.isEmailVerified() != null) user.setEmailVerified(userRep.isEmailVerified());
         user.setFirstName(userRep.getFirstName());
@@ -1237,7 +1243,6 @@ public class DefaultExportImportManager implements ExportImportManager {
         model.setFullSyncPeriod(fedModel.getFullSyncPeriod());
         model.setPriority(fedModel.getPriority());
         model.setChangedSyncPeriod(fedModel.getChangedSyncPeriod());
-        model.setLastSync(fedModel.getLastSync());
         if (fedModel.getConfig() != null) {
             for (Map.Entry<String, String> entry : fedModel.getConfig().entrySet()) {
                 model.getConfig().putSingle(entry.getKey(), entry.getValue());
@@ -1512,7 +1517,7 @@ public class DefaultExportImportManager implements ExportImportManager {
         String defaultProvider = null;
         if (rep.getIdentityProviders() != null) {
             for (IdentityProviderRepresentation i : rep.getIdentityProviders()) {
-                if (i.isEnabled() && i.isAuthenticateByDefault()) {
+                if (i.isEnabled() && Booleans.isTrue(i.isAuthenticateByDefault())) {
                     defaultProvider = i.getProviderId();
                     break;
                 }
@@ -1726,6 +1731,26 @@ public class DefaultExportImportManager implements ExportImportManager {
                         provider.addMember(orgModel, m);
                     }
                 }
+            }
+        }
+    }
+
+    private void validateClientAndRealmTimeouts(RealmModel realm) {
+        if (realm.isRememberMe()) {
+            if (realm.getClientSessionIdleTimeout() > Math.max(realm.getSsoSessionIdleTimeout(), realm.getSsoSessionIdleTimeoutRememberMe())) {
+                throw new ModelException("Client session idle timeout cannot exceed realm SSO session idle timeout and RememberMe idle timeout.");
+            }
+
+            if (realm.getClientSessionMaxLifespan() > Math.max(realm.getSsoSessionMaxLifespan(), realm.getSsoSessionMaxLifespanRememberMe())) {
+                throw new ModelException("Client session max lifespan cannot exceed realm SSO session max lifespan and RememberMe Max span.");
+            }
+        } else {
+            if (realm.getClientSessionIdleTimeout() > realm.getSsoSessionIdleTimeout()) {
+                throw new ModelException("Client Session Idle Timeout cannot be greater than Realm SSO Idle Timeout.");
+            }
+
+            if (realm.getClientSessionMaxLifespan() > realm.getSsoSessionMaxLifespan()) {
+                throw new ModelException("Client session max lifespan cannot exceed realm SSO session max lifespan.");
             }
         }
     }

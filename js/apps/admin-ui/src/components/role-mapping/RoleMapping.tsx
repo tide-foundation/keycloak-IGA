@@ -82,7 +82,11 @@ export const ServiceRole = ({ role, client, id, type }: Row) => {
 
         if (type === "users" ) {
           const result = await adminClient.tideUsersExt.getUserRoleDraftStatus({ userId: id!, roleId: role.id!}); // TIDE IMPLEMENTATION
+<<<<<<< HEAD
+
+=======
           
+>>>>>>> origin/release/0.13.26
           setRoleStatus(result.draftStatus ?? "");
           setDeleteStatus(result.deleteStatus ?? "");
 

@@ -17,6 +17,8 @@
 
 package org.keycloak.storage.ldap;
 
+<<<<<<< HEAD
+=======
 import static org.keycloak.storage.UserStorageProviderModel.IMPORT_ENABLED;
 
 import org.keycloak.common.util.MultivaluedHashMap;
@@ -25,10 +27,18 @@ import org.keycloak.storage.UserStorageProvider;
 
 import javax.naming.directory.SearchControls;
 
+>>>>>>> origin/release/0.13.26
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
+import javax.naming.directory.SearchControls;
+
+import org.keycloak.common.util.MultivaluedHashMap;
+import org.keycloak.models.LDAPConstants;
+import org.keycloak.storage.UserStorageProvider;
+
+import static org.keycloak.storage.UserStorageProviderModel.IMPORT_ENABLED;
 
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>

@@ -17,6 +17,12 @@
 
 package org.keycloak.models.cache.infinispan.entities;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
 import org.keycloak.common.util.MultivaluedHashMap;
 import org.keycloak.models.GroupModel;
 import org.keycloak.models.GroupModel.Type;
@@ -25,11 +31,6 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.models.cache.infinispan.DefaultLazyLoader;
 import org.keycloak.models.cache.infinispan.LazyLoader;
-
-import java.util.Collections;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
@@ -43,6 +44,11 @@ public class CachedGroup extends AbstractRevisioned implements InRealm {
     private final String parentId;
     private final LazyLoader<GroupModel, MultivaluedHashMap<String, String>> attributes;
     private final LazyLoader<GroupModel, Set<String>> roleMappings;
+    /**
+     * Use this so the cache invalidation can retrieve any previously cached role mappings to determine if this
+     * items should be evicted.
+     */
+    private Set<String> cachedRoleMappings = new HashSet<>();
     private final LazyLoader<GroupModel, Set<String>> subGroups;
     private final Type type;
 
@@ -68,11 +74,16 @@ public class CachedGroup extends AbstractRevisioned implements InRealm {
     }
 
     public Set<String> getRoleMappings(KeycloakSession session, Supplier<GroupModel> group) {
-        // it may happen that groups were not loaded before so we don't actually need to invalidate entries in the cache
-        if (group == null) {
-            return Collections.emptySet();
-        }
-        return roleMappings.get(session, group);
+        cachedRoleMappings = roleMappings.get(session, group);
+        return cachedRoleMappings;
+    }
+
+    /**
+     * Use this so the cache invalidation can retrieve any previously cached role mappings to determine if this
+     * items should be evicted. Will return an empty list if it hasn't been cached yet (and then no invalidation is necessary)
+     */
+    public Set<String> getCachedRoleMappings() {
+        return cachedRoleMappings;
     }
 
     public String getName() {

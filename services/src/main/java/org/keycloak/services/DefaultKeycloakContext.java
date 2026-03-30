@@ -17,8 +17,14 @@
 
 package org.keycloak.services;
 
-import io.opentelemetry.api.trace.Span;
+import java.net.URI;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
 import jakarta.ws.rs.core.HttpHeaders;
+
 import org.keycloak.Token;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.http.HttpRequest;
@@ -36,16 +42,11 @@ import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.representations.JsonWebToken;
 import org.keycloak.sessions.AuthenticationSessionModel;
-import org.keycloak.theme.Theme;
 import org.keycloak.tracing.TracingAttributes;
 import org.keycloak.tracing.TracingProvider;
 import org.keycloak.urls.UrlType;
 
-import java.net.URI;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import io.opentelemetry.api.trace.Span;
 
 /**
  * @author <a href="mailto:sthorger@redhat.com">Stian Thorgersen</a>

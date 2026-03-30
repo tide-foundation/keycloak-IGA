@@ -1,10 +1,16 @@
 package org.keycloak.tests.admin.realm;
 
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+
 import org.keycloak.admin.client.resource.RoleResource;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.events.admin.OperationType;
@@ -20,12 +26,8 @@ import org.keycloak.testframework.realm.RoleConfigBuilder;
 import org.keycloak.tests.utils.Assert;
 import org.keycloak.tests.utils.admin.AdminEventPaths;
 
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -128,6 +130,14 @@ public class RealmRolesCRUDTest extends AbstractRealmRolesTest {
 
         assertFalse(managedRealm.admin().roles().get("role-a").toRepresentation().isComposite());
         assertEquals(0, managedRealm.admin().roles().get("role-a").getRoleComposites().size());
+
+        managedRealm.admin().roles().create(RoleConfigBuilder.create().name("role-z").build());
+        managedRealm.admin().roles().get("role-z").addComposites(l);
+        // show that I can delete a role that has composite roles
+        managedRealm.admin().roles().deleteRole("role-z");
+        // show that the roles still exist
+        assertNotNull(managedRealm.admin().roles().get("role-b").toRepresentation().getId());
+        assertNotNull(managedRealm.admin().clients().get(clientA.getId()).roles().get("role-c").toRepresentation().getId());
     }
 
     @Test

@@ -37,7 +37,11 @@ export const GeneralSettings = ({
 
       <TextControl name="displayName" label={t("displayName")} />
       {/* TIDECLOAK IMPLEMENTATION */}
+<<<<<<< HEAD
+      <ClientIdSecret create={create} isTideIdp={id === "tide"} />
+=======
       <ClientIdSecret create={create} isTideIdp={id === "tide"} /> 
+>>>>>>> origin/release/0.13.26
       <DisplayOrder />
     </>
   );

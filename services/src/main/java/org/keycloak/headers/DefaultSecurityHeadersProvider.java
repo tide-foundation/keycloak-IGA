@@ -16,22 +16,25 @@
  */
 package org.keycloak.headers;
 
-import org.jboss.logging.Logger;
-import org.keycloak.models.BrowserSecurityHeaders;
-import org.keycloak.models.ContentSecurityPolicyBuilder;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.RealmModel;
+import java.util.Collections;
+import java.util.Map;
 
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
-import java.util.Collections;
-import java.util.Map;
+
+import org.keycloak.models.BrowserSecurityHeaders;
+import org.keycloak.models.ContentSecurityPolicyBuilder;
+import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.RealmModel;
+
+import org.jboss.logging.Logger;
 
 import static jakarta.ws.rs.HttpMethod.HEAD;
 import static jakarta.ws.rs.HttpMethod.OPTIONS;
+
 import static org.keycloak.models.BrowserSecurityHeaders.CONTENT_SECURITY_POLICY;
 
 public class DefaultSecurityHeadersProvider implements SecurityHeadersProvider {
@@ -90,6 +93,7 @@ public class DefaultSecurityHeadersProvider implements SecurityHeadersProvider {
         addHeader(BrowserSecurityHeaders.STRICT_TRANSPORT_SECURITY, headers);
         addHeader(BrowserSecurityHeaders.X_CONTENT_TYPE_OPTIONS, headers);
         addHeader(BrowserSecurityHeaders.REFERRER_POLICY, headers);
+        addHeader(BrowserSecurityHeaders.X_ROBOTS_TAG, headers);
     }
 
     private void addRestHeaders(MultivaluedMap<String, Object> headers) {
@@ -97,6 +101,7 @@ public class DefaultSecurityHeadersProvider implements SecurityHeadersProvider {
         addHeader(BrowserSecurityHeaders.X_FRAME_OPTIONS, headers);
         addHeader(BrowserSecurityHeaders.X_CONTENT_TYPE_OPTIONS, headers);
         addHeader(BrowserSecurityHeaders.REFERRER_POLICY, headers);
+        addHeader(BrowserSecurityHeaders.X_ROBOTS_TAG, headers);
     }
 
     private void addHtmlHeaders(MultivaluedMap<String, Object> headers) {

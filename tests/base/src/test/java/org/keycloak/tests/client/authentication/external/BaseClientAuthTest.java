@@ -1,7 +1,7 @@
 package org.keycloak.tests.client.authentication.external;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import java.util.UUID;
+
 import org.keycloak.authentication.authenticators.client.FederatedJWTClientAuthenticator;
 import org.keycloak.broker.oidc.OIDCIdentityProviderConfig;
 import org.keycloak.broker.oidc.OIDCIdentityProviderFactory;
@@ -16,7 +16,8 @@ import org.keycloak.testframework.realm.RealmConfig;
 import org.keycloak.testframework.realm.RealmConfigBuilder;
 import org.keycloak.testsuite.util.IdentityProviderBuilder;
 
-import java.util.UUID;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 @KeycloakIntegrationTest(config = ClientAuthIdpServerConfig.class)
 public class BaseClientAuthTest extends AbstractBaseClientAuthTest {
@@ -88,6 +89,17 @@ public class BaseClientAuthTest extends AbstractBaseClientAuthTest {
     public void testClientAssertionsNotSupported() {
         realm.updateIdentityProviderWithCleanup(IDP_ALIAS, rep -> {
             rep.getConfig().remove(OIDCIdentityProviderConfig.SUPPORTS_CLIENT_ASSERTIONS);
+        });
+
+        JsonWebToken jwt = createDefaultToken();
+        assertFailure(doClientGrant(jwt));
+        assertFailure(null, TOKEN_ISSUER, EXTERNAL_CLIENT_ID, jwt.getId(), "client_not_found", events.poll());
+    }
+
+    @Test
+    public void testDisabledIdentityProvider() {
+        realm.updateIdentityProviderWithCleanup(IDP_ALIAS, rep -> {
+            rep.setEnabled(false);
         });
 
         JsonWebToken jwt = createDefaultToken();

@@ -19,6 +19,25 @@ export const StringComponent = ({
   const { register } = useFormContext();
 
   return (
+<<<<<<< HEAD
+    <div style={{ display: isHidden ? 'none' : undefined }}>{/* TIDECLOAK IMPLEMENTATION */}
+      <TextControl
+        name={convertToName(name!)}
+        label={t(label!)}
+        labelIcon={t(helpText!)}
+        data-testid={name}
+        isDisabled={isDisabled} // TIDECLOAK IMPLEMENTATION
+        defaultValue={defaultValue?.toString()} // TIDECLOAK IMPLEMENTATION
+        rules={{
+          required: {
+            value: !!required,
+            message: t("required"),
+          },
+        }}
+        {...props}
+      />
+    </div>
+=======
     <FormGroup
       style={{ display: isHidden ? 'none' : undefined }} // TIDECLOAK IMPLEMENTATION
       label={t(label!)}
@@ -34,5 +53,6 @@ export const StringComponent = ({
         {...register(convertToName(name!))}
       />
     </FormGroup>
+>>>>>>> origin/release/0.13.26
   );
 };

@@ -19,11 +19,15 @@
 
 package org.keycloak.protocol.oidc.tokenexchange;
 
+import java.util.Arrays;
+import java.util.List;
+
 import jakarta.ws.rs.core.Response;
+
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OAuthErrorException;
 import org.keycloak.broker.provider.BrokeredIdentityContext;
-import org.keycloak.broker.provider.IdentityProvider;
+import org.keycloak.broker.provider.UserAuthenticationIdentityProvider;
 import org.keycloak.events.Details;
 import org.keycloak.events.Errors;
 import org.keycloak.models.UserModel;
@@ -31,9 +35,6 @@ import org.keycloak.models.UserSessionModel;
 import org.keycloak.protocol.oidc.TokenExchangeContext;
 import org.keycloak.services.CorsErrorResponseException;
 import org.keycloak.services.managers.UserSessionManager;
-
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Provider for external-internal token exchange
@@ -101,8 +102,8 @@ public class ExternalToInternalTokenExchangeProvider extends StandardTokenExchan
         externalExchangeContext.provider().exchangeExternalComplete(userSession, context, formParams);
 
         // this must exist so that we can obtain access token from user session if idp's store tokens is off
-        userSession.setNote(IdentityProvider.EXTERNAL_IDENTITY_PROVIDER, externalExchangeContext.idpModel().getAlias());
-        userSession.setNote(IdentityProvider.FEDERATED_ACCESS_TOKEN, subjectToken);
+        userSession.setNote(UserAuthenticationIdentityProvider.EXTERNAL_IDENTITY_PROVIDER, externalExchangeContext.idpModel().getAlias());
+        userSession.setNote(UserAuthenticationIdentityProvider.FEDERATED_ACCESS_TOKEN, subjectToken);
 
         context.addSessionNotesToUserSession(userSession);
 

@@ -17,35 +17,27 @@
 
 package org.keycloak.testsuite.organization.admin;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.keycloak.testsuite.broker.BrokerTestTools.waitForPage;
-
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
-import org.hamcrest.Matchers;
-import org.jboss.arquillian.graphene.page.Page;
+
 import org.keycloak.admin.client.resource.OrganizationResource;
-import org.keycloak.models.OrganizationModel;
-import org.keycloak.admin.client.resource.UsersResource;
-import org.keycloak.models.OrganizationModel.IdentityProviderRedirectMode;
-import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.UsersResource;
+import org.keycloak.models.OrganizationModel;
+import org.keycloak.models.OrganizationModel.IdentityProviderRedirectMode;
 import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationDomainRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
-import org.keycloak.testsuite.Assert;
 import org.keycloak.testsuite.AbstractAdminTest;
+import org.keycloak.testsuite.Assert;
 import org.keycloak.testsuite.admin.ApiUtil;
 import org.keycloak.testsuite.admin.Users;
 import org.keycloak.testsuite.broker.BrokerConfiguration;
@@ -58,6 +50,19 @@ import org.keycloak.testsuite.pages.LoginPage;
 import org.keycloak.testsuite.pages.SelectOrganizationPage;
 import org.keycloak.testsuite.pages.UpdateAccountInformationPage;
 import org.keycloak.testsuite.util.TestCleanup;
+
+import org.hamcrest.Matchers;
+import org.jboss.arquillian.graphene.page.Page;
+
+import static org.keycloak.testsuite.broker.BrokerTestTools.waitForPage;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author <a href="mailto:psilva@redhat.com">Pedro Igor</a>
@@ -235,7 +240,7 @@ public abstract class AbstractOrganizationTest extends AbstractAdminTest  {
         if (firstTimeLogin) {
             waitForPage(driver, "update account information", false);
             updateAccountInformationPage.assertCurrent();
-            Assert.assertTrue("We must be on correct realm right now",
+            assertTrue("We must be on correct realm right now",
                     driver.getCurrentUrl().contains("/auth/realms/" + bc.consumerRealmName() + "/"));
             log.debug("Updating info on updateAccount page");
             assertFalse(driver.getPageSource().contains("kc.org"));
@@ -267,7 +272,7 @@ public abstract class AbstractOrganizationTest extends AbstractAdminTest  {
     protected UserRepresentation getUserRepresentation(String realm, String userEmail) {
         UsersResource users = adminClient.realm(realm).users();
         List<UserRepresentation> reps = users.searchByEmail(userEmail, true);
-        Assert.assertFalse(reps.isEmpty());
+        assertFalse(reps.isEmpty());
         Assert.assertEquals(1, reps.size());
         return reps.get(0);
     }
@@ -300,14 +305,16 @@ public abstract class AbstractOrganizationTest extends AbstractAdminTest  {
         oauth.clientId("broker-app");
         loginPage.open(bc.consumerRealmName());
         log.debug("Logging in");
-        Assert.assertFalse(loginPage.isPasswordInputPresent());
-        Assert.assertFalse(loginPage.isSocialButtonPresent(bc.getIDPAlias()));
-        Assert.assertTrue(loginPage.isRegisterLinkPresent());
+        assertTrue(loginPage.isUsernameInputPresent());
+        assertNull(loginPage.getUsernameInputError());
+        assertFalse(loginPage.isPasswordInputPresent());
+        assertFalse(loginPage.isSocialButtonPresent(bc.getIDPAlias()));
+        assertTrue(loginPage.isRegisterLinkPresent());
         if (idpAlias != null) {
             if (isVisible) {
-                Assert.assertTrue(loginPage.isSocialButtonPresent(idpAlias));
+                assertTrue(loginPage.isSocialButtonPresent(idpAlias));
             } else {
-                Assert.assertFalse(loginPage.isSocialButtonPresent(idpAlias));
+                assertFalse(loginPage.isSocialButtonPresent(idpAlias));
             }
         }
         loginPage.loginUsername(username);

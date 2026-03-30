@@ -5,12 +5,20 @@ import {
   createNamedContext,
   useRequiredContext,
 } from "@keycloak/keycloak-ui-shared";
+<<<<<<< HEAD
+import type { TideCloak } from "@tidecloak/js"; // TIDECLOAK IMPLEMENTATION
+=======
+>>>>>>> origin/release/0.13.26
 import type { Environment } from "./environment";
 
 type KeycloakInstance = KeycloakContext<BaseEnvironment>["keycloak"];
 
 export type AdminClientProps = {
+<<<<<<< HEAD
+  keycloak: TideCloak; // TIDECLOAK IMPLEMENTATION
+=======
   keycloak: KeycloakInstance;
+>>>>>>> origin/release/0.13.26
   adminClient: KeycloakAdminClient;
 };
 
@@ -21,7 +29,11 @@ export const AdminClientContext = createNamedContext<
 export const useAdminClient = () => useRequiredContext(AdminClientContext);
 
 export async function initAdminClient(
+<<<<<<< HEAD
+  keycloak: TideCloak, // TIDECLOAK IMPLEMENTATION
+=======
   keycloak: KeycloakInstance,
+>>>>>>> origin/release/0.13.26
   environment: Environment,
 ) {
   const adminClient = new KeycloakAdminClient();

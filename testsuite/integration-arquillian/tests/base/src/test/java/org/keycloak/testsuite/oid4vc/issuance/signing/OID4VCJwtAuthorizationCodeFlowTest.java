@@ -19,7 +19,9 @@ package org.keycloak.testsuite.oid4vc.issuance.signing;
 
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * JWT-specific authorization code flow tests with authorization details and claims validation.
@@ -41,7 +43,12 @@ public class OID4VCJwtAuthorizationCodeFlowTest extends OID4VCAuthorizationCodeF
 
     @Override
     protected String getExpectedClaimPath() {
-        return "given_name";
+        return "family_name";
+    }
+
+    @Override
+    protected String getFirstNameProtocolMapperName() {
+        return "givenName";
     }
 
     @Override

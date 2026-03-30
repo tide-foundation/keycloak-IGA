@@ -17,15 +17,26 @@
 
 package org.keycloak.quarkus.runtime.services;
 
+<<<<<<< HEAD
+import java.util.Objects;
+
+import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
+import org.keycloak.services.util.ObjectMapperResolver;
+
+=======
+>>>>>>> origin/release/0.13.26
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Handler;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
+<<<<<<< HEAD
+=======
 import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 import org.keycloak.services.util.ObjectMapperResolver;
 
 import java.util.Objects;
+>>>>>>> origin/release/0.13.26
 
 /**
  * This filter rejects all paths that need normalization as of RFC3986 or that have double slashes.
@@ -50,6 +61,24 @@ public class RejectNonNormalizedPathFilter implements Handler<RoutingContext> {
                 jsonString = "";
             }
             routingContext.response().setStatusCode(400).end(jsonString);
+<<<<<<< HEAD
+        } else if (routingContext.request().path().contains(";")) {
+            // RFC 6570 defines matrix parameters that are separated with a semicolon in each path segment.
+            // Keycloak does not use @MatrixParam, therefore any URL containing a semicolon is treated as invalid.
+            // Once Keycloak starts using them in any of its APIs, consider enabling them only for specific paths,
+            // as URL filtering would otherwise be quite hard for reverse proxies.
+            LOGGER.debugf("Invalid character ';' found in the request path", routingContext.request().path());
+            OAuth2ErrorRepresentation error = new OAuth2ErrorRepresentation("invalidCharacter", "Request path contains invalid character ';'");
+            routingContext.response().headers().add("Content-Type", "application/json; charset=UTF-8");
+            String jsonString;
+            try {
+                jsonString = MAPPER.writeValueAsString(error);
+            } catch (JsonProcessingException e) {
+                jsonString = "";
+            }
+            routingContext.response().setStatusCode(400).end(jsonString);
+=======
+>>>>>>> origin/release/0.13.26
         } else {
             routingContext.next();
         }

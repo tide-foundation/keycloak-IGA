@@ -22,7 +22,11 @@
     <parent>
         <artifactId>keycloak-parent</artifactId>
         <groupId>org.keycloak</groupId>
+<<<<<<< HEAD
+        <version>26.5.5</version>
+=======
         <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
     </parent>
 
     <name>Keycloak Administration UI</name>
@@ -32,6 +36,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>admin-v2</module>
         <module>admin-ui-ext</module>
     </modules>
 

@@ -1,6 +1,11 @@
 # Keycloak on Quarkus
 
-The module holds the codebase to run Keycloak on top of [Quarkus](https://quarkus.io/):
+## Before you start
+
+This section describes how to run Keycloak in *Quarkus development mode*. Before continuing, make sure you have already followed the main project [build
+and prerequisites](https://github.com/keycloak/keycloak/blob/main/docs/building.md) documentation, which explains all required tools (JDK, Maven, etc.).
+
+This module holds the codebase to run Keycloak on top of [Quarkus](https://quarkus.io/):
 
 ```
 ├── container
@@ -23,8 +28,11 @@ The module holds the codebase to run Keycloak on top of [Quarkus](https://quarku
 ``` 
 
 ## Prerequisites
-Ensure you have at least JDK 11 installed.
-Your shell is located at the `quarkus` submodule. (`cd quarkus`)
+Before using this module, make sure you have a compatible JDK installed. (See [main build instructions](https://github.com/keycloak/keycloak/blob/main/docs/building.md)). Your shell is located at the `quarkus` submodule:
+
+    <KEYCLOAK_HOME> $ cd quarkus
+
+* `KEYCLOAK_HOME` is the directory where you cloned the Keycloak repository.
 
 ### Activating the Module from the root directory
 When a build from the project root directory is started, this module is only enabled if your installed JDK is 11 or newer. 
@@ -33,7 +41,7 @@ When a build from the project root directory is started, this module is only ena
 
 To build this module and produce the artifacts to run a server, you first need to build the main codebase once. This step will put required modules of keycloak into your local maven cache in package `org.keycloak`:
 
-    ../mvnw -f ../pom.xml clean install -DskipTestsuite -DskipExamples -DskipTests
+    <KEYCLOAK_HOME>/quarkus $ ../mvnw -f ../pom.xml clean install -DskipTestsuite -DskipExamples -DskipTests
 
 This build can take some time, usually around two to four minutes depending on your hardware, and even longer depending on the maven packages that need to be downloaded and installed to the cache.
 
@@ -41,22 +49,18 @@ This build can take some time, usually around two to four minutes depending on y
 
 After the main codebase is built, you can build the quarkus distribution, including the zip and tar.gz files, by invoking the following command:
     
-    ../mvnw clean install -DskipTests
+    <KEYCLOAK_HOME>/quarkus $ ../mvnw clean install -DskipTests
 
 This command produces the distribution artifacts as ZIP and TAR file. The artifacts for the quarkus distribution will be available at the `/dist/target` subdirectory afterwards.
 
 As an alternative, you can build the distribution artifacts directly without a rebuild of the code by running the following command:
 
-    ../mvnw -f dist/pom.xml clean install
+    <KEYCLOAK_HOME>/quarkus $ ~/keycloak/quarkus $ ../mvnw -f dist/pom.xml clean install
 
 ## Running in Keycloak development mode
 When you start Keycloak in production mode, the HTTP port is disabled by default, and you need to provide the key material to configure HTTPS, a hostname and other configuration suitable for production. 
 
-For development purposes, you can run the server in development mode instead using `start-dev`:
-
-    java -jar server/target/lib/quarkus-run.jar start-dev
-
-This spins up Keycloak using a development database (h2-file) and with insecure HTTP enabled.
+For development purposes, you can run the server in development mode instead using `start-dev`.
 
 ### Running from your IDE
 Alternatively, you can run the server in development mode from your IDE. For that, run the `org.keycloak.Keycloak` main class in the `tests/junit5` directory.
@@ -70,22 +74,26 @@ Set the `kc.home.dir` environment variable for keeping state between startups:
     
     -Dkc.home.dir=.kc 
 
-## Contributing
-Please make sure to read our [Contribution Guidelines](../CONTRIBUTING.md) before contributing.
+### Running from the command line
 
 To run the server in Quarkus' development mode, invoke the following command:
 
-    ../mvnw -f server/pom.xml compile quarkus:dev -Dquarkus.args="start-dev"
+    <KEYCLOAK_HOME>/quarkus $ ../mvnw -f server/pom.xml compile quarkus:dev -Dkc.config.built=true -Dquarkus.args="start-dev"
 
 You will be able to attach your debugger to port `5005`.
 
 For debugging the build steps right after start, you can suspend the JVM by running:
 
-    ../mvnw -f server/pom.xml -Dsuspend=true compile quarkus:dev -Dquarkus.args="start-dev"
+    <KEYCLOAK_HOME>/quarkus $ ../mvnw -f server/pom.xml -Dsuspend=true compile quarkus:dev -Dkc.config.built=true -Dquarkus.args="start-dev"
+
+**Expected behavior:** The server will start on **http://localhost:8080**.
 
 When running using `quarkus:dev` you are able to do live coding whenever you change / add code in the `server` module, for example when creating a new custom provider.
 
 There are currently limitations when running in development mode that block us to use all capabilities the Quarkus development mode has to offer. For instance, hot-reload of transient dependencies from keycloak (e.g.: keycloak-* dependencies) do not work. Expect more improvements in this area, and feel free to reach out if you want to help, using our [discussions](https://github.com/keycloak/keycloak/discussions/categories/keycloak-x-quarkus-distribution) or the development mailing list.
+
+## Contributing
+Please make sure to read our [Contribution Guidelines](../CONTRIBUTING.md) before contributing.
 
 ## Running tests
 Keycloaks Quarkus distribution module uses a new testsuite more integrated into the quarkus platform.
@@ -111,7 +119,7 @@ There are also some container based tests to check if Keycloak starts using one 
 
 These tests are disabled by default. They using Quarkus development mode predefined database containers by default and can be run in the `tests` subdirectory by using e.g. 
 
-    ../mvnw clean install -Ptest-database -Dtest=MariaDBDistTest
+    <KEYCLOAK_HOME>/quarkus $ ../mvnw clean install -Ptest-database -Dtest=MariaDBDistTest
 
 to spin up a MariaDB container and start Keycloak with it.
 
@@ -119,12 +127,12 @@ To use a specific database container image, use the option `-Dkc.db.postgresql.c
 
 Example:
 
-    ../mvnw clean install -Ptest-database -Dtest=PostgreSQLDistTest -Dkc.db.postgresql.container.image=postgres:alpine
+    <KEYCLOAK_HOME>/quarkus $ ../mvnw clean install -Ptest-database -Dtest=PostgreSQLDistTest -Dkc.db.postgresql.container.image=postgres:alpine
     
 ### Updating Expectations
 
-Changing to the help output will cause HelpCommandDistTest to fail. You may use:
+Changing to the help output will cause HelpCommandDistTest to fail. This test uses [ApprovalTests](https://github.com/approvals/ApprovalTests.Java) which creates `.received.txt` files containing the actual output when tests fail. To update the expected output (see [Approving The Result](https://github.com/approvals/ApprovalTests.Java/blob/master/approvaltests/docs/tutorials/GettingStarted.md#approving-the-result)) run:
 
-    KEYCLOAK_REPLACE_EXPECTED=true ../mvnw clean install -Dtest=HelpCommandDistTest 
+   KEYCLOAK_REPLACE_EXPECTED=true ../mvnw clean install -Dtest=HelpCommandDistTest 
 
-to replace the expected output, then use a diff to ensure the changes look good.
+then use a diff to ensure the changes look good.

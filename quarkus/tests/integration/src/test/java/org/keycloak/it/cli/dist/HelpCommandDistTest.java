@@ -17,24 +17,16 @@
 
 package org.keycloak.it.cli.dist;
 
-import static org.keycloak.quarkus.runtime.cli.command.AbstractAutoBuildCommand.OPTIMIZED_BUILD_OPTION_LONG;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
-import org.apache.commons.io.FileUtils;
-import org.approvaltests.Approvals;
-import org.hamcrest.MatcherAssert;
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.OS;
 import org.keycloak.it.junit5.extension.CLIResult;
 import org.keycloak.it.junit5.extension.DistributionTest;
 import org.keycloak.it.junit5.extension.RawDistOnly;
+import org.keycloak.it.junit5.extension.WithEnvVars;
 import org.keycloak.it.utils.KeycloakDistribution;
+import org.keycloak.quarkus.runtime.Environment;
 import org.keycloak.quarkus.runtime.cli.command.BootstrapAdmin;
 import org.keycloak.quarkus.runtime.cli.command.BootstrapAdminService;
 import org.keycloak.quarkus.runtime.cli.command.BootstrapAdminUser;
@@ -43,12 +35,20 @@ import org.keycloak.quarkus.runtime.cli.command.Export;
 import org.keycloak.quarkus.runtime.cli.command.Import;
 import org.keycloak.quarkus.runtime.cli.command.Start;
 import org.keycloak.quarkus.runtime.cli.command.StartDev;
-
-import io.quarkus.test.junit.main.Launch;
 import org.keycloak.quarkus.runtime.cli.command.UpdateCompatibility;
 import org.keycloak.quarkus.runtime.cli.command.UpdateCompatibilityCheck;
 import org.keycloak.quarkus.runtime.cli.command.UpdateCompatibilityMetadata;
 
+import io.quarkus.test.junit.main.Launch;
+import org.apache.commons.io.FileUtils;
+import org.approvaltests.Approvals;
+import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
+import org.junit.jupiter.api.Test;
+
+import static org.keycloak.quarkus.runtime.cli.command.AbstractAutoBuildCommand.OPTIMIZED_BUILD_OPTION_LONG;
+
+@WithEnvVars({"KEYCLOAK_COMMAND_MODE", "ALL"})
 @DistributionTest
 @RawDistOnly(reason = "Verifying the help message output doesn't need long spin-up of docker dist tests.")
 public class HelpCommandDistTest {
@@ -193,7 +193,7 @@ public class HelpCommandDistTest {
             for (String cmd : List.of("", "start", "start-dev", "build")) {
                 String debugOption = "--debug";
 
-                if (OS.WINDOWS.isCurrentOs()) {
+                if (Environment.isWindows()) {
                     debugOption = "--debug=8787";
                 }
 
@@ -211,16 +211,14 @@ public class HelpCommandDistTest {
         // normalize the output to prevent changes around the feature toggles or events to mark the output to differ
         String output = cliResult.getOutput()
                 .replaceAll("((Disables|Enables) a set of one or more features. Possible values are: )[^.]{30,}", "$1<...>")
-                .replaceAll("(create a metric.\\s+Possible values are:)[^.]{30,}.(Available|only|when|user|event|metrics|are|enabled.| )*", "$1<...>");
+                .replaceAll("(create a metric.\\s+Possible values are:)[^.]{30,}.[^.]*.", "$1<...>");
 
-        String osName = System.getProperty("os.name");
-        if(osName.toLowerCase(Locale.ROOT).contains("windows")) {
-            // On Windows, all output should have at least one "kc.bat" in it.
+        if (Environment.isWindows()) {
             MatcherAssert.assertThat(output, Matchers.containsString("kc.bat"));
-            output = output.replaceAll("kc.bat", "kc.sh");
-            output = output.replaceAll(Pattern.quote("data\\log\\"), "data/log/");
-            // line wrap which looks differently due to ".bat" vs. ".sh"
-            output = output.replaceAll("including\nbuild ", "including build\n");
+            output = output
+                    .replace("kc.bat", "kc.sh")
+                    .replace("data\\log\\", "data/log/")
+                    .replace("\r\n", "\n");
         }
 
         try {

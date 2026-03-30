@@ -40,7 +40,13 @@ https://www.npmjs.com/package/*
 # Failing because of broken certificate, can likely be restored later.
 https://docs.kantarainitiative.org*
 https://saml.xml.org*
-# BEGIN - To be removed once KC 26.4 has been released
-https://www.keycloak.org/securing-apps/specifications
-https://www.keycloak.org/server/db#configure-multiple-datasources
-# END
+
+# To be removed once KC 26.5.0 is released
+https://www.keycloak.org/observability/telemetry
+https://www.keycloak.org/securing-apps/jwt-authorization-grant
+https://www.keycloak.org/server/windows-service
+https://www.keycloak.org/server/db#multiple-datasources
+https://www.keycloak.org/server/logging#http-access-logging
+https://www.keycloak.org/server/logging#mdc
+https://www.keycloak.org/securing-apps/mcp-authz-server
+https://www.keycloak.org/docs/latest/server_admin/index.html#_identity_broker_kubernetes

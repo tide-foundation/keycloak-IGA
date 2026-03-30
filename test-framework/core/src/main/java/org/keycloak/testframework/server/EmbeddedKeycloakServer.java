@@ -1,24 +1,27 @@
 package org.keycloak.testframework.server;
 
-import io.quarkus.maven.dependency.Dependency;
-import org.keycloak.Keycloak;
-import org.keycloak.common.Version;
-import org.keycloak.platform.Platform;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
+import org.keycloak.Keycloak;
+import org.keycloak.common.Version;
+import org.keycloak.platform.Platform;
+
+import io.quarkus.maven.dependency.Dependency;
+
 public class EmbeddedKeycloakServer implements KeycloakServer {
 
     private Keycloak keycloak;
     private Path homeDir;
+    private boolean tlsEnabled = false;
 
     @Override
-    public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder) {
+    public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder, boolean tlsEnabled) {
         Keycloak.Builder builder = Keycloak.builder().setVersion(Version.VERSION);
+        this.tlsEnabled = tlsEnabled;
 
         for(Dependency dependency : keycloakServerConfigBuilder.toDependencies()) {
             builder.addDependency(dependency.getGroupId(), dependency.getArtifactId(), "");
@@ -61,11 +64,19 @@ public class EmbeddedKeycloakServer implements KeycloakServer {
 
     @Override
     public String getBaseUrl() {
-        return "http://localhost:8080";
+        if (tlsEnabled) {
+            return "https://localhost:8443";
+        } else {
+            return "http://localhost:8080";
+        }
     }
 
     @Override
     public String getManagementBaseUrl() {
-        return "http://localhost:9001";
+        if (tlsEnabled) {
+            return "https://localhost:9001";
+        } else {
+            return "http://localhost:9001";
+        }
     }
 }

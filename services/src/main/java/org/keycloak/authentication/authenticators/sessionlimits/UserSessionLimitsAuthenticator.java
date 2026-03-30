@@ -1,18 +1,21 @@
 package org.keycloak.authentication.authenticators.sessionlimits;
 
-import jakarta.ws.rs.core.Response;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.jboss.logging.Logger;
+
+import jakarta.ws.rs.core.Response;
+
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.AuthenticationFlowException;
 import org.keycloak.authentication.Authenticator;
 import org.keycloak.events.Errors;
+import org.keycloak.events.EventBuilder;
+import org.keycloak.events.EventType;
 import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.KeycloakSession;
@@ -21,6 +24,8 @@ import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.utils.StringUtil;
+
+import org.jboss.logging.Logger;
 
 public class UserSessionLimitsAuthenticator implements Authenticator {
 
@@ -49,9 +54,9 @@ public class UserSessionLimitsAuthenticator implements Authenticator {
 
         // check if new user and client session are needed
         AuthenticationManager.AuthResult authResult = AuthenticationManager.authenticateIdentityCookie(context.getSession(), context.getRealm(), true);
-        final boolean newUserSession = authResult == null || authResult.getSession() == null;
-        final boolean newClientSession = authResult == null || authResult.getSession() == null
-                || authResult.getSession().getAuthenticatedClientSessionByClient(currentClient.getId()) == null;
+        final boolean newUserSession = authResult == null || authResult.session() == null;
+        final boolean newClientSession = authResult == null || authResult.session() == null
+                || authResult.session().getAuthenticatedClientSessionByClient(currentClient.getId()) == null;
 
         // Get the configuration for this authenticator
         behavior = config.get(UserSessionLimitsAuthenticatorFactory.BEHAVIOR);
@@ -176,7 +181,7 @@ public class UserSessionLimitsAuthenticator implements Authenticator {
 
             case UserSessionLimitsAuthenticatorFactory.TERMINATE_OLDEST_SESSION:
                 logger.info("Terminating oldest session");
-                var removedSessions = logoutOldestSessions(userSessions, limit);
+                var removedSessions = logoutOldestSessions(userSessions, limit, context.getEvent());
                 context.success();
                 return removedSessions;
         }
@@ -187,7 +192,7 @@ public class UserSessionLimitsAuthenticator implements Authenticator {
     /**
      * @return A list of logged-out user sessions, if any.
      */
-    private List<UserSessionModel> logoutOldestSessions(List<UserSessionModel> userSessions, long limit) {
+    private List<UserSessionModel> logoutOldestSessions(List<UserSessionModel> userSessions, long limit, EventBuilder eventBuilder) {
         long numberOfSessionsThatNeedToBeLoggedOut = getNumberOfSessionsThatNeedToBeLoggedOut(userSessions.size(), limit);
         if (numberOfSessionsThatNeedToBeLoggedOut == 1) {
             logger.info("Logging out oldest session");
@@ -203,6 +208,11 @@ public class UserSessionLimitsAuthenticator implements Authenticator {
 
         for (UserSessionModel userSession : userSessionsToBeRemoved) {
             AuthenticationManager.backchannelLogout(session, userSession, true);
+            eventBuilder.clone()
+                .event(EventType.LOGOUT)
+                .user(userSession.getUser())
+                .session(userSession.getId())
+                .success();
         }
 
         return userSessionsToBeRemoved;

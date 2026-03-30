@@ -1,9 +1,16 @@
 package org.keycloak.authentication.authenticators.client;
 
+<<<<<<< HEAD
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+=======
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.authentication.AuthenticationFlowError;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.authentication.ClientAuthenticationFlowContext;
 import org.keycloak.http.HttpRequest;
 import org.keycloak.protocol.LoginProtocol;
@@ -14,10 +21,6 @@ import org.keycloak.protocol.oidc.OIDCProviderConfig;
 import org.keycloak.protocol.oidc.grants.ciba.CibaGrantType;
 import org.keycloak.protocol.oidc.par.endpoints.ParEndpoint;
 import org.keycloak.services.Urls;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 public class JWTClientValidator extends AbstractJWTClientValidator {
 
@@ -61,7 +64,7 @@ public class JWTClientValidator extends AbstractJWTClientValidator {
     }
 
     protected int getMaximumExpirationTime() {
-        return OIDCAdvancedConfigWrapper.fromClientModel(client).getTokenEndpointAuthSigningMaxExp();
+        return OIDCAdvancedConfigWrapper.fromClientModel(clientAssertionState.getClient()).getTokenEndpointAuthSigningMaxExp();
     }
 
     @Override
@@ -71,7 +74,7 @@ public class JWTClientValidator extends AbstractJWTClientValidator {
 
     @Override
     protected String getExpectedSignatureAlgorithm() {
-        return OIDCAdvancedConfigWrapper.fromClientModel(client).getTokenEndpointAuthSigningAlg();
+        return OIDCAdvancedConfigWrapper.fromClientModel(clientAssertionState.getClient()).getTokenEndpointAuthSigningAlg();
     }
 
     public boolean clientAssertionParametersValidation() {

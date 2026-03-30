@@ -1,7 +1,5 @@
 package org.keycloak.config;
 
-import io.smallrye.common.constraint.Assert;
-
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
@@ -11,6 +9,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import io.smallrye.common.constraint.Assert;
 
 @SuppressWarnings({"unchecked", "OptionalUsedAsFieldOrParameterType", "rawtypes"})
 public class OptionBuilder<T> {
@@ -54,7 +54,6 @@ public class OptionBuilder<T> {
         hidden = false;
         build = false;
         description = null;
-        defaultValue = Optional.empty();
         strictExpectedValues = true;
     }
 
@@ -178,8 +177,12 @@ public class OptionBuilder<T> {
             }
         }
 
-        if (defaultValue.isEmpty() && Boolean.class.equals(expected)) {
-            defaultValue = Optional.of((T) Boolean.FALSE);
+        if (defaultValue == null) {
+            if (Boolean.class.equals(expected)) {
+                defaultValue = Optional.of((T) Boolean.FALSE);
+            } else {
+                defaultValue = Optional.empty();
+            }
         }
 
         if (transformEnumValues) {
@@ -191,7 +194,7 @@ public class OptionBuilder<T> {
             }
         }
 
-        return new Option<T>(type, key, category, hidden, build, description, defaultValue, expectedValues, strictExpectedValues, caseInsensitiveExpectedValues, deprecatedMetadata, connectedOptions, wildcardKey);
+        return new Option<T>(type, key, category, hidden, build, description, defaultValue, expectedValues, strictExpectedValues, caseInsensitiveExpectedValues, deprecatedMetadata, connectedOptions, wildcardKey, expected);
     }
 
 }

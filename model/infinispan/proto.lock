@@ -481,6 +481,25 @@
           "optional" : true
         } ]
       }, {
+        "name" : "LoginFailuresLifespanUpdate",
+        "type_id" : 65620,
+        "fields" : [ {
+          "id" : 1,
+          "name" : "maxDeltaTimeMillis",
+          "type" : "int64",
+          "optional" : true
+        }, {
+          "id" : 2,
+          "name" : "maxTemporaryLockouts",
+          "type" : "int32",
+          "optional" : true
+        }, {
+          "id" : 3,
+          "name" : "permanentLockout",
+          "type" : "bool",
+          "optional" : true
+        } ]
+      }, {
         "name" : "ScopeRemovedEvent",
         "type_id" : 65553,
         "fields" : [ {
@@ -685,6 +704,25 @@
           "optional" : true
         } ]
       }, {
+        "name" : "UserStorageProviderClusterEvent",
+        "type_id" : 65540,
+        "fields" : [ {
+          "id" : 1,
+          "name" : "removed",
+          "type" : "bool",
+          "optional" : true
+        }, {
+          "id" : 2,
+          "name" : "realmId",
+          "type" : "string",
+          "optional" : true
+        }, {
+          "id" : 3,
+          "name" : "storageProvider",
+          "type" : "UserStorageProviderModel",
+          "optional" : true
+        } ]
+      }, {
         "name" : "AuthenticatedClientSessionEntity",
         "type_id" : 65596,
         "fields" : [ {
@@ -750,25 +788,6 @@
           "id" : 2,
           "name" : "userId",
           "type" : "string",
-          "optional" : true
-        } ]
-      }, {
-        "name" : "UserStorageProviderClusterEvent",
-        "type_id" : 65540,
-        "fields" : [ {
-          "id" : 1,
-          "name" : "removed",
-          "type" : "bool",
-          "optional" : true
-        }, {
-          "id" : 2,
-          "name" : "realmId",
-          "type" : "string",
-          "optional" : true
-        }, {
-          "id" : 3,
-          "name" : "storageProvider",
-          "type" : "UserStorageProviderModel",
           "optional" : true
         } ]
       }, {
@@ -1455,6 +1474,10 @@
           "type" : "string",
           "optional" : true
         } ]
+      }, {
+        "name" : "ValueIdentityBiFunction",
+        "type_id" : 65619,
+        "fields" : [ ]
       }, {
         "name" : "SessionEntityWrapper",
         "type_id" : 65555,

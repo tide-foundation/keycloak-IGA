@@ -1,12 +1,5 @@
 package org.keycloak.testframework.server;
 
-import io.quarkus.maven.dependency.Dependency;
-import io.quarkus.maven.dependency.DependencyBuilder;
-import io.smallrye.config.SmallRyeConfig;
-import org.eclipse.microprofile.config.spi.ConfigSource;
-import org.keycloak.common.Profile;
-import org.keycloak.testframework.infinispan.CacheType;
-
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,7 +13,17 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.keycloak.common.Profile;
+import org.keycloak.testframework.infinispan.CacheType;
+
+import io.quarkus.maven.dependency.Dependency;
+import io.quarkus.maven.dependency.DependencyBuilder;
+import io.smallrye.config.SmallRyeConfig;
+import org.eclipse.microprofile.config.spi.ConfigSource;
+
 public class KeycloakServerConfigBuilder {
+
+    private static final String SPI_OPTION = "spi-%s--%s--%s";
 
     private final String command;
     private final Map<String, String> options = new HashMap<>();
@@ -94,11 +97,16 @@ public class KeycloakServerConfigBuilder {
         return this;
     }
 
+    public KeycloakServerConfigBuilder spiOption(String spi, String provider, String key, String value) {
+        options.put(String.format(SPI_OPTION, spi, provider, key), value);
+        return this;
+    }
+
     public KeycloakServerConfigBuilder dependency(String groupId, String artifactId) {
         dependencies.add(new DependencyBuilder().setGroupId(groupId).setArtifactId(artifactId).build());
         return this;
     }
-
+    
     public KeycloakServerConfigBuilder cacheConfigFile(String resourcePath) {
         try {
             Path p = Paths.get(Objects.requireNonNull(getClass().getResource(resourcePath)).toURI());
@@ -211,11 +219,7 @@ public class KeycloakServerConfigBuilder {
         List<String> args = new LinkedList<>();
         args.add(command);
         for (Map.Entry<String, String> e : options.entrySet()) {
-            if (e.getKey().startsWith("-D")) {
-                args.add(e.getKey() + "=" + e.getValue());
-            } else {
-                args.add("--" + e.getKey() + "=" + e.getValue());
-            }
+            args.add("--" + e.getKey() + "=" + e.getValue());
         }
         if (!features.isEmpty()) {
             args.add("--features=" + String.join(",", features));
@@ -237,10 +241,10 @@ public class KeycloakServerConfigBuilder {
 
     private Set<String> toFeatureStrings(Profile.Feature... features) {
         return Arrays.stream(features).map(f -> {
-            if (Profile.getFeatureVersions(f.getKey()).size() > 1) {
+            if (f.getVersion() > 1 || Profile.getFeatureVersions(f.getKey()).size() > 1) {
                 return f.getVersionedKey();
             }
-            return f.name().toLowerCase().replace('_', '-');
+            return f.getUnversionedKey();
         }).collect(Collectors.toSet());
     }
 

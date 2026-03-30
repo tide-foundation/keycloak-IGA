@@ -17,11 +17,12 @@
 
 package org.keycloak.models.sessions.infinispan.query;
 
-import org.infinispan.client.hotrod.RemoteCache;
-import org.infinispan.commons.api.query.Query;
 import org.keycloak.marshalling.Marshalling;
 import org.keycloak.models.sessions.infinispan.entities.ClientSessionKey;
 import org.keycloak.models.sessions.infinispan.entities.RemoteAuthenticatedClientSessionEntity;
+
+import org.infinispan.client.hotrod.RemoteCache;
+import org.infinispan.commons.api.query.Query;
 
 /**
  * Util class with Infinispan Ickle Queries for {@link RemoteAuthenticatedClientSessionEntity}.
@@ -34,7 +35,7 @@ public final class ClientSessionQueries {
     public static final String CLIENT_SESSION = Marshalling.protoEntity(RemoteAuthenticatedClientSessionEntity.class);
 
     private static final String FETCH_USER_SESSION_ID = "SELECT e.userSessionId FROM %s as e WHERE e.realmId = :realmId && e.clientId = :clientId ORDER BY e.userSessionId".formatted(CLIENT_SESSION);
-    private static final String PER_CLIENT_COUNT = "SELECT e.clientId, count(e.clientId) FROM %s as e GROUP BY e.clientId ORDER BY e.clientId".formatted(CLIENT_SESSION);
+    private static final String PER_CLIENT_COUNT = "SELECT e.clientId, count(e.clientId) FROM %s as e WHERE e.realmId = :realmId GROUP BY e.clientId ORDER BY e.clientId".formatted(CLIENT_SESSION);
     private static final String CLIENT_SESSION_COUNT = "SELECT count(e) FROM %s as e WHERE e.realmId = :realmId && e.clientId = :clientId".formatted(CLIENT_SESSION);
     private static final String FROM_USER_SESSION = "FROM %s as e WHERE e.userSessionId = :userSessionId ORDER BY e.clientId".formatted(CLIENT_SESSION);
     private static final String IDS_FROM_USER_SESSION = "SELECT e.clientId FROM %s as e WHERE e.userSessionId = :userSessionId ORDER BY e.clientId".formatted(CLIENT_SESSION);
@@ -51,8 +52,9 @@ public final class ClientSessionQueries {
     /**
      * Returns a projection with the client ID and its number of active client sessions.
      */
-    public static Query<Object[]> activeClientCount(RemoteCache<ClientSessionKey, RemoteAuthenticatedClientSessionEntity> cache) {
-        return cache.query(PER_CLIENT_COUNT);
+    public static Query<Object[]> activeClientCount(RemoteCache<ClientSessionKey, RemoteAuthenticatedClientSessionEntity> cache, String realmId) {
+        return cache.<Object[]>query(PER_CLIENT_COUNT)
+                .setParameter("realmId", realmId);
     }
 
     /**

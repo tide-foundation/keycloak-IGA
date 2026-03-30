@@ -28,6 +28,8 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
 import org.infinispan.client.hotrod.RemoteCacheManager;
 import org.infinispan.commons.configuration.io.ConfigurationWriter;
 import org.infinispan.commons.io.StringBuilderWriter;
@@ -40,6 +42,7 @@ import org.infinispan.health.CacheHealth;
 import org.infinispan.manager.DefaultCacheManager;
 import org.infinispan.manager.EmbeddedCacheManager;
 import org.jboss.logging.Logger;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.Config;
 import org.keycloak.cluster.ClusterEvent;
 import org.keycloak.cluster.ClusterProvider;
@@ -67,6 +70,19 @@ import org.keycloak.provider.ServerInfoAwareProviderFactory;
 import org.keycloak.spi.infinispan.CacheEmbeddedConfigProvider;
 import org.keycloak.spi.infinispan.CacheRemoteConfigProvider;
 import org.keycloak.spi.infinispan.impl.embedded.CacheConfigurator;
+
+import org.infinispan.client.hotrod.RemoteCacheManager;
+import org.infinispan.commons.configuration.io.ConfigurationWriter;
+import org.infinispan.commons.io.StringBuilderWriter;
+import org.infinispan.commons.util.Version;
+import org.infinispan.configuration.cache.Configuration;
+import org.infinispan.configuration.parsing.ConfigurationBuilderHolder;
+import org.infinispan.configuration.parsing.ParserRegistry;
+import org.infinispan.factories.GlobalComponentRegistry;
+import org.infinispan.health.CacheHealth;
+import org.infinispan.manager.DefaultCacheManager;
+import org.infinispan.manager.EmbeddedCacheManager;
+import org.jboss.logging.Logger;
 
 import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.AUTHENTICATION_SESSIONS_CACHE_NAME;
 import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.CLIENT_SESSION_CACHE_NAME;
@@ -169,12 +185,13 @@ public class DefaultInfinispanConnectionProviderFactory implements InfinispanCon
             this.cacheManager = createEmbeddedCacheManager(keycloakSession);
             injectKeycloakTimeService(cacheManager);
             var topologyInfo = new TopologyInfo(cacheManager);
-            logger.infof(topologyInfo.toString());
+            var nodeInfo = NodeInfo.of(cacheManager);
+            logger.info(nodeInfo.printInfo());
 
             this.remoteCacheManager = createRemoteCacheManager(keycloakSession);
             this.connectionProvider = InfinispanUtils.isRemoteInfinispan() ?
-                    new RemoteInfinispanConnectionProvider(cacheManager, remoteCacheManager, topologyInfo) :
-                    new DefaultInfinispanConnectionProvider(cacheManager, topologyInfo);
+                    new RemoteInfinispanConnectionProvider(cacheManager, remoteCacheManager, topologyInfo, nodeInfo) :
+                    new DefaultInfinispanConnectionProvider(cacheManager, topologyInfo, nodeInfo);
 
             clusterHealth = GlobalComponentRegistry.componentOf(cacheManager, ClusterHealth.class);
             return connectionProvider;
@@ -204,10 +221,17 @@ public class DefaultInfinispanConnectionProviderFactory implements InfinispanCon
     private static DefaultCacheManager getDefaultCacheManager(KeycloakSession session, ConfigurationBuilderHolder holder) {
         // This disables the JTA transaction context to avoid binding all JDBC_PING2 interactions to the current transaction
         DefaultCacheManager[] _cm = new DefaultCacheManager[1];
+<<<<<<< HEAD
+        //noinspection resource
+        KeycloakModelUtils.suspendJtaTransaction(session.getKeycloakSessionFactory(), () ->
+                _cm[0] = new DefaultCacheManager(holder, true));
+        return _cm[0];
+=======
         KeycloakModelUtils.suspendJtaTransaction(session.getKeycloakSessionFactory(), () ->
                 _cm[0] = new DefaultCacheManager(holder, true));
         var cm = _cm[0];
         return cm;
+>>>>>>> origin/release/0.13.26
     }
 
     protected RemoteCacheManager createRemoteCacheManager(KeycloakSession session) {

@@ -1,20 +1,5 @@
 package org.keycloak.guides.maven;
 
-import static org.keycloak.quarkus.runtime.configuration.Configuration.OPTION_PART_SEPARATOR;
-import static org.keycloak.quarkus.runtime.configuration.Configuration.toDashCase;
-import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
-
-import org.keycloak.config.ConfigSupportLevel;
-import org.keycloak.config.DeprecatedMetadata;
-import org.keycloak.config.OptionCategory;
-import org.keycloak.provider.ProviderConfigProperty;
-import org.keycloak.provider.ProviderFactory;
-import org.keycloak.provider.ProviderManager;
-import org.keycloak.provider.Spi;
-import org.keycloak.quarkus.runtime.Providers;
-import org.keycloak.quarkus.runtime.configuration.mappers.PropertyMappers;
-import org.keycloak.utils.StringUtil;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -31,6 +16,21 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import org.keycloak.config.ConfigSupportLevel;
+import org.keycloak.config.DeprecatedMetadata;
+import org.keycloak.config.OptionCategory;
+import org.keycloak.provider.ProviderConfigProperty;
+import org.keycloak.provider.ProviderFactory;
+import org.keycloak.provider.ProviderManager;
+import org.keycloak.provider.Spi;
+import org.keycloak.quarkus.runtime.Providers;
+import org.keycloak.quarkus.runtime.configuration.mappers.PropertyMappers;
+import org.keycloak.utils.StringUtil;
+
+import static org.keycloak.quarkus.runtime.configuration.Configuration.OPTION_PART_SEPARATOR;
+import static org.keycloak.quarkus.runtime.configuration.Configuration.toDashCase;
+import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
+
 public class Options {
 
     private final Map<OptionCategory, Set<Option>> options;
@@ -46,9 +46,9 @@ public class Options {
                 .map(m -> new Option(m.getFrom(),
                         m.getCategory(),
                         m.isBuildTime(),
-                        null,
+                        m.getType().getSimpleName(),
                         m.getDescription(),
-                        m.getDefaultValue().map(Object::toString).orElse(null),
+                        m.getDefaultValue().orElse(null),
                         m.getExpectedValues(),
                         m.isStrictExpectedValues(),
                         m.getEnabledWhen().orElse(""),
@@ -82,7 +82,7 @@ public class Options {
                         .map(m -> new Option(optionPrefix + toDashCase(m.getName()), OptionCategory.GENERAL, false,
                                 m.getType(),
                                 m.getHelpText(),
-                                m.getDefaultValue() == null ? null : m.getDefaultValue().toString(),
+                                m.getDefaultValue(),
                                 m.getOptions() == null ? Collections.emptyList() : m.getOptions(),
                                 true,
                                 "",
@@ -198,7 +198,7 @@ public class Options {
                       boolean build,
                       String type,
                       String description,
-                      String defaultValue,
+                      Object defaultValue,
                       Iterable<String> expectedValues,
                       boolean strictExpectedValues,
                       String enabledWhen,
@@ -209,7 +209,7 @@ public class Options {
             this.build = build;
             this.type = type;
             this.description = description;
-            this.defaultValue = defaultValue;
+            this.defaultValue = org.keycloak.config.Option.getDefaultValueString(defaultValue);
             this.expectedValues = StreamSupport.stream(expectedValues.spliterator(), false).collect(Collectors.toList());
             this.strictExpectedValues = strictExpectedValues;
             this.enabledWhen = enabledWhen;

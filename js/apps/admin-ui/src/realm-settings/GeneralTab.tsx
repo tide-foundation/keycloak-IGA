@@ -128,9 +128,14 @@ function RealmSettingsGeneralTabForm({
 
   const { addAlert, addError } = useAlerts();
 
+<<<<<<< HEAD
+  // TIDECLOAK IMPLEMENTATION
+  const updateSwitchValue = async (value: boolean) => {
+=======
 
   const updateSwitchValue = async (value: boolean) => {
 
+>>>>>>> origin/release/0.13.26
     try {
       const data = new FormData();
       data.append("isIGAEnabled", value.toString());
@@ -211,6 +216,10 @@ function RealmSettingsGeneralTabForm({
               />
             )}
           </FormGroup>
+<<<<<<< HEAD
+          {/* TIDECLOAK IMPLEMENTATION */}
+=======
+>>>>>>> origin/release/0.13.26
           <FormGroup
               label={t("Identity Governance and Administration (IGA)")}
               fieldId="tide-iga"
@@ -354,7 +363,7 @@ function RealmSettingsGeneralTabForm({
                   <FormattedLink
                     href={`${addTrailingSlash(
                       serverBaseUrl,
-                    )}realms/${realmName}/.well-known/openid-credential-issuer`}
+                    )}.well-known/openid-credential-issuer/realms/${realmName}`}
                     title={t("oid4vcIssuerMetadata")}
                   />
                 </StackItem>

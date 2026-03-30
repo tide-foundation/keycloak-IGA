@@ -16,6 +16,13 @@
  */
 package org.keycloak.services.resources.admin.fgap;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+
+import jakarta.ws.rs.ForbiddenException;
+
 import org.keycloak.Config;
 import org.keycloak.authorization.AuthorizationProvider;
 import org.keycloak.authorization.AuthorizationProviderFactory;
@@ -36,18 +43,14 @@ import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserModel;
+import org.keycloak.protocol.oidc.mappers.AbstractOIDCProtocolMapper;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.idm.authorization.Permission;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.managers.RealmManager;
 import org.keycloak.services.resources.admin.AdminAuth;
-
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-
-import jakarta.ws.rs.ForbiddenException;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
@@ -156,16 +159,37 @@ class MgmtPermissions implements AdminPermissionEvaluator, AdminPermissionManage
     public boolean hasOneAdminRole(RealmModel realm, String... adminRoles) {
         String clientId;
         RealmManager realmManager = new RealmManager(session);
+        boolean masterAdminRealm = false;
         if (RealmManager.isAdministrationRealm(adminsRealm)) {
             clientId = realm.getMasterAdminClient().getClientId();
+            masterAdminRealm = true;
         } else if (adminsRealm.equals(realm)) {
             clientId = realm.getClientByClientId(realmManager.getRealmAdminClientId(realm)).getClientId();
         } else {
             return false;
         }
-        return identity.hasOneClientRole(clientId, adminRoles);
+        boolean result = identity.hasOneClientRole(clientId, adminRoles);
+        if (!result && masterAdminRealm && !adminsRealm.equals(realm)
+                && AbstractOIDCProtocolMapper.getShouldUseLightweightToken(session)
+                && hasNewAdminRoles(realm, clientId, adminRoles)) {
+            return true;
+        }
+        return result;
     }
 
+    private boolean hasNewAdminRoles(RealmModel realm, String clientId, String... adminRoles) {
+        RealmModel masterRealm = getMasterRealm();
+        UserModel admin = admin();
+        RoleModel masterAdminRole = masterRealm.getRole(AdminRoles.ADMIN);
+        if (!admin.hasRole(masterAdminRole)) {
+            return false;
+        }
+        Set<String> roleNames = Set.of(adminRoles);
+        ClientModel clientModel = masterRealm.getClientByClientId(clientId);
+        return clientModel != null && masterAdminRole.getCompositesStream()
+                .anyMatch(r -> (r.isClientRole() && r.getContainerId().equals(clientModel.getId())
+                        && roleNames.contains(r.getName())));
+    }
 
     public boolean isAdminSameRealm() {
         return auth == null || realm.getId().equals(auth.getRealm().getId());
@@ -392,7 +416,10 @@ class MgmtPermissions implements AdminPermissionEvaluator, AdminPermissionManage
         }
     }
 
-
-
+    RealmModel getMasterRealm() {
+        return adminsRealm().getName().equals(Config.getAdminRealm()) ?
+                adminsRealm():
+                session.realms().getRealmByName(Config.getAdminRealm());
+    }
 
 }

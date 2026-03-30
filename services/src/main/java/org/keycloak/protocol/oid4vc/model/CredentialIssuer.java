@@ -17,13 +17,13 @@
 
 package org.keycloak.protocol.oid4vc.model;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Represents a credentials issuer according to the OID4VCI Credentials Issuer Metadata
@@ -48,9 +48,6 @@ public class CredentialIssuer {
 
     @JsonProperty("authorization_servers")
     private List<String> authorizationServers;
-
-    @JsonProperty("notification_endpoint")
-    private String notificationEndpoint;
 
     @JsonProperty("batch_credential_issuance")
     private BatchCredentialIssuance batchCredentialIssuance;
@@ -109,15 +106,6 @@ public class CredentialIssuer {
 
     public CredentialIssuer setAuthorizationServers(List<String> authorizationServers) {
         this.authorizationServers = authorizationServers;
-        return this;
-    }
-
-    public String getNotificationEndpoint() {
-        return notificationEndpoint;
-    }
-
-    public CredentialIssuer setNotificationEndpoint(String notificationEndpoint) {
-        this.notificationEndpoint = notificationEndpoint;
         return this;
     }
 

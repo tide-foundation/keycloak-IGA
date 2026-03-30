@@ -12,10 +12,18 @@ import javax.naming.ldap.LdapContext;
 import javax.naming.spi.NamingManager;
 import javax.naming.spi.ObjectFactory;
 
+<<<<<<< HEAD
+import org.keycloak.storage.ldap.idm.store.ldap.SessionBoundInitialLdapContext;
+import org.keycloak.utils.KeycloakSessionUtil;
+
+import org.jboss.logging.Logger;
+
+=======
 import org.jboss.logging.Logger;
 import org.keycloak.storage.ldap.idm.store.ldap.SessionBoundInitialLdapContext;
 import org.keycloak.utils.KeycloakSessionUtil;
 
+>>>>>>> origin/release/0.13.26
 /**
  * <p>A {@link javax.naming.spi.ObjectFactoryBuilder} implementation to filter out referral references if they do not
  * point to an LDAP URL.

@@ -1,11 +1,12 @@
 package org.keycloak.services.util;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+<<<<<<< HEAD
+=======
 import org.jboss.logging.Logger;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.OAuth2Constants;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.common.Profile;
@@ -34,6 +35,8 @@ import org.keycloak.services.managers.UserSessionManager;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.RootAuthenticationSessionModel;
 import org.keycloak.util.TokenUtil;
+
+import org.jboss.logging.Logger;
 
 public class UserSessionUtil {
 

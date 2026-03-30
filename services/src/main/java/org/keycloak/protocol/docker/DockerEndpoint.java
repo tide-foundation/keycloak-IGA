@@ -1,7 +1,11 @@
 package org.keycloak.protocol.docker;
 
-import org.jboss.logging.Logger;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.Response;
+
 import org.keycloak.common.Profile;
+import org.keycloak.events.Errors;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.models.AuthenticationFlowModel;
@@ -19,9 +23,7 @@ import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.CommonClientSessionModel;
 import org.keycloak.utils.ProfileHelper;
 
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.core.MultivaluedMap;
-import jakarta.ws.rs.core.Response;
+import org.jboss.logging.Logger;
 
 /**
  * Implements a docker-client understandable format.
@@ -39,6 +41,7 @@ public class DockerEndpoint extends AuthorizationEndpointBase {
     public DockerEndpoint(KeycloakSession session, final EventBuilder event, final EventType login) {
         super(session, event);
         this.login = login;
+        event.event(login);
     }
 
     @GET
@@ -53,19 +56,11 @@ public class DockerEndpoint extends AuthorizationEndpointBase {
                     "username is provided by Basic auth header.");
         }
         service = params.getFirst(DockerAuthV2Protocol.SERVICE_PARAM);
-        if (service == null) {
-            throw new ErrorResponseException("invalid_request", "service parameter must be provided", Response.Status.BAD_REQUEST);
-        }
-        client = realm.getClientByClientId(service);
-        if (client == null) {
-            logger.errorv("Failed to lookup client given by service={0} parameter for realm: {1}.", service, realm.getName());
-            throw new ErrorResponseException("invalid_client", "Client specified by 'service' parameter does not exist", Response.Status.BAD_REQUEST);
-        }
-        session.getContext().setClient(client);
         scope = params.getFirst(DockerAuthV2Protocol.SCOPE_PARAM);
 
         checkSsl();
         checkRealm();
+        checkService();
 
         final AuthorizationEndpointRequest authRequest = AuthorizationEndpointRequestParserProcessor.parseRequest(event, session, client, params, AuthorizationEndpointRequestParserProcessor.EndpointType.DOCKER_ENDPOINT);
         authenticationSession = createAuthenticationSession(client, authRequest.getState());
@@ -91,6 +86,25 @@ public class DockerEndpoint extends AuthorizationEndpointBase {
         authenticationSession.setClientNote(DockerAuthV2Protocol.SCOPE_PARAM, scope);
         authenticationSession.setClientNote(DockerAuthV2Protocol.ISSUER, Urls.realmIssuer(session.getContext().getUri().getBaseUri(), realm.getName()));
 
+    }
+
+    private void checkService() {
+        if (service == null) {
+            event.error(Errors.INVALID_REQUEST);
+            throw new ErrorResponseException("invalid_request", "service parameter must be provided", Response.Status.BAD_REQUEST);
+        }
+        client = realm.getClientByClientId(service);
+        if (client == null) {
+            event.error(Errors.CLIENT_NOT_FOUND);
+            logger.errorv("Failed to lookup client given by service={0} parameter for realm: {1}.", service, realm.getName());
+            throw new ErrorResponseException("invalid_client", "Client specified by 'service' parameter does not exist", Response.Status.BAD_REQUEST);
+        }
+        if (!client.isEnabled()) {
+            event.error(Errors.CLIENT_DISABLED);
+            logger.errorv("The service {0} in realm {1} is disabled.", service, realm.getName());
+            throw new ErrorResponseException("invalid_client", "Client specified by 'service' is disabled", Response.Status.BAD_REQUEST);
+        }
+        session.getContext().setClient(client);
     }
 
     @Override

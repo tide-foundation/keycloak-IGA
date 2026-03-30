@@ -1,15 +1,15 @@
 package org.keycloak.testframework.realm;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 import org.keycloak.models.credential.OTPCredentialModel;
 import org.keycloak.models.utils.HmacOTP;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.FederatedIdentityRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 
 public class UserConfigBuilder {
 
@@ -52,6 +52,16 @@ public class UserConfigBuilder {
 
     public UserConfigBuilder email(String email) {
         rep.setEmail(email);
+        return this;
+    }
+
+    public UserConfigBuilder firstName(String firstName) {
+        rep.setFirstName(firstName);
+        return this;
+    }
+
+    public UserConfigBuilder lastName(String lastName) {
+        rep.setLastName(lastName);
         return this;
     }
 
@@ -109,6 +119,11 @@ public class UserConfigBuilder {
         rep.setCredentials(Collections.combine(rep.getCredentials(), ModelToRepresentation.toRepresentation(
                 OTPCredentialModel.createTOTP(totpSecret, 6, 30, HmacOTP.HMAC_SHA1))));
         rep.setTotp(true);
+        return this;
+    }
+
+    public UserConfigBuilder serviceAccountId(String serviceAccountClientId) {
+        rep.setServiceAccountClientId(serviceAccountClientId);
         return this;
     }
 

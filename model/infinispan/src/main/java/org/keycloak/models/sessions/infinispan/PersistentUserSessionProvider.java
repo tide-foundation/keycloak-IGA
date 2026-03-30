@@ -31,6 +31,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
+=======
 import io.reactivex.rxjava3.core.Flowable;
 import org.infinispan.Cache;
 import org.infinispan.client.hotrod.RemoteCache;
@@ -43,6 +45,7 @@ import org.infinispan.context.Flag;
 import org.infinispan.factories.ComponentRegistry;
 import org.infinispan.persistence.manager.PersistenceManager;
 import org.jboss.logging.Logger;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.cluster.ClusterProvider;
 import org.keycloak.common.Profile;
 import org.keycloak.common.Profile.Feature;
@@ -61,6 +64,7 @@ import org.keycloak.models.UserProvider;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.models.UserSessionProvider;
 import org.keycloak.models.light.LightweightUserAdapter;
+import org.keycloak.models.session.PersistentUserSessionAdapter;
 import org.keycloak.models.session.UserSessionPersisterProvider;
 import org.keycloak.models.sessions.infinispan.changes.ClientSessionPersistentChangelogBasedTransaction;
 import org.keycloak.models.sessions.infinispan.changes.JpaChangesPerformer;
@@ -79,16 +83,36 @@ import org.keycloak.models.sessions.infinispan.entities.UserSessionEntity;
 import org.keycloak.models.sessions.infinispan.events.RealmRemovedSessionEvent;
 import org.keycloak.models.sessions.infinispan.events.RemoveUserSessionsEvent;
 import org.keycloak.models.sessions.infinispan.events.SessionEventsSenderTransaction;
+<<<<<<< HEAD
+import org.keycloak.models.sessions.infinispan.stream.ClientSessionFilterByUser;
+=======
+>>>>>>> origin/release/0.13.26
 import org.keycloak.models.sessions.infinispan.stream.MapEntryToKeyMapper;
 import org.keycloak.models.sessions.infinispan.stream.Mappers;
+import org.keycloak.models.sessions.infinispan.stream.RemoveKeyConsumer;
 import org.keycloak.models.sessions.infinispan.stream.SessionWrapperPredicate;
 import org.keycloak.models.sessions.infinispan.stream.UserSessionPredicate;
 import org.keycloak.models.sessions.infinispan.util.FuturesHelper;
-import org.keycloak.models.sessions.infinispan.util.InfinispanKeyGenerator;
 import org.keycloak.models.sessions.infinispan.util.SessionTimeouts;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.models.utils.UserModelDelegate;
 
+import io.reactivex.rxjava3.core.Flowable;
+import org.infinispan.Cache;
+import org.infinispan.client.hotrod.RemoteCache;
+import org.infinispan.client.hotrod.exceptions.HotRodClientException;
+import org.infinispan.commons.api.AsyncCache;
+import org.infinispan.commons.api.BasicCache;
+import org.infinispan.commons.util.ByRef;
+import org.infinispan.commons.util.concurrent.CompletionStages;
+import org.infinispan.factories.ComponentRegistry;
+import org.infinispan.persistence.manager.PersistenceManager;
+import org.jboss.logging.Logger;
+
+import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.CLIENT_SESSION_CACHE_NAME;
+import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.OFFLINE_CLIENT_SESSION_CACHE_NAME;
+import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.OFFLINE_USER_SESSION_CACHE_NAME;
+import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.USER_SESSION_CACHE_NAME;
 import static org.keycloak.models.Constants.SESSION_NOTE_LIGHTWEIGHT_USER;
 import static org.keycloak.models.sessions.infinispan.changes.ClientSessionPersistentChangelogBasedTransaction.createAuthenticatedClientSessionInstance;
 import static org.keycloak.utils.StreamsUtil.paginatedStream;
@@ -107,11 +131,13 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
 
     protected final SessionEventsSenderTransaction clusterEventsSenderTx;
     protected final UserSessionPersisterProvider userSessionPersister;
+<<<<<<< HEAD
+=======
 
     protected final InfinispanKeyGenerator keyGenerator;
+>>>>>>> origin/release/0.13.26
 
     public PersistentUserSessionProvider(KeycloakSession session,
-                                         InfinispanKeyGenerator keyGenerator,
                                          UserSessionPersistentChangelogBasedTransaction sessionTx,
                                          ClientSessionPersistentChangelogBasedTransaction clientSessionTx) {
         if (!MultiSiteUtils.isPersistentSessionsEnabled()) {
@@ -122,7 +148,6 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
         this.sessionTx = sessionTx;
         this.clientSessionTx = clientSessionTx;
         this.clusterEventsSenderTx = new SessionEventsSenderTransaction(session);
-        this.keyGenerator = keyGenerator;
 
         session.getTransactionManager().enlistAfterCompletion(clusterEventsSenderTx);
         userSessionPersister = session.getProvider(UserSessionPersisterProvider.class);
@@ -188,7 +213,7 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
     public UserSessionModel createUserSession(String id, RealmModel realm, UserModel user, String loginUsername, String ipAddress,
                                               String authMethod, boolean rememberMe, String brokerSessionId, String brokerUserId, UserSessionModel.SessionPersistenceState persistenceState) {
         if (id == null) {
-            id = keyGenerator.generateKeyString(session, sessionTx.getCache(false));
+            id = sessionTx.generateKey();
         }
 
         UserSessionEntity entity = new UserSessionEntity(id);
@@ -400,19 +425,6 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
     protected void removeUserSessions(RealmModel realm, UserModel user, boolean offline) {
         getUserSessionsStream(realm, UserSessionPredicate.create(realm.getId()).user(user.getId()), offline)
                 .forEach(s -> removeUserSession(realm, s));
-    }
-
-    public void removeAllExpired() {
-        // Rely on expiration of cache entries provided by infinispan. Just expire entries from persister is needed
-        // TODO: Avoid iteration over all realms here (Details in the KEYCLOAK-16802)
-        session.realms().getRealmsStream().forEach(this::removeExpired);
-
-    }
-
-    @Override
-    public void removeExpired(RealmModel realm) {
-        // Rely on expiration of cache entries provided by infinispan. Nothing needed here besides calling persister
-        session.getProvider(UserSessionPersisterProvider.class).removeExpired(realm);
     }
 
     @Override
@@ -687,6 +699,11 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
             return existingSession;
         }
 
+        // importing here when the transaction has the changelog available.
+        if (!offline) {
+            migrateRememberMe(persistentUserSession);
+        }
+
         // Import client sessions
         clientSessionTx.importSessionsConcurrently(realm, clientSessionsById, offline);
         clientSessionTx.setUserSessionId(clientSessionsById.keySet(), sessionId, offline);
@@ -792,6 +809,9 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
         }
 
         sessionTx.addTask(userSessionEntity.getId(), null, userSessionEntity, UserSessionModel.SessionPersistenceState.PERSISTENT);
+        if (!offline) {
+            migrateRememberMe(persistentUserSession);
+        }
 
         for (Map.Entry<String, AuthenticatedClientSessionModel> entry : persistentUserSession.getAuthenticatedClientSessions().entrySet()) {
             String clientUUID = entry.getKey();
@@ -821,6 +841,29 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
 
     }
 
+    private void migrateRememberMe(UserSessionModel persistentUserSession) {
+        if (persistentUserSession instanceof PersistentUserSessionAdapter pusa && pusa.requiresRememberMeMigration()) {
+            final boolean rememberMe = pusa.isRememberMe();
+            sessionTx.addTask(persistentUserSession.getId(), new PersistentSessionUpdateTask<>() {
+                @Override
+                public boolean isOffline() {
+                    return false;
+                }
+
+                @Override
+                public void runUpdate(UserSessionEntity entity) {
+                    // update database column
+                    entity.setRememberMe(rememberMe);
+                }
+
+                @Override
+                public CacheOperation getOperation() {
+                    return CacheOperation.REPLACE;
+                }
+            });
+        }
+    }
+
     private boolean isClientSessionExpired(RealmModel realm, ClientModel client, AuthenticatedClientSessionEntity entity, boolean offline) {
         SessionFunction<AuthenticatedClientSessionEntity> idleChecker = offline ? SessionTimeouts::getOfflineClientSessionMaxIdleMs : SessionTimeouts::getClientSessionMaxIdleMs;
         SessionFunction<AuthenticatedClientSessionEntity> lifetimeChecker = offline ? SessionTimeouts::getOfflineClientSessionLifespanMs : SessionTimeouts::getClientSessionLifespanMs;
@@ -845,7 +888,7 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
             // This is a best-effort approach: Even if due to a rolling update some entries are left there, the checking of sessions and tokens does not depend on them.
             // Refreshing of tokens will still work even if the user session does not contain the list of client sessions.
             var stage = CompletionStages.aggregateCompletionStage();
-            Stream.of(InfinispanConnectionProvider.USER_SESSION_CACHE_NAME, InfinispanConnectionProvider.OFFLINE_USER_SESSION_CACHE_NAME, InfinispanConnectionProvider.CLIENT_SESSION_CACHE_NAME, InfinispanConnectionProvider.OFFLINE_CLIENT_SESSION_CACHE_NAME)
+            Stream.of(USER_SESSION_CACHE_NAME, OFFLINE_USER_SESSION_CACHE_NAME, CLIENT_SESSION_CACHE_NAME, OFFLINE_CLIENT_SESSION_CACHE_NAME)
                     .map(s -> {
                         InfinispanConnectionProvider provider = session.getProvider(InfinispanConnectionProvider.class);
                         if (provider != null) {
@@ -962,14 +1005,28 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
             // caching disabled
             return;
         }
+<<<<<<< HEAD
+=======
 
         var stage = CompletionStages.aggregateCompletionStage();
 
+>>>>>>> origin/release/0.13.26
         try (var stream = getCache(offline).getAdvancedCache()
                 .entrySet()
                 .stream()
                 .filter(UserSessionPredicate.create(realmId).user(userId))
                 .map(MapEntryToKeyMapper.getInstance())) {
+<<<<<<< HEAD
+            stream.forEach(RemoveKeyConsumer.getInstance());
+        }
+        try (var stream = getClientSessionCache(offline) .getAdvancedCache()
+                .entrySet()
+                .stream()
+                .filter(new ClientSessionFilterByUser(realmId, userId))
+                .map(MapEntryToKeyMapper.getInstance())) {
+            stream.forEach(RemoveKeyConsumer.getInstance());
+        }
+=======
             var rmCache = getCache(offline).getAdvancedCache()
                     .withFlags(Flag.ZERO_LOCK_ACQUISITION_TIMEOUT, Flag.FAIL_SILENTLY, Flag.IGNORE_RETURN_VALUES);
             stream.iterator().forEachRemaining(id -> stage.dependsOn(rmCache.removeAsync(id)));
@@ -992,5 +1049,6 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
         }
 
         CompletionStages.join(stage.freeze());
+>>>>>>> origin/release/0.13.26
     }
 }

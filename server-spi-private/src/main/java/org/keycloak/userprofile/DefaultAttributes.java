@@ -19,8 +19,6 @@
 
 package org.keycloak.userprofile;
 
-import static java.util.Collections.emptyList;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -34,7 +32,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.jboss.logging.Logger;
 import org.keycloak.common.util.CollectionUtil;
 import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
@@ -50,6 +47,10 @@ import org.keycloak.validate.ValidationContext;
 import org.keycloak.validate.ValidationError;
 import org.keycloak.validate.ValidatorConfig;
 import org.keycloak.validate.validators.LengthValidator;
+
+import org.jboss.logging.Logger;
+
+import static java.util.Collections.emptyList;
 
 /**
  * <p>The default implementation for {@link Attributes}. Should be reused as much as possible by the different implementations
@@ -260,20 +261,22 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
         Map<String, List<String>> attributes = new HashMap<>(this);
 
         for (String name : nameSet()) {
-            AttributeMetadata metadata = getMetadata(name);
             RealmModel realm = session.getContext().getRealm();
 
+<<<<<<< HEAD
+            if ((UserModel.USERNAME.equals(name) && realm.isRegistrationEmailAsUsername())) {
+=======
             if ((UserModel.USERNAME.equals(name) && realm.isRegistrationEmailAsUsername())
                 || isReadableOrWritableDuringRegistration(name)
                 || !isManagedAttribute(name)) {
+>>>>>>> origin/release/0.13.26
                 continue;
             }
 
-            if (metadata == null || !metadata.canEdit(createAttributeContext(metadata))) {
+            if (isReadOnly(name)) {
                 attributes.remove(name);
             }
         }
-
         return attributes;
     }
 

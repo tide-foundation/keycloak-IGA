@@ -15,7 +15,10 @@ import {
 import { DEFAULT_REALM } from "../utils/constants.ts";
 import { selectItem } from "../utils/form.ts";
 import { login } from "../utils/login.ts";
-import { assertNotificationMessage } from "../utils/masthead.ts";
+import {
+  assertNotificationMessage,
+  selectActionToggleItem,
+} from "../utils/masthead.ts";
 import { confirmModal } from "../utils/modal.ts";
 import { goToUsers } from "../utils/sidebar.ts";
 import {
@@ -34,9 +37,9 @@ import {
 
 test.describe("User creation", () => {
   test("navigates to the create user page", async ({ page }) => {
-    const realm = await createTestBed();
+    await using testBed = await createTestBed();
 
-    await login(page, { to: toUsers({ realm }) });
+    await login(page, { to: toUsers({ realm: testBed.realm }) });
 
     await clickAddUserButton(page);
     await expect(page).toHaveURL(/.*users\/add-user/);
@@ -46,9 +49,9 @@ test.describe("User creation", () => {
   });
 
   test("creates a new user", async ({ page }) => {
-    const realm = await createTestBed();
+    await using testBed = await createTestBed();
 
-    await login(page, { to: toAddUser({ realm }) });
+    await login(page, { to: toAddUser({ realm: testBed.realm }) });
 
     await fillUserForm(page, {
       username: "test-user",
@@ -72,11 +75,11 @@ test.describe("User creation", () => {
   });
 
   test("creates a user that joins a group", async ({ page }) => {
-    const realm = await createTestBed({
+    await using testBed = await createTestBed({
       groups: [{ name: "test-group" }],
     });
 
-    await login(page, { to: toAddUser({ realm }) });
+    await login(page, { to: toAddUser({ realm: testBed.realm }) });
 
     await fillUserForm(page, { username: "test-user" });
     await joinGroup(page, ["test-group"]);
@@ -85,9 +88,9 @@ test.describe("User creation", () => {
   });
 
   test("creates a user with a password credential", async ({ page }) => {
-    const realm = await createTestBed();
+    await using testBed = await createTestBed();
 
-    await login(page, { to: toAddUser({ realm }) });
+    await login(page, { to: toAddUser({ realm: testBed.realm }) });
 
     await fillUserForm(page, {
       username: "test-user",
@@ -105,6 +108,10 @@ test.describe("User creation", () => {
 
     await confirmModal(page);
     await confirmModal(page);
+
+    await selectActionToggleItem(page, "Delete");
+    await confirmModal(page);
+    await assertNotificationMessage(page, "The user has been deleted");
   });
 });
 
@@ -116,28 +123,33 @@ test.describe("Existing users", () => {
   };
 
   test("searches for an existing user", async ({ page }) => {
-    const realm = await createTestBed(overrides);
+    await using testBed = await createTestBed(overrides);
 
-    await login(page, { to: toUsers({ realm }) });
+    await login(page, { to: toUsers({ realm: testBed.realm }) });
 
     await searchItem(page, placeHolder, existingUserName);
     await assertRowExists(page, existingUserName);
   });
 
   test("searches for a non-existing user", async ({ page }) => {
-    const realm = await createTestBed(overrides);
+    await using testBed = await createTestBed(overrides);
 
-    await login(page, { to: toUsers({ realm }) });
+    await login(page, { to: toUsers({ realm: testBed.realm }) });
 
     await searchItem(page, "Search", "non-existing-user");
     await assertNoResults(page);
   });
 
   test("edits a user", async ({ page }) => {
-    const realm = await createTestBed(overrides);
-    const user = await adminClient.findUserByUsername(realm, existingUserName);
+    await using testBed = await createTestBed(overrides);
+    const user = await adminClient.findUserByUsername(
+      testBed.realm,
+      existingUserName,
+    );
 
-    await login(page, { to: toUser({ realm, id: user.id!, tab: "settings" }) });
+    await login(page, {
+      to: toUser({ realm: testBed.realm, id: user.id!, tab: "settings" }),
+    });
 
     await fillUserForm(page, {
       email: "test-user@example.com",
@@ -151,9 +163,9 @@ test.describe("Existing users", () => {
   const attributesName = "unmanagedAttributes";
 
   test("adds unmanaged attributes to a user", async ({ page }) => {
-    const realm = await createTestBed(overrides);
+    await using testBed = await createTestBed(overrides);
 
-    await login(page, { to: toRealmSettings({ realm }) });
+    await login(page, { to: toRealmSettings({ realm: testBed.realm }) });
 
     await selectItem(page, "#unmanagedAttributePolicy", "Enabled");
     await page.getByTestId("realmSettingsGeneralTab-save").click();
@@ -185,9 +197,9 @@ test.describe("Existing users", () => {
   test("adds unmanaged attributes with multiple values to a user", async ({
     page,
   }) => {
-    const realm = await createTestBed(overrides);
+    await using testBed = await createTestBed(overrides);
 
-    await login(page, { to: toRealmSettings({ realm }) });
+    await login(page, { to: toRealmSettings({ realm: testBed.realm }) });
 
     await selectItem(page, "#unmanagedAttributePolicy", "Enabled");
     await page.getByTestId("realmSettingsGeneralTab-save").click();
@@ -204,13 +216,18 @@ test.describe("Existing users", () => {
   });
 
   test("adds a user to a group", async ({ page }) => {
-    const realm = await createTestBed({
+    await using testBed = await createTestBed({
       ...overrides,
       groups: [{ name: "test-group" }],
     });
-    const user = await adminClient.findUserByUsername(realm, existingUserName);
+    const user = await adminClient.findUserByUsername(
+      testBed.realm,
+      existingUserName,
+    );
 
-    await login(page, { to: toUser({ realm, id: user.id!, tab: "groups" }) });
+    await login(page, {
+      to: toUser({ realm: testBed.realm, id: user.id!, tab: "groups" }),
+    });
 
     await joinGroup(page, ["test-group"], true);
     await assertNotificationMessage(page, "Added group membership");

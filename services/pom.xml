@@ -21,7 +21,11 @@
     <parent>
         <artifactId>keycloak-parent</artifactId>
         <groupId>org.keycloak</groupId>
+<<<<<<< HEAD
+        <version>26.5.5</version>
+=======
         <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -81,7 +85,6 @@
             <groupId>org.twitter4j</groupId>
             <artifactId>twitter4j-core</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.jboss.logging</groupId>
             <artifactId>jboss-logging</artifactId>
@@ -182,6 +185,11 @@
             <artifactId>woodstox-core</artifactId>
             <version>${woodstox.version}</version>    <!-- this version has to match that of used in Wildfly -->
             <scope>test</scope>
+        </dependency>
+        <!-- YAML -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.jakarta.rs</groupId>
+            <artifactId>jackson-jakarta-rs-yaml-provider</artifactId>
         </dependency>
         <dependency>
             <groupId>com.google.zxing</groupId>
@@ -439,6 +447,7 @@
                                          -->
                                         <toc/>
                                         <toc-position>left</toc-position>
+                                        <sectanchors />
                                         <generated>${project.basedir}/target/apidocs-rest/asciidoc</generated>
                                         <!-- Boolean attributes are passed as defined/undefined to AsciiDoc, not at their literal value -->
                                         <project_community>true</project_community>

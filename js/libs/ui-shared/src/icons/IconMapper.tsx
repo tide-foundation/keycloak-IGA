@@ -15,7 +15,11 @@ import {
   TwitterIcon,
 } from "@patternfly/react-icons";
 
+<<<<<<< HEAD
+import TideIcon  from "../../../../assets/icons/tide-icon.svg"; // TIDECLOAK IMPLEMENTATION
+=======
 import TideIcon  from "../../../../assets/icons/tide-icon.svg";
+>>>>>>> origin/release/0.13.26
 
 type IconMapperProps = {
   icon: string;
@@ -59,7 +63,11 @@ function getIcon(icon: string) {
     case "paypal":
       return PaypalIcon;
     case "tide":
+<<<<<<< HEAD
+      return () => <img src={TideIcon} alt="Tide Icon" width="16" height="16" />; // TIDECLOAK IMPLEMENTATION
+=======
       return () => <img src={TideIcon} alt="Tide Icon" width="16" height="16" />; // TIDE IMPLEMENTATION
+>>>>>>> origin/release/0.13.26
     default:
       return CubeIcon;
   }

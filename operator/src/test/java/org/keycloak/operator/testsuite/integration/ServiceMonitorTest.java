@@ -1,13 +1,14 @@
 package org.keycloak.operator.testsuite.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.List;
 
+<<<<<<< HEAD
+=======
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.operator.controllers.KeycloakServiceMonitorDependentResource;
 import org.keycloak.operator.crds.v2alpha1.deployment.Keycloak;
 import org.keycloak.operator.crds.v2alpha1.deployment.KeycloakStatusCondition;
@@ -19,6 +20,12 @@ import org.keycloak.operator.testsuite.utils.K8sUtils;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.openshift.api.model.monitoring.v1.ServiceMonitor;
 import io.quarkus.test.junit.QuarkusTest;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Tag(BaseOperatorTest.SLOW)
 @QuarkusTest
@@ -50,6 +57,18 @@ public class ServiceMonitorTest extends BaseOperatorTest {
             var sm = getServiceMonitor(kc);
             assertThat(sm).isNotNull();
             assertThat(sm.getSpec().getEndpoints()).hasSize(1);
+        });
+
+        // make sure the desired state is maintained
+        var sm = getServiceMonitor(kc);
+        sm.getMetadata().setResourceVersion(null);
+        sm.getSpec().setScrapeProtocols(List.of("PrometheusText0.0.4"));
+        assertThat(k8sclient.resource(sm).patch().getSpec().getScrapeProtocols())
+                .doesNotContain(KeycloakServiceMonitorDependentResource.OPEN_METRICS_PROTOCOL);
+
+        Awaitility.await().untilAsserted(() -> {
+            assertThat(getServiceMonitor(kc).getSpec().getScrapeProtocols())
+                    .contains(KeycloakServiceMonitorDependentResource.OPEN_METRICS_PROTOCOL);
         });
     }
 

@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+/** TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
 // TAKEN FROM TIDE-JS
 /**
  * @param {Uint8Array} bytes 

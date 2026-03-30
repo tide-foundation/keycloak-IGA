@@ -23,13 +23,21 @@
     <parent>
         <groupId>org.keycloak</groupId>
         <artifactId>keycloak-parent</artifactId>
+<<<<<<< HEAD
+        <version>26.5.5</version>
+=======
         <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <groupId>org.keycloak</groupId>
     <artifactId>theme-verifier-maven-plugin</artifactId>
+<<<<<<< HEAD
+    <version>26.5.5</version>
+=======
     <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
 
     <name>Keycloak Theme verifier</name>
     <description>Keycloak Theme verifier</description>

@@ -1,5 +1,9 @@
 import { expect } from "chai";
+<<<<<<< HEAD
+import { joinPath } from "../src/utils/joinPath.ts";
+=======
 import { joinPath } from "../lib/utils/joinPath.js";
+>>>>>>> origin/release/0.13.26
 
 describe("joinPath", () => {
   it("returns an empty string when no paths are provided", () => {

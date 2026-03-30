@@ -1,23 +1,5 @@
 package org.keycloak.testsuite.docker;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.keycloak.common.Profile;
-import org.keycloak.common.util.PemUtils;
-import org.keycloak.crypto.KeyStatus;
-import org.keycloak.models.Constants;
-import org.keycloak.representations.idm.KeysMetadataRepresentation;
-import org.keycloak.representations.idm.RealmRepresentation;
-import org.keycloak.testsuite.AbstractKeycloakTest;
-import org.keycloak.testsuite.arquillian.annotation.EnableFeature;
-import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.BindMode;
-import org.testcontainers.containers.Container;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.output.Slf4jLogConsumer;
-import org.testcontainers.containers.wait.strategy.Wait;
-
 import java.io.File;
 import java.io.PrintWriter;
 import java.time.Duration;
@@ -26,11 +8,42 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+<<<<<<< HEAD
+import org.keycloak.admin.client.resource.ClientResource;
+import org.keycloak.common.Profile;
+import org.keycloak.common.util.PemUtils;
+import org.keycloak.crypto.KeyStatus;
+import org.keycloak.models.Constants;
+import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.KeysMetadataRepresentation;
+import org.keycloak.representations.idm.RealmRepresentation;
+import org.keycloak.testsuite.AbstractKeycloakTest;
+import org.keycloak.testsuite.admin.ApiUtil;
+import org.keycloak.testsuite.arquillian.annotation.EnableFeature;
+
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.BindMode;
+import org.testcontainers.containers.Container;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
+import org.testcontainers.containers.wait.strategy.Wait;
+
+=======
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assume.assumeTrue;
+>>>>>>> origin/release/0.13.26
 import static org.keycloak.testsuite.util.ServerURLs.AUTH_SERVER_PORT_HTTP;
 import static org.keycloak.testsuite.util.WaitUtils.pause;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.junit.Assume.assumeTrue;
 
 @EnableFeature(Profile.Feature.DOCKER)
 public class DockerClientTest extends AbstractKeycloakTest {
@@ -160,6 +173,22 @@ public class DockerClientTest extends AbstractKeycloakTest {
         result = dockerClientContainer.execInContainer("docker", "push", REGISTRY_HOSTNAME + ":" + REGISTRY_PORT + "/empty");
         printCommandResult(result);
         assertThat("Error pushing to registry", result.getExitCode(), is(0));
+
+        // logout
+        result = dockerClientContainer.execInContainer("docker", "logout");
+        printCommandResult(result);
+        assertThat("Error performing logout", result.getExitCode(), is(0));
+
+        // disable and login should fail
+        ClientResource client = ApiUtil.findClientByClientId(adminClient.realm(REALM_ID), CLIENT_ID);
+        ClientRepresentation clientRep = client.toRepresentation();
+        clientRep.setEnabled(Boolean.FALSE);
+        client.update(clientRep);
+
+        result = dockerClientContainer.execInContainer("docker", "login", "-u", DOCKER_USER, "-p", DOCKER_USER_PASSWORD, REGISTRY_HOSTNAME + ":" + REGISTRY_PORT);
+        printCommandResult(result);
+        assertThat("Error performing login", result.getExitCode(), not(is(0)));
+        assertThat("Service is not disabled", result.getStderr(), containsString("Client specified by 'service' is disabled"));
     }
 
     private void printCommandResult(Container.ExecResult result) {

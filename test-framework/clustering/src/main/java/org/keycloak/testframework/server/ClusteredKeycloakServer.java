@@ -22,12 +22,13 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import org.infinispan.server.test.core.CountdownLatchLoggingConsumer;
-import org.jboss.logging.Logger;
 import org.keycloak.it.utils.DockerKeycloakDistribution;
 import org.keycloak.testframework.clustering.LoadBalancer;
 import org.keycloak.testframework.infinispan.CacheType;
 import org.keycloak.testframework.logging.JBossLogConsumer;
+
+import org.infinispan.server.test.core.CountdownLatchLoggingConsumer;
+import org.jboss.logging.Logger;
 import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.LazyFuture;
@@ -53,7 +54,7 @@ public class ClusteredKeycloakServer implements KeycloakServer {
     }
 
     @Override
-    public void start(KeycloakServerConfigBuilder configBuilder) {
+    public void start(KeycloakServerConfigBuilder configBuilder, boolean tlsEnabled) {
         int numServers = containers.length;
         CountdownLatchLoggingConsumer clusterLatch = new CountdownLatchLoggingConsumer(numServers, String.format(CLUSTER_VIEW_REGEX, numServers));
         String[] imagePeServer = null;
