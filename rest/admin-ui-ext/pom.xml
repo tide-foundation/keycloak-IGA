@@ -22,7 +22,11 @@
     <parent>
         <groupId>org.keycloak</groupId>
         <artifactId>keycloak-rest-parent</artifactId>
+<<<<<<< HEAD
         <version>26.5.5</version>
+=======
+        <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
     </parent>
 
     <artifactId>keycloak-rest-admin-ui-ext</artifactId>

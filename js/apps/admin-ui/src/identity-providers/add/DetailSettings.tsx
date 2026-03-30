@@ -10,14 +10,19 @@ import {
   ScrollForm,
   useAlerts,
   useFetch,
+<<<<<<< HEAD
   HelpItem,
+=======
+  KeycloakSpinner,
+  HelpItem,
+  ListEmptyState
+>>>>>>> origin/release/0.13.26
 } from "@keycloak/keycloak-ui-shared";
 import {
   AlertVariant,
   Button,
   ButtonVariant,
   Divider,
-  DropdownItem,
   Form,
   PageSection,
   Tab,
@@ -30,6 +35,10 @@ import {
   Grid,
   GridItem,
   ClipboardCopy,
+<<<<<<< HEAD
+=======
+  DropdownItem,
+>>>>>>> origin/release/0.13.26
   FileUpload,
   DropEvent
 } from "@patternfly/react-core";
@@ -199,37 +208,37 @@ const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDi
         divider={false}
         dropdownItems={[
           ...(provider?.providerId?.includes("saml") &&
-          validateSignature === "true" &&
-          useMetadataDescriptorUrl === "true" &&
-          metadataDescriptorUrl &&
-          !formState.isDirty &&
-          value
+            validateSignature === "true" &&
+            useMetadataDescriptorUrl === "true" &&
+            metadataDescriptorUrl &&
+            !formState.isDirty &&
+            value
             ? [
+              <DropdownItem
+                key="reloadKeys"
+                onClick={() => reloadSamlKeys(provider.alias!)}
+              >
+                {t("reloadKeys")}
+              </DropdownItem>,
+            ]
+            : provider?.providerId?.includes("saml") &&
+              validateSignature === "true" &&
+              useMetadataDescriptorUrl !== "true" &&
+              metadataDescriptorUrl &&
+              !formState.isDirty
+              ? [
                 <DropdownItem
-                  key="reloadKeys"
-                  onClick={() => reloadSamlKeys(provider.alias!)}
+                  key="importKeys"
+                  onClick={() =>
+                    importSamlKeys(
+                      provider.providerId!,
+                      metadataDescriptorUrl,
+                    )
+                  }
                 >
-                  {t("reloadKeys")}
+                  {t("importKeys")}
                 </DropdownItem>,
               ]
-            : provider?.providerId?.includes("saml") &&
-                validateSignature === "true" &&
-                useMetadataDescriptorUrl !== "true" &&
-                metadataDescriptorUrl &&
-                !formState.isDirty
-              ? [
-                  <DropdownItem
-                    key="importKeys"
-                    onClick={() =>
-                      importSamlKeys(
-                        provider.providerId!,
-                        metadataDescriptorUrl,
-                      )
-                    }
-                  >
-                    {t("importKeys")}
-                  </DropdownItem>,
-                ]
               : []),
           ...(provider?.alias === "tide" && toggleOffboardingDialog ? [
             <DropdownItem key="offboard" onClick={() => toggleOffboardingDialog()}>
@@ -612,11 +621,14 @@ export default function DetailSettings() {
     },
   });
 
+<<<<<<< HEAD
   const jwtAuthorizationGrantEnabled = useWatch({
     control: form.control,
     name: "config.jwtAuthorizationGrantEnabled",
   });
 
+=======
+>>>>>>> origin/release/0.13.26
   if (!provider) {
     return <KeycloakSpinner />;
   }
@@ -694,7 +706,7 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           {isSocial && <GeneralSettings create={false} id={providerId} />}
-          {(isOIDC || isOAuth2) && <OIDCGeneralSettings />}
+          {isOIDC && <OIDCGeneralSettings />}
           {isSAML && <SamlGeneralSettings isAliasReadonly />}
           {providerInfo && (
             <DynamicComponents stringify properties={providerInfo.properties} isTideProvider={providerId === "tide"} />

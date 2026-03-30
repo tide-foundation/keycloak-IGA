@@ -528,11 +528,19 @@ public class CachedRealm extends AbstractExtendableRevisioned {
     }
 
     public CibaConfig getCibaConfig(Supplier<RealmModel> modelSupplier) {
+<<<<<<< HEAD
         return CibaConfig.fromCache(modelSupplier, Collections.unmodifiableMap(attributes));
     }
 
     public ParConfig getParConfig(Supplier<RealmModel> modelSupplier) {
         return ParConfig.fromCache(modelSupplier, Collections.unmodifiableMap(attributes));
+=======
+        return new CibaConfig(modelSupplier.get());
+    }
+
+    public ParConfig getParConfig(Supplier<RealmModel> modelSupplier) {
+        return new ParConfig(modelSupplier.get());
+>>>>>>> origin/release/0.13.26
     }
 
     public int getActionTokenGeneratedByAdminLifespan() {

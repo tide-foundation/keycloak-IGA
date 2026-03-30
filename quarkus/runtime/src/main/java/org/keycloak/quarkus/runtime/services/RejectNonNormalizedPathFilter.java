@@ -17,16 +17,26 @@
 
 package org.keycloak.quarkus.runtime.services;
 
+<<<<<<< HEAD
 import java.util.Objects;
 
 import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 import org.keycloak.services.util.ObjectMapperResolver;
 
+=======
+>>>>>>> origin/release/0.13.26
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.Handler;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
+<<<<<<< HEAD
+=======
+import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
+import org.keycloak.services.util.ObjectMapperResolver;
+
+import java.util.Objects;
+>>>>>>> origin/release/0.13.26
 
 /**
  * This filter rejects all paths that need normalization as of RFC3986 or that have double slashes.
@@ -51,6 +61,7 @@ public class RejectNonNormalizedPathFilter implements Handler<RoutingContext> {
                 jsonString = "";
             }
             routingContext.response().setStatusCode(400).end(jsonString);
+<<<<<<< HEAD
         } else if (routingContext.request().path().contains(";")) {
             // RFC 6570 defines matrix parameters that are separated with a semicolon in each path segment.
             // Keycloak does not use @MatrixParam, therefore any URL containing a semicolon is treated as invalid.
@@ -66,6 +77,8 @@ public class RejectNonNormalizedPathFilter implements Handler<RoutingContext> {
                 jsonString = "";
             }
             routingContext.response().setStatusCode(400).end(jsonString);
+=======
+>>>>>>> origin/release/0.13.26
         } else {
             routingContext.next();
         }

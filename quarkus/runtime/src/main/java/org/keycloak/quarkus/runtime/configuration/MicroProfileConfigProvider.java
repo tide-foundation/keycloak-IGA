@@ -17,21 +17,34 @@
 
 package org.keycloak.quarkus.runtime.configuration;
 
+<<<<<<< HEAD
+=======
+import static org.keycloak.quarkus.runtime.configuration.Configuration.OPTION_PART_SEPARATOR;
+import static org.keycloak.quarkus.runtime.configuration.Configuration.toDashCase;
+
+>>>>>>> origin/release/0.13.26
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+<<<<<<< HEAD
 
+=======
+import org.eclipse.microprofile.config.ConfigValue;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.Config;
 import org.keycloak.Config.AbstractScope;
 import org.keycloak.Config.Scope;
 
 import io.smallrye.config.SmallRyeConfig;
+<<<<<<< HEAD
 import org.eclipse.microprofile.config.ConfigValue;
 
 import static org.keycloak.quarkus.runtime.configuration.Configuration.OPTION_PART_SEPARATOR;
 import static org.keycloak.quarkus.runtime.configuration.Configuration.toDashCase;
+=======
+>>>>>>> origin/release/0.13.26
 
 public class MicroProfileConfigProvider implements Config.ConfigProvider {
 

@@ -87,11 +87,14 @@ public class BasicTimerProvider implements TimerProvider {
         // do nothing
     }
 
+<<<<<<< HEAD
     @Override
     public Map<String, TimerTaskContext> getTasks() {
         return Collections.unmodifiableMap(new HashMap<>(factory.getTasks()));
     }
 
+=======
+>>>>>>> origin/release/0.13.26
     /**
      * Using a private static class avoids keeping a reference to {@link BasicTimerProvider} which then fails to be garbage collected,
      * including its reference to {@link KeycloakSession}.

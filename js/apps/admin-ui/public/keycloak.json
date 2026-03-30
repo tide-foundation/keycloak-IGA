@@ -1,0 +1,23 @@
+{
+  "realm": "myrealm",
+  "auth-server-url": "http://localhost:8080",
+  "ssl-required": "external",
+  "resource": "security-admin-console",
+  "public-client": true,
+  "confidential-port": 0,
+  "jwk": {
+    "keys": [
+      {
+        "kid": "lI1Gc_MdjVvGBJ9iiEIWT2WuploYIRNQJQBV6LrO0hI",
+        "kty": "OKP",
+        "alg": "EdDSA",
+        "use": "sig",
+        "crv": "Ed25519",
+        "x": "RcGAsYEdDclfaKLmDIEuEDJEZs6FkIGPsoVtmZN84-U"
+      }
+    ]
+  },
+  "vendorId": "265530975369402417162413582663136843489015162792855576311732978051501890817",
+  "homeOrkUrl": "http://localhost:1001",
+  "client-origin-auth-http://localhost:8080": "/gGzL17yik3L+KB9dCKbMar+fPX95YPcH/2FjCDl8UxAE1K+ryi13v63xYZryt3JPTYsFUfAuDjj1cZbeoOcAA=="
+}

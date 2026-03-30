@@ -128,8 +128,14 @@ function RealmSettingsGeneralTabForm({
 
   const { addAlert, addError } = useAlerts();
 
+<<<<<<< HEAD
   // TIDECLOAK IMPLEMENTATION
   const updateSwitchValue = async (value: boolean) => {
+=======
+
+  const updateSwitchValue = async (value: boolean) => {
+
+>>>>>>> origin/release/0.13.26
     try {
       const data = new FormData();
       data.append("isIGAEnabled", value.toString());
@@ -210,7 +216,10 @@ function RealmSettingsGeneralTabForm({
               />
             )}
           </FormGroup>
+<<<<<<< HEAD
           {/* TIDECLOAK IMPLEMENTATION */}
+=======
+>>>>>>> origin/release/0.13.26
           <FormGroup
               label={t("Identity Governance and Administration (IGA)")}
               fieldId="tide-iga"

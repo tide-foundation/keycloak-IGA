@@ -17,6 +17,7 @@
 
 package org.keycloak.storage.ldap.mappers;
 
+<<<<<<< HEAD
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -28,6 +29,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+=======
+import static java.util.Optional.ofNullable;
+
+import org.jboss.logging.Logger;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.LDAPConstants;
@@ -48,9 +54,24 @@ import org.keycloak.storage.ldap.idm.model.LDAPObject;
 import org.keycloak.storage.ldap.idm.query.Condition;
 import org.keycloak.storage.ldap.idm.query.internal.LDAPQuery;
 
+<<<<<<< HEAD
 import org.jboss.logging.Logger;
 
 import static java.util.Optional.ofNullable;
+=======
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+>>>>>>> origin/release/0.13.26
 
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>

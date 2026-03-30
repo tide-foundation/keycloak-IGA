@@ -58,6 +58,7 @@
         </modifySql>
     </changeSet>
 
+<<<<<<< HEAD
     <changeSet author="keycloak" id="26.5.0-idp-config-allow-null-fixed-drop-mssql-index">
         <preConditions onFail="MARK_RAN" onSqlOutput="TEST">
             <and>
@@ -233,4 +234,6 @@
                              constraintName="UK_ORG_INVITATION_EMAIL"/>
     </changeSet>
 
+=======
+>>>>>>> origin/release/0.13.26
 </databaseChangeLog>

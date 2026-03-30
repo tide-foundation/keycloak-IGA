@@ -562,6 +562,24 @@ public class BruteForceTest extends AbstractChangeImportedUserPasswordsTest {
     }
 
     // Issue 30939
+<<<<<<< HEAD
+=======
+    @Test
+    public void testNoOverflowDuringBruteForceCalculation() throws Exception {
+        int waitTime = Integer.MAX_VALUE - 172800; // Max int value without 2 days
+
+        try (RealmAttributeUpdater updater = new RealmAttributeUpdater(testRealm())
+                .setWaitIncrementSeconds(waitTime)
+                .setMaxFailureWaitSeconds(waitTime)
+                .setMaxDeltaTimeSeconds(900) // 15 minutes
+                .update()) {
+            loginInvalidPassword("test-user@localhost");
+            loginInvalidPassword("test-user@localhost");
+            expectTemporarilyDisabled();
+        }
+    }
+
+>>>>>>> origin/release/0.13.26
     @Test
     public void testNoOverflowDuringBruteForceCalculation() throws Exception {
         int waitTime = Integer.MAX_VALUE - 172800; // Max int value without 2 days

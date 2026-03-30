@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 /** TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -11,8 +14,12 @@ import {
   Button,
   ToolbarItem,
   AlertVariant,
+<<<<<<< HEAD
   ButtonVariant,
   ExpandableSection
+=======
+  ButtonVariant
+>>>>>>> origin/release/0.13.26
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import CompositeRoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/CompositeRoleChangeRequest"
@@ -25,15 +32,21 @@ import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { useRealm } from '../context/realm-context/RealmContext';
+<<<<<<< HEAD
 import { useWhoAmI } from '../context/whoami/WhoAmI';
 import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { ActivityPanel } from "./ActivityPanel";
 import { expandRowAndScrollTo } from "./utils/expandAndScroll";
+=======
+import { groupRequestsByDraftId, type BundledRequest } from './utils/bundleUtils';
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+>>>>>>> origin/release/0.13.26
 
 
 type ChangeRequestProps = {
   updateCounter: (count: number) => void;
+<<<<<<< HEAD
   onActionComplete?: () => void;
 };
 
@@ -42,16 +55,31 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
   const { adminClient } = useAdminClient();
   const { realm } = useRealm();
   const { whoAmI } = useWhoAmI();
+=======
+};
+
+export const RolesChangeRequestsList = ({ updateCounter }: ChangeRequestProps) => {
+  const { keycloak, approveTideRequests,  } = useEnvironment();
+  const { adminClient } = useAdminClient();
+  const { realm } = useRealm();
+>>>>>>> origin/release/0.13.26
 
   const { t } = useTranslation();
   const [key, setKey] = useState(0);
   const refresh = () => {
     setSelectedRow([])
     setKey((prev: number) => prev + 1);
+<<<<<<< HEAD
     onActionComplete?.();
   };
   const [selectedRow, setSelectedRow] = useState<BundledRequest[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+=======
+  };
+  const [selectedRow, setSelectedRow] = useState<BundledRequest[]>([]);
+  const [commitRecord, setCommitRecord] = useState<boolean>(false);
+  const [approveRecord, setApproveRecord] = useState<boolean>(false);
+>>>>>>> origin/release/0.13.26
   const { addAlert, addError } = useAlerts();
   const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true);
 
@@ -64,6 +92,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
     checkTide();
   }, [adminClient, realm])
 
+<<<<<<< HEAD
   const getEffectiveStatus = (bundle: BundledRequest): string => {
     const statuses = [...new Set(bundle.requests.map((r: any) =>
       r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status
@@ -87,6 +116,44 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
     const s = getEffectiveStatus(b);
     return s !== "ACTIVE" && (!b.requestedByUserId || b.requestedByUserId === whoAmI.userId);
   });
+=======
+
+  useEffect(() => {
+    if (!selectedRow || !selectedRow[0]) {
+      setApproveRecord(false);
+      setCommitRecord(false);
+      return;
+    }
+
+    const bundle = selectedRow[0];
+    const { status } = bundle;
+
+    // Disable both buttons if status is DENIED
+    if (status === "DENIED") {
+      setApproveRecord(false);
+      setCommitRecord(false);
+      return;
+    }
+
+    // Enable Approve button if the bundle is PENDING or DRAFT or MIXED
+    if (status === "PENDING" || status === "DRAFT" || status === "MIXED") {
+      setApproveRecord(true);
+      setCommitRecord(false);
+      return;
+    }
+
+    // Enable Commit button if status is APPROVED
+    if (status === "APPROVED") {
+      setCommitRecord(true);
+      setApproveRecord(false);
+      return;
+    }
+
+    // Default: Disable both buttons
+    setApproveRecord(false);
+    setCommitRecord(false);
+  }, [selectedRow]);
+>>>>>>> origin/release/0.13.26
 
   const ToolbarItemsComponent = () => {
     const { t } = useTranslation();
@@ -98,6 +165,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
     return (
       <>
         <ToolbarItem>
+<<<<<<< HEAD
           <Button
             variant="primary"
             isDisabled={!canApprove || isProcessing}
@@ -126,6 +194,19 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
             isDisabled={!canCancel || isProcessing}
             onClick={() => toggleCancelDialog()}
           >
+=======
+          <Button variant="primary" isDisabled={!approveRecord} onClick={() => handleApproveButtonClick(selectedRow)}>
+            {isTideEnabled ? t("Review Draft") : t("Approve Draft")}
+          </Button>
+        </ToolbarItem>
+        <ToolbarItem>
+          <Button variant="secondary" isDisabled={!commitRecord} onClick={() => handleCommitButtonClick(selectedRow)}>
+            {t("Commit Draft")}
+          </Button>
+        </ToolbarItem>
+        <ToolbarItem>
+          <Button variant="secondary" isDanger onClick={() => toggleCancelDialog()}>
+>>>>>>> origin/release/0.13.26
             {t("Cancel Draft")}
           </Button>
         </ToolbarItem>
@@ -135,7 +216,10 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
   };
 
   const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
+<<<<<<< HEAD
     setIsProcessing(true);
+=======
+>>>>>>> origin/release/0.13.26
     try {
       const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
 
@@ -145,21 +229,36 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
         actionType: x.actionType,
       }));
 
+<<<<<<< HEAD
       if (!isTideEnabled) {
         for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
         addAlert(t("Change requests approved successfully"), AlertVariant.success);
+=======
+      // Non-Tide path
+      if (!isTideEnabled) {
+        // Run sequentially; use Promise.all() if you want parallel
+        for (const change of changeRequests) {
+          await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
+        }
+>>>>>>> origin/release/0.13.26
         refresh();
         return;
       }
 
+<<<<<<< HEAD
+=======
+      // Tide-enabled path
+      // TODO: type response properly
+>>>>>>> origin/release/0.13.26
       const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });
 
       if (respObj.length > 0) {
         try {
+<<<<<<< HEAD
           const firstRespObj = respObj[0];
           if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
             const respMetaMap: Record<string, { actionType: string; changeSetType: string }> = {};
@@ -168,6 +267,13 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
                 actionType: resp.actionType || allRequests[0].actionType,
                 changeSetType: resp.changeSetType || allRequests[0].changeSetType,
               };
+=======
+          
+          const firstRespObj = respObj[0];
+          if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+            // Map through all responses to collect all change requests
+            const changereqs = respObj.map((resp: any) => {
+>>>>>>> origin/release/0.13.26
               return {
                 id: resp.changesetId,
                 request: base64ToBytes(resp.changeSetDraftRequests),
@@ -175,6 +281,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
             });
             const reviewResponses = await approveTideRequests(changereqs);
 
+<<<<<<< HEAD
             for (const reviewResp of reviewResponses) {
               if (reviewResp.approved) {
                 const meta = respMetaMap[reviewResp.id] || { actionType: allRequests[0].actionType, changeSetType: allRequests[0].changeSetType };
@@ -199,6 +306,21 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
             addAlert(t("Change requests reviewed successfully"), AlertVariant.success);
           } else {
             addAlert(t("Change requests approved successfully"), AlertVariant.success);
+=======
+            // Process each review response sequentially; use Promise.all for parallel
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
+                const formData = new FormData();
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", allRequests[0].actionType);
+                formData.append("changeSetType", allRequests[0].changeSetType);
+                formData.append("requests", bytesToBase64(msg));
+
+                await adminClient.tideAdmin.addReview(formData);
+              }
+            }
+>>>>>>> origin/release/0.13.26
           }
         } catch (error: any) {
           addAlert(error.responseData, AlertVariant.danger);
@@ -208,12 +330,16 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
       }
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
+<<<<<<< HEAD
     } finally {
       setIsProcessing(false);
+=======
+>>>>>>> origin/release/0.13.26
     }
   };
 
   const handleCommitButtonClick = async (selectedBundles: BundledRequest[]) => {
+<<<<<<< HEAD
     setIsProcessing(true);
     try {
       const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
@@ -230,6 +356,23 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
       addAlert(error.responseData, AlertVariant.danger);
     } finally {
       setIsProcessing(false);
+=======
+    try {
+      const allRequests = selectedBundles.flatMap(bundle => bundle.requests);
+      const changeRequests = allRequests.map(x => {
+        return {
+          changeSetId: x.draftRecordId,
+          changeSetType: x.changeSetType,
+          actionType: x.actionType,
+        }
+      })
+
+      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      refresh();
+      return;
+    } catch (error: any) {
+      addAlert(error.responseData, AlertVariant.danger);
+>>>>>>> origin/release/0.13.26
     }
   };
 
@@ -272,6 +415,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
       }
     },
     {
+<<<<<<< HEAD
       name: 'Requested By',
       displayKey: 'Requested By',
       cellRenderer: (bundle: BundledRequest) => (
@@ -279,10 +423,13 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
       )
     },
     {
+=======
+>>>>>>> origin/release/0.13.26
       name: 'Status',
       displayKey: 'Status',
       cellRenderer: (bundle: BundledRequest) => bundleStatusLabel(bundle)
     },
+<<<<<<< HEAD
     {
       name: 'Reviews',
       displayKey: 'Reviews',
@@ -328,6 +475,8 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
         </span>
       )
     },
+=======
+>>>>>>> origin/release/0.13.26
   ];
 
   const bundleStatusLabel = (bundle: BundledRequest) => {
@@ -370,6 +519,7 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
   };
 
   const DetailCell = (bundle: BundledRequest) => (
+<<<<<<< HEAD
     <>
     <ExpandableSection toggleText="Change Requests" isIndented>
       <Table
@@ -420,6 +570,53 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
     </ExpandableSection>
     <ActivityPanel changesetRequestId={bundle.draftRecordId} />
     </>
+=======
+    <Table
+      aria-label="Bundle details"
+      variant={'compact'}
+      borders={false}
+      isStriped
+    >
+      <Thead>
+        <Tr>
+          <Th width={10}>Action</Th>
+          <Th width={10}>Role</Th>
+          <Th width={10}>Client ID</Th>
+          <Th width={10}>Type</Th>
+          <Th width={10}>Status</Th>
+          <Th width={15} modifier="wrap">Affected User</Th>
+          <Th width={15} modifier="wrap">Affected Client</Th>
+          <Th width={40}>Access Draft</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {bundle.requests.map((request: any, index: number) =>
+          request.userRecord.map((userRecord: any, userIndex: number) => (
+            <Tr key={`${index}-${userIndex}`}>
+              <Td dataLabel="Action">{request.action}</Td>
+              <Td dataLabel="Role">{request.role}</Td>
+              <Td dataLabel="Client ID">{request.clientId}</Td>
+              <Td dataLabel="Type">{request.requestType}</Td>
+              <Td dataLabel="Status">
+                <Label
+                  color={request.status === 'APPROVED' ? 'blue' : request.status === 'PENDING' ? 'orange' : request.status === 'DENIED' ? 'red' : 'grey'}
+                >
+                  {request.status === "ACTIVE" ? request.deleteStatus || request.status : request.status}
+                </Label>
+              </Td>
+              <Td dataLabel="Affected User">{userRecord.username}</Td>
+              <Td dataLabel="Affected Client">{userRecord.clientId}</Td>
+              <Td dataLabel={columnNames.accessDraft}>
+                <ClipboardCopy isCode isReadOnly hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
+                  {parseAndFormatJson(userRecord.accessDraft)}
+                </ClipboardCopy>
+              </Td>
+            </Tr>
+          ))
+        )}
+      </Tbody>
+    </Table>
+>>>>>>> origin/release/0.13.26
   );
 
   const loader = async () => {
@@ -439,9 +636,13 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
     titleKey: "Cancel Change Request",
     children: (
       <>
+<<<<<<< HEAD
         {selectedRow.length > 1
           ? `Are you sure you want to cancel these ${selectedRow.length} change requests?`
           : "Are you sure you want to cancel this change request?"}
+=======
+        {"Are you sure you want to cancel this change request?"}
+>>>>>>> origin/release/0.13.26
       </>
     ),
     continueButtonLabel: "cancel",
@@ -474,6 +675,10 @@ export const RolesChangeRequestsList = ({ updateCounter, onActionComplete }: Cha
         <KeycloakDataTable
           key={key}
           toolbarItem={<ToolbarItemsComponent />}
+<<<<<<< HEAD
+=======
+          isRadio={isTideEnabled}
+>>>>>>> origin/release/0.13.26
           loader={loader}
           ariaLabelKey="Role Change Requests"
           detailColumns={[

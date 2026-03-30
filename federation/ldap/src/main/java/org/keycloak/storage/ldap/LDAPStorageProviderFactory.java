@@ -76,6 +76,9 @@ import org.keycloak.utils.CredentialHelper;
 
 import org.jboss.logging.Logger;
 
+import javax.naming.NamingException;
+import javax.naming.spi.NamingManager;
+
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>

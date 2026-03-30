@@ -3,7 +3,10 @@ import Resource from "./resource.js";
 import type RequestedChanges from "../defs/RequestedChanges.js";
 import type RoleChangeRequest from "../defs/RoleChangeRequest.js";
 import type CompositeRoleChangeRequest from "../defs/CompositeRoleChangeRequest.js";
+<<<<<<< HEAD
 import type GroupChangeRequest from "../defs/GroupChangeRequest.js";
+=======
+>>>>>>> origin/release/0.13.26
 import type DraftChangeSetRequest from "../defs/DraftChangeSetRequest.js";
 
 // TIDECLOAK IMPLEMENTATION
@@ -13,18 +16,27 @@ interface ChangeSetRequest {
   actionType: string;
 }
 
+<<<<<<< HEAD
 // TIDECLOAK IMPLEMENTATION
+=======
+>>>>>>> origin/release/0.13.26
 interface ChangeSetRequestList {
   changeSets: ChangeSetRequest[];
 }
 
+<<<<<<< HEAD
 // TIDECLOAK IMPLEMENTATION
+=======
+>>>>>>> origin/release/0.13.26
 export interface RoleDraftStatus {
   draftStatus: string,
   deleteStatus: string
 }
 
+<<<<<<< HEAD
 // TIDECLOAK IMPLEMENTATION
+=======
+>>>>>>> origin/release/0.13.26
 export interface changeSetApprovalRequest {
   message: string,
   uri: string,
@@ -33,9 +45,13 @@ export interface changeSetApprovalRequest {
   expiry: string
 }
 
+<<<<<<< HEAD
 /* TIDECLOAK IMPLEMENTATION */
 export class TideUsersExt extends Resource<{ realm?: string }> {
     /* # TIDECLOAK IMPLEMENTATION */
+=======
+export class TideUsersExt extends Resource<{ realm?: string }> {
+>>>>>>> origin/release/0.13.26
     public generateDefaultUserContext = this.makeRequest<
     {
         clients?: (string)[];
@@ -47,7 +63,10 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
         payloadKey: "clients",
     });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getUserDraftStatus = this.makeRequest<
     { id: string },
     string
@@ -57,7 +76,10 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
     urlParamKeys: ["id"],
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getUserRoleDraftStatus = this.makeRequest<
     { userId: string, roleId: string },
     RoleDraftStatus
@@ -67,7 +89,10 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
     urlParamKeys: ["userId", "roleId"],
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getRoleDraftStatus = this.makeRequest<
     { parentId: string, childId: string },
     RoleDraftStatus
@@ -77,24 +102,34 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
     urlParamKeys: ["parentId", "childId"],
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getRequestedChangesForUsers = this.makeRequest<void, RoleChangeRequest[]>({
     method: "GET",
     path: "/tide-admin/change-set/users/requests",
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getRequestedChangesForRoles = this.makeRequest<void, CompositeRoleChangeRequest[] | RoleChangeRequest[]>({
     method: "GET",
     path: "/tide-admin/change-set/roles/requests",
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getRequestedChangesForClients = this.makeRequest<void, RequestedChanges[]>({
     method: "GET",
     path: "/tide-admin/change-set/clients/requests",
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
   public getRequestedChangesForGroups = this.makeRequest<void, GroupChangeRequest[]>({
     method: "GET",
@@ -125,18 +160,26 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public getRequestedChangesForRagnarokSettings = this.makeRequest<void, RequestedChanges[]>({
     method: "GET",
     path: "/ragnarok/change-set/offboarding/requests",
   });
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
     public getRequestedChangesForRealmLicensing = this.makeRequest<void, RequestedChanges[]>({
     method: "GET",
     path: "/tideAdminResources/change-set/licensing/requests",
   });
 
 
+<<<<<<< HEAD
 /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
 public getChangeSetRequests = this.makeRequest<
   ChangeSetRequestList,
   { id?: string; type?: string }
@@ -146,7 +189,10 @@ public getChangeSetRequests = this.makeRequest<
   queryParamKeys: ["id", "type"],
 });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public approveDraftChangeSet = this.makeRequest<
   ChangeSetRequestList,
   any
@@ -156,7 +202,10 @@ public getChangeSetRequests = this.makeRequest<
 });
 
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public cancelDraftChangeSet = this.makeRequest<
     ChangeSetRequestList,
     void
@@ -165,7 +214,10 @@ public getChangeSetRequests = this.makeRequest<
     path: "/tide-admin/change-set/cancel/batch",
   });
 
+<<<<<<< HEAD
   /* # TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
   public commitDraftChangeSet = this.makeRequest<
     ChangeSetRequestList,
     void
@@ -174,6 +226,7 @@ public getChangeSetRequests = this.makeRequest<
     path: "/tide-admin/change-set/commit/batch",
   });
 
+<<<<<<< HEAD
   // ── Policy Template endpoints ───────────────────────────────────
 
   /* # TIDECLOAK IMPLEMENTATION */
@@ -504,6 +557,8 @@ public getChangeSetRequests = this.makeRequest<
     urlParamKeys: ["id", "commentId"],
   });
 
+=======
+>>>>>>> origin/release/0.13.26
   constructor(client: KeycloakAdminClient) {
     super(client, {
       path: "/admin/realms/{realm}",

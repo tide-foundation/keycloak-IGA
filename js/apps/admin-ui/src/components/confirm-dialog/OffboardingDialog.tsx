@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 /** TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
 import { ReactElement, useState } from "react";
 import {
   Button,
@@ -54,7 +57,11 @@ export const OffboardingDialogModal = ({
 }: OffboardingDialogModalProps) => {
   const { t } = useTranslation();
   const [inputValue, setInputValue] = useState("");
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> origin/release/0.13.26
   const isConfirmationValid = inputValue === confirmationText;
 
   const handleConfirm = () => {
@@ -118,4 +125,8 @@ export const OffboardingDialogModal = ({
       </FormGroup>
     </Modal>
   );
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> origin/release/0.13.26

@@ -21,9 +21,14 @@ import sessionRoutes from "./sessions/routes";
 import userFederationRoutes from "./user-federation/routes";
 import userRoutes from "./user/routes";
 import workflowRoutes from "./workflows/routes";
+<<<<<<< HEAD
 import changeRequestsRoutes from "./tide-change-requests/routes"; // TIDECLOAK IMPLEMENTATION
 import tidePoliciesRoutes from "./tide-policies/routes"; // TIDECLOAK IMPLEMENTATION
 import tideKeyRoute from "./realm-settings/keys/routes"; // TIDECLOAK IMPLEMENTATION
+=======
+import changeRequestsRoutes from "./tide-change-requests/routes"; // TIDE IMPLEMENTATION
+import tideKeyRoute from "./realm-settings/keys/routes"; // TIDE IMPLEMENTATION
+>>>>>>> origin/release/0.13.26
 
 export type AppRouteObjectHandle = {
   access: AccessType | AccessType[];
@@ -61,9 +66,14 @@ export const routes: AppRouteObject[] = [
   ...groupsRoutes,
   ...dashboardRoutes,
   ...pageRoutes,
+<<<<<<< HEAD
   ...changeRequestsRoutes, // TIDECLOAK IMPLEMENTATION
   ...tidePoliciesRoutes, // TIDECLOAK IMPLEMENTATION
   ...tideKeyRoute, // TIDECLOAK IMPLEMENTATION
+=======
+  ...changeRequestsRoutes, // TIDE IMPLEMENTATION
+  ...tideKeyRoute, // TIDE IMPLEMENTATION
+>>>>>>> origin/release/0.13.26
   NotFoundRoute,
 ];
 

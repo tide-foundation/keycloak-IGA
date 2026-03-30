@@ -48,7 +48,11 @@ interface KeycloakContextProps<T extends BaseEnvironment> {
   environment: T;
 }
 
+<<<<<<< HEAD
 // Shape of the adapter JSON you're fetching for security-admin-console
+=======
+// Shape of the adapter JSON you’re fetching for security-admin-console
+>>>>>>> origin/release/0.13.26
 type TideKeycloakConfig = {
   realm: string;
   "auth-server-url": string;

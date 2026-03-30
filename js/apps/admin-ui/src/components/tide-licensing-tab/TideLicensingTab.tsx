@@ -124,8 +124,12 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
 
 
   // Function to ensure each watched field is a single string
+<<<<<<< HEAD
   function getSingleValue(value: string | string[] | undefined): string {
     if (value === undefined) return "";
+=======
+  function getSingleValue(value: string | string[]): string {
+>>>>>>> origin/release/0.13.26
     return Array.isArray(value) ? value[0] : value;
   }
 

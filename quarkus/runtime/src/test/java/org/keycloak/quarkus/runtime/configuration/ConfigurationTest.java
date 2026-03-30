@@ -50,11 +50,15 @@ import org.junit.Test;
 import org.mariadb.jdbc.MariaDbDataSource;
 import org.postgresql.xa.PGXADataSource;
 
+<<<<<<< HEAD
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+=======
+import static org.junit.Assert.assertFalse;
+>>>>>>> origin/release/0.13.26
 
 public class ConfigurationTest extends AbstractConfigurationTest {
 

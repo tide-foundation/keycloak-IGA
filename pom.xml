@@ -31,7 +31,11 @@
     </description>
     <groupId>org.keycloak</groupId>
     <artifactId>keycloak-parent</artifactId>
+<<<<<<< HEAD
     <version>26.5.5</version>
+=======
+    <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
     <packaging>pom</packaging>
 
     <properties>
@@ -41,12 +45,21 @@
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
 
+<<<<<<< HEAD
         <project.version.npm>26.5.5</project.version.npm>
 
         <asciidoctor.plugin.version>1.5.8</asciidoctor.plugin.version>
 
         <quarkus.version>3.27.2</quarkus.version>
         <quarkus.build.version>3.27.2</quarkus.build.version>
+=======
+        <project.version.npm>26.4.7</project.version.npm>
+
+        <asciidoctor.plugin.version>1.5.8</asciidoctor.plugin.version>
+
+        <quarkus.version>3.27.1</quarkus.version>
+        <quarkus.build.version>3.27.1</quarkus.build.version>
+>>>>>>> origin/release/0.13.26
         <jboss-logging-annotations.version>3.0.4.Final</jboss-logging-annotations.version> <!-- keep in sync with the version used by quarkus -->
 
         <project.build-time>${timestamp}</project.build-time>

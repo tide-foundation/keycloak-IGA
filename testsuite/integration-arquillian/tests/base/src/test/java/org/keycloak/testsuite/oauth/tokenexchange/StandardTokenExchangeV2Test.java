@@ -79,7 +79,10 @@ import org.keycloak.testsuite.util.ServerURLs;
 import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
 import org.keycloak.testsuite.util.oauth.TokenExchangeRequest;
 import org.keycloak.testsuite.util.oauth.TokenRevocationResponse;
+<<<<<<< HEAD
 import org.keycloak.testsuite.util.oauth.UserInfoResponse;
+=======
+>>>>>>> origin/release/0.13.26
 import org.keycloak.testsuite.utils.tls.TLSUtils;
 import org.keycloak.util.TokenUtil;
 
@@ -1339,7 +1342,11 @@ public class StandardTokenExchangeV2Test extends AbstractClientPoliciesTest {
         assertTrue(rep.isActive());
         events.expect(EventType.INTROSPECT_TOKEN)
                 .user(AssertEvents.isUUID())
+<<<<<<< HEAD
                 .session(AssertEvents.isSessionId())
+=======
+                .session(AssertEvents.isUUID())
+>>>>>>> origin/release/0.13.26
                 .client(clientId)
                 .assertEvent();
     }

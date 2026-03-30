@@ -1,5 +1,13 @@
 package org.keycloak.operator.controllers;
 
+<<<<<<< HEAD
+import java.net.HttpURLConnection;
+=======
+import static org.keycloak.operator.controllers.KeycloakDeploymentDependentResource.managementEndpoint;
+import static org.keycloak.operator.crds.v2alpha1.CRDUtils.METRICS_ENABLED;
+import static org.keycloak.operator.crds.v2alpha1.CRDUtils.configuredOptions;
+>>>>>>> origin/release/0.13.26
+
 import java.net.HttpURLConnection;
 
 import org.keycloak.operator.Constants;
@@ -19,17 +27,23 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernete
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
 import io.javaoperatorsdk.operator.processing.dependent.workflow.Condition;
 import io.quarkus.logging.Log;
+<<<<<<< HEAD
 
 import static org.keycloak.operator.controllers.KeycloakDeploymentDependentResource.managementEndpoint;
 import static org.keycloak.operator.crds.v2alpha1.CRDUtils.METRICS_ENABLED;
 import static org.keycloak.operator.crds.v2alpha1.CRDUtils.configuredOptions;
+=======
+>>>>>>> origin/release/0.13.26
 
 @KubernetesDependent(
       informer = @Informer(labelSelector = Constants.DEFAULT_LABELS_AS_STRING)
 )
 public class KeycloakServiceMonitorDependentResource extends CRUDKubernetesDependentResource<ServiceMonitor, Keycloak> {
 
+<<<<<<< HEAD
     public static final String OPEN_METRICS_PROTOCOL = "OpenMetricsText1.0.0";
+=======
+>>>>>>> origin/release/0.13.26
     public static final String WARN_METRICS_NOT_ENABLED = "A ServiceMonitor will not be created because `metrics-enabled` is not true.";
     public static final String WARN_CRD_NOT_INSTALLED = "A ServiceMonitor will not be created because the ServiceMonitor CRD is not installed.";
 

@@ -16,9 +16,12 @@
  */
 package org.keycloak.models;
 
+<<<<<<< HEAD
 import java.util.Map;
 import java.util.function.Supplier;
 
+=======
+>>>>>>> origin/release/0.13.26
 public class ParConfig extends AbstractConfig {
 
     // realm attribute names

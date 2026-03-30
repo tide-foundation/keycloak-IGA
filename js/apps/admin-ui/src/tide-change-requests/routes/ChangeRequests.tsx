@@ -4,7 +4,11 @@ import type { Path } from "react-router-dom";
 import { generateEncodedPath } from "../../utils/generateEncodedPath";
 /** TIDECLOAK IMPLEMENTATION */
 
+<<<<<<< HEAD
 export type ChangeRequestsTab = "users" | "roles" | "groups" | "clients" | "settings" | "policies";
+=======
+export type ChangeRequestsTab = "users" | "roles" | "clients" | "settings";
+>>>>>>> origin/release/0.13.26
 
 export type ChangeRequestsParams = { realm: string; tab?: ChangeRequestsTab };
 

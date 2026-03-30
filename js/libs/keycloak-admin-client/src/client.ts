@@ -18,11 +18,17 @@ import { UserStorageProvider } from "./resources/userStorageProvider.js";
 import { WhoAmI } from "./resources/whoAmI.js";
 import { Credentials, getToken, Settings } from "./utils/auth.js";
 import { defaultBaseUrl, defaultRealm } from "./utils/constants.js";
+<<<<<<< HEAD
 import { DecodedToken, decodeToken } from "./utils/decode.js";
 import { TideProvider } from "./resources/tideProvider.js"; // TIDECLOAK IMPLEMENTATION
 import { TideUsersExt } from "./resources/TideUserExt.js"; // TIDECLOAK IMPLEMENTATION
 
 export type RequestOptions = Omit<RequestInit, "signal">;
+=======
+import { TideProvider } from "./resources/tideProvider.js";
+import { TideUsersExt } from "./resources/TideUserExt.js";
+
+>>>>>>> origin/release/0.13.26
 
 export interface TokenProvider {
   getAccessToken: () => Promise<string | undefined>;
@@ -59,6 +65,10 @@ export class KeycloakAdminClient {
   public cache: Cache;
   public tideAdmin: TideProvider; // TIDECLOAK IMPLEMENTATION
   public tideUsersExt: TideUsersExt; // TIDECLOAK IMPLEMENTATION
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/release/0.13.26
 
   // Members
   public baseUrl: string;
@@ -102,6 +112,10 @@ export class KeycloakAdminClient {
     this.cache = new Cache(this);
     this.tideAdmin = new TideProvider(this); // TIDECLOAK IMPLEMENTATION
     this.tideUsersExt = new TideUsersExt(this); // TIDECLOAK IMPLEMENTATION
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/release/0.13.26
   }
 
   public async auth(credentials: Credentials) {

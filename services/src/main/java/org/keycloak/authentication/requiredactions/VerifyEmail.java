@@ -55,8 +55,15 @@ import org.keycloak.services.messages.Messages;
 import org.keycloak.services.validation.Validation;
 import org.keycloak.sessions.AuthenticationSessionCompoundId;
 import org.keycloak.sessions.AuthenticationSessionModel;
+import org.keycloak.authentication.requiredactions.util.EmailCooldownManager;
 
+<<<<<<< HEAD
 import org.jboss.logging.Logger;
+=======
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+>>>>>>> origin/release/0.13.26
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>

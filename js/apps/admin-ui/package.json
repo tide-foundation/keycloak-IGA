@@ -1,6 +1,10 @@
 {
   "name": "@keycloak/keycloak-admin-ui",
+<<<<<<< HEAD
   "version": "26.5.5",
+=======
+  "version": "26.4.7",
+>>>>>>> origin/release/0.13.26
   "type": "module",
   "main": "lib/keycloak-admin-ui.js",
   "types": "./lib/keycloak-admin-ui.d.ts",
@@ -111,7 +115,13 @@
     "react-router-dom": "^6.30.2",
     "reactflow": "^11.11.4",
     "use-react-router-breadcrumbs": "^4.0.1",
+<<<<<<< HEAD
     "yaml": "^2.8.2"
+=======
+    "heimdall-tide": "^0.1.1",
+    "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js"
+
+>>>>>>> origin/release/0.13.26
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.0",

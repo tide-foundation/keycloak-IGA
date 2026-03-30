@@ -237,8 +237,13 @@ public class LogoutEndpoint {
         // Check if we have session in the browser. If yes and it is different session than referenced by id_token_hint, the confirmation should be displayed
         AuthenticationManager.AuthResult authResult = AuthenticationManager.authenticateIdentityCookie(session, realm, false);
         if (authResult != null) {
+<<<<<<< HEAD
             userSession = authResult.session();
             if (idToken != null && idToken.getSessionState() != null && !idToken.getSessionState().equals(authResult.session().getId())) {
+=======
+            userSession = authResult.getSession();
+            if (idToken != null && idToken.getSessionState() != null && !idToken.getSessionState().equals(authResult.getSession().getId())) {
+>>>>>>> origin/release/0.13.26
                 forcedConfirmation = true;
             }
         } else {

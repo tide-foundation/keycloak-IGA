@@ -26,7 +26,14 @@ import org.keycloak.provider.ProviderConfigurationBuilder;
 import org.keycloak.representations.JsonWebToken;
 import org.keycloak.services.resources.IdentityBrokerService;
 
+<<<<<<< HEAD
 import org.jboss.logging.Logger;
+=======
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> origin/release/0.13.26
 
 public class FederatedJWTClientAuthenticator extends AbstractClientAuthenticator implements EnvironmentDependentProviderFactory {
 
@@ -79,6 +86,7 @@ public class FederatedJWTClientAuthenticator extends AbstractClientAuthenticator
             // Mark it as attempted for all items that return directly
             context.attempted();
 
+<<<<<<< HEAD
             ClientAssertionState clientAssertionState = context.getState(ClientAssertionState.class, ClientAssertionState.supplier());
             if (clientAssertionState == null || clientAssertionState.getClientAssertionType() == null) {
                 return;
@@ -103,6 +111,31 @@ public class FederatedJWTClientAuthenticator extends AbstractClientAuthenticator
 
             ClientAssertionIdentityProvider<?> identityProvider = getClientAssertionIdentityProvider(context.getSession(), lookup.identityProviderModel());
             ClientModel client = lookup.clientModel();
+=======
+            if (clientAssertionState == null || clientAssertionState.getClientAssertionType() == null) {
+                return;
+            }
+
+            if (!SUPPORTED_ASSERTION_TYPES.contains(clientAssertionState.getClientAssertionType())) {
+                return;
+            }
+
+            AlternativeLookupProvider lookupProvider = context.getSession().getProvider(AlternativeLookupProvider.class);
+
+            String federatedClientId = clientAssertionState.getToken().getSubject();
+
+            ClientModel client = lookupProvider.lookupClientFromClientAttributes(
+                    context.getSession(),
+                    Map.of(FederatedJWTClientAuthenticator.JWT_CREDENTIAL_SUBJECT_KEY, federatedClientId));
+            if (client == null) return;
+
+            String idpAlias = client.getAttribute(FederatedJWTClientAuthenticator.JWT_CREDENTIAL_ISSUER_KEY);
+
+            IdentityProviderModel identityProviderModel = context.getSession().identityProviders().getByAlias(idpAlias);
+            ClientAssertionIdentityProvider identityProvider = getClientAssertionIdentityProvider(context.getSession(), identityProviderModel);
+            if (identityProvider == null) return;
+
+>>>>>>> origin/release/0.13.26
             clientAssertionState.setClient(client);
 
             if (!PROVIDER_ID.equals(client.getClientAuthenticatorType())) return;

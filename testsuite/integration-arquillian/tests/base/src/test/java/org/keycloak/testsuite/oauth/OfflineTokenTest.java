@@ -73,7 +73,11 @@ import org.keycloak.testsuite.util.RealmManager;
 import org.keycloak.testsuite.util.RoleBuilder;
 import org.keycloak.testsuite.util.TokenSignatureUtil;
 import org.keycloak.testsuite.util.UserBuilder;
+<<<<<<< HEAD
 import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
+=======
+import org.keycloak.testsuite.util.AccountHelper;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.testsuite.util.oauth.IntrospectionResponse;
 import org.keycloak.testsuite.util.oauth.LogoutResponse;
 import org.keycloak.testsuite.utils.tls.TLSUtils;
@@ -1605,7 +1609,11 @@ public class OfflineTokenTest extends AbstractKeycloakTest {
                 .assertEvent();
 
         // remove offline scope from the client and perform a second refresh
+<<<<<<< HEAD
         try (ClientAttributeUpdater ignored = ClientAttributeUpdater.forClient(adminClient, TEST, "offline-client")
+=======
+        try (ClientAttributeUpdater updater = ClientAttributeUpdater.forClient(adminClient, TEST, "offline-client")
+>>>>>>> origin/release/0.13.26
                 .removeOptionalClientScope("offline_access").update()) {
 
             introspectionResponse = oauth.doIntrospectionAccessTokenRequest(response.getAccessToken());

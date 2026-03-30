@@ -230,8 +230,11 @@ import org.infinispan.protostream.types.java.CommonTypes;
                 SessionUnwrapMapper.class,
                 ClientSessionFilterByUser.class,
                 RemoveKeyConsumer.class,
+<<<<<<< HEAD
                 ValueIdentityBiFunction.class,
                 LoginFailuresLifespanUpdate.class,
+=======
+>>>>>>> origin/release/0.13.26
 
                 // infinispan.module.certificates
                 ReloadCertificateFunction.class,

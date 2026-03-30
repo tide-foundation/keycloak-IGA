@@ -2,10 +2,17 @@
 :project_name_full: Keycloak
 :project_community: true
 :project_product: false
+<<<<<<< HEAD
 :project_version: 26.5.5
 :project_versionMvn: 26.5.5
 :project_versionNpm: 26.5.5
 :project_versionDoc: 26.5.5
+=======
+:project_version: 26.4.7
+:project_versionMvn: 26.4.7
+:project_versionNpm: 26.4.7
+:project_versionDoc: 26.4.7
+>>>>>>> origin/release/0.13.26
 
 :archivebasename: keycloak
 :archivedownloadurl: https://github.com/keycloak/keycloak/releases/download/{project_version}/keycloak-{project_version}.zip
@@ -62,10 +69,17 @@
 :allproviderconfigguide_name: All provider configuration Guide
 :allproviderconfigguide_link: {server_guide_base_link}/all-provider-config
 :bootstrapadminrecovery_name: Admin Bootstrap and Recovery
+<<<<<<< HEAD
 :bootstrapadminrecovery_link: {server_guide_base_link}/bootstrap-admin-recovery
 :client_certificate_lookup_link: {server_guide_base_link}/reverseproxy#_enabling_client_certificate_lookup
 :databaseguide_name: Configuring the database
 :databaseguide_link: {server_guide_base_link}/db
+=======
+:bootstrapadminrecovery_link: https://www.keycloak.org/server/bootstrap-admin-recovery
+:client_certificate_lookup_link: https://www.keycloak.org/server/reverseproxy#_enabling_client_certificate_lookup
+:databaseguide_name: Configuring the database
+:databaseguide_link: https://www.keycloak.org/server/db
+>>>>>>> origin/release/0.13.26
 :developerguide_name: Server Developer Guide
 :developerguide_name_short: Server Developer
 :developerguide_link: {project_doc_base_url}/server_development/

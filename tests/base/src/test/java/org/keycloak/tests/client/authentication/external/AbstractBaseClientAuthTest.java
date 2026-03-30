@@ -1,13 +1,21 @@
 package org.keycloak.tests.client.authentication.external;
 
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.common.util.Time;
 import org.keycloak.representations.JsonWebToken;
 import org.keycloak.testframework.oauth.OAuthIdentityProvider;
 import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
 
+<<<<<<< HEAD
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+=======
+>>>>>>> origin/release/0.13.26
 public abstract class AbstractBaseClientAuthTest extends AbstractClientAuthTest {
 
     public AbstractBaseClientAuthTest(String expectedTokenIssuer, String internalClientId, String externalClientId) {

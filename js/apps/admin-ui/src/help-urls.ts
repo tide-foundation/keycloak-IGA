@@ -20,6 +20,11 @@ export default {
   guides: `${keycloakHomepageURL}/guides`,
   community: `${keycloakHomepageURL}/community`,
   blog: `${keycloakHomepageURL}/blog`,
+<<<<<<< HEAD
   workflowsUrl: `https://www.keycloak.org/2025/10/workflows-experimental-26-4`,
   changeRequests: "", // TIDECLOAK IMPLEMENTATION
+=======
+  workflowsUrl: `https://github.com/keycloak/keycloak/issues/39888`,
+  changeRequests: `something/to/explain/approvals` // tidecloak implementation
+>>>>>>> origin/release/0.13.26
 };

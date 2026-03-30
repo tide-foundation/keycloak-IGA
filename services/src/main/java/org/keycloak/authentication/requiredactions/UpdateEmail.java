@@ -68,6 +68,7 @@ import org.keycloak.userprofile.UserProfile;
 import org.keycloak.userprofile.UserProfileContext;
 import org.keycloak.userprofile.UserProfileProvider;
 import org.keycloak.userprofile.ValidationException;
+import org.keycloak.authentication.requiredactions.util.EmailCooldownManager;
 
 import org.jboss.logging.Logger;
 

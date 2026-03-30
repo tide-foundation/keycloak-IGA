@@ -223,9 +223,13 @@ public abstract class AbstractPermissionTest {
     }
 
     protected ScopePermissionRepresentation createGroupPermission(GroupRepresentation group, Set<String> scopes, AbstractPolicyRepresentation... policies) {
+<<<<<<< HEAD
         return createGroupPermission(Set.of(group), scopes, policies);
     }
     protected ScopePermissionRepresentation createGroupPermission(Set<GroupRepresentation> groups, Set<String> scopes, AbstractPolicyRepresentation... policies) {
         return createPermission(client, groups.stream().map(GroupRepresentation::getId).collect(Collectors.toSet()), AdminPermissionsSchema.GROUPS_RESOURCE_TYPE, scopes, policies);
+=======
+        return createPermission(client, group.getId(), AdminPermissionsSchema.GROUPS_RESOURCE_TYPE, scopes, policies);
+>>>>>>> origin/release/0.13.26
     }
 }

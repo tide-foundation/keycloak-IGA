@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+<<<<<<< HEAD
 import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.common.Profile;
 import org.keycloak.common.util.PemUtils;
@@ -30,6 +31,11 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
+=======
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assume.assumeTrue;
+>>>>>>> origin/release/0.13.26
 import static org.keycloak.testsuite.util.ServerURLs.AUTH_SERVER_PORT_HTTP;
 import static org.keycloak.testsuite.util.WaitUtils.pause;
 

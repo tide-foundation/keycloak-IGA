@@ -1,11 +1,23 @@
 package org.keycloak.tests.admin.authz.fgap;
 
+<<<<<<< HEAD
+=======
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
+
+>>>>>>> origin/release/0.13.26
 import java.util.List;
 import java.util.Map;
 
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
+<<<<<<< HEAD
 
+=======
+import org.junit.jupiter.api.Test;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientsResource;
 import org.keycloak.models.AdminRoles;
@@ -17,6 +29,7 @@ import org.keycloak.testframework.annotations.InjectAdminClient;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
 import org.keycloak.testframework.realm.ClientConfigBuilder;
 
+<<<<<<< HEAD
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -24,6 +37,8 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 
+=======
+>>>>>>> origin/release/0.13.26
 @KeycloakIntegrationTest
 public class RealmRoleAdminTest extends AbstractPermissionTest {
 

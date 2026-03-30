@@ -2,6 +2,13 @@ package org.keycloak.operator.testsuite.integration;
 
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.operator.controllers.KeycloakServiceMonitorDependentResource;
 import org.keycloak.operator.crds.v2alpha1.deployment.Keycloak;
 import org.keycloak.operator.crds.v2alpha1.deployment.KeycloakStatusCondition;

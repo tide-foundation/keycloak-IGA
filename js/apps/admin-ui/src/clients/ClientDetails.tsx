@@ -76,7 +76,11 @@ import { getProtocolName, isRealmClient } from "./utils";
 import { UserEvents } from "../events/UserEvents";
 import { useIsAdminPermissionsClient } from "../utils/useIsAdminPermissionsClient";
 import { AdminEvents } from "../events/AdminEvents";
+<<<<<<< HEAD
 import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil"; // TIDECLOAK IMPLEMENTATION
+=======
+import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil";
+>>>>>>> origin/release/0.13.26
 
 type ClientDetailHeaderProps = {
   onChange: (value: boolean) => void;
@@ -384,10 +388,17 @@ export default function ClientDetails() {
       setupForm(newClient);
       setClient(newClient);
 
+<<<<<<< HEAD
       // TIDECLOAK IMPLEMENTATION
       const signSettings = async () => {
         const tideComponent = await findTideComponent(adminClient, realm);
 
+=======
+      // TIDE IMPLEMENTATION
+      const signSettings = async () => {
+        const tideComponent = await findTideComponent(adminClient, realm);
+  
+>>>>>>> origin/release/0.13.26
         if (tideComponent) {
           try {
             await adminClient.tideAdmin.signIdpSettings();
@@ -395,9 +406,15 @@ export default function ClientDetails() {
             addError("SignSettingsError", error);
           }
         }
+<<<<<<< HEAD
 
       }
 
+=======
+  
+      }
+    
+>>>>>>> origin/release/0.13.26
       signSettings();
       addAlert(t(messageKey), AlertVariant.success);
     } catch (error) {

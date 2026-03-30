@@ -12,7 +12,11 @@ export type ProviderType =
   | "rsa-enc"
   | "rsa-enc-generated"
   | "rsa-generated"
+<<<<<<< HEAD
   | "tide-vendor-key"; // TIDECLOAK IMPLEMENTATION
+=======
+  | "tide-vendor-key";  // TIDE IMPLEMENTATION
+>>>>>>> origin/release/0.13.26
 
 export type KeyProviderParams = {
   id: string;

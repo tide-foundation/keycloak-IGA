@@ -3,6 +3,10 @@ package org.keycloak.services.util;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+<<<<<<< HEAD
+=======
+import org.jboss.logging.Logger;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.OAuth2Constants;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.common.Profile;

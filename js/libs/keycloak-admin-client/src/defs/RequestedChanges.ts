@@ -11,6 +11,7 @@ export default interface RequestedChanges {
     userRecord: RequestChangesUserRecord[];
     status: string;
     deleteStatus: string;
+<<<<<<< HEAD
     requestedBy?: string;
     requestedByUsername?: string;
     approvalCount?: number;
@@ -18,5 +19,7 @@ export default interface RequestedChanges {
     approvedBy?: string[];
     deniedBy?: string[];
     commentCount?: number;
+=======
+>>>>>>> origin/release/0.13.26
 }
 

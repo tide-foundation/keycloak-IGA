@@ -17,14 +17,18 @@
 
 package org.keycloak.testsuite.broker;
 
+<<<<<<< HEAD
 import java.util.Map;
 
+=======
+>>>>>>> origin/release/0.13.26
 import org.keycloak.broker.oidc.OIDCIdentityProviderConfig;
 import org.keycloak.models.IdentityProviderModel;
 import org.keycloak.models.IdentityProviderSyncMode;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
 
+<<<<<<< HEAD
 import static org.keycloak.broker.oidc.OAuth2IdentityProviderConfig.TOKEN_ENDPOINT_URL;
 import static org.keycloak.testsuite.broker.BrokerTestConstants.CLIENT_SECRET;
 import static org.keycloak.testsuite.broker.BrokerTestConstants.IDP_OIDC_ALIAS;
@@ -32,6 +36,13 @@ import static org.keycloak.testsuite.broker.BrokerTestConstants.IDP_OIDC_PROVIDE
 import static org.keycloak.testsuite.broker.BrokerTestConstants.REALM_PROV_NAME;
 import static org.keycloak.testsuite.broker.BrokerTestTools.createIdentityProvider;
 import static org.keycloak.testsuite.broker.BrokerTestTools.getProviderRoot;
+=======
+import java.util.Map;
+
+import static org.keycloak.broker.oidc.OAuth2IdentityProviderConfig.TOKEN_ENDPOINT_URL;
+import static org.keycloak.testsuite.broker.BrokerTestConstants.*;
+import static org.keycloak.testsuite.broker.BrokerTestTools.*;
+>>>>>>> origin/release/0.13.26
 
 public class KcOidcBrokerColonAliasClientSecretBasicAuthTest extends AbstractBrokerTest {
 

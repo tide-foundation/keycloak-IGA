@@ -26,8 +26,13 @@ export type ComponentProps = Omit<ConfigPropertyRepresentation, "type"> & {
   isNew?: boolean;
   stringify?: boolean;
   convertToName: (name: string) => string;
+<<<<<<< HEAD
   onSearch?: (search: string) => void;
   isHidden?: boolean; // TIDECLOAK IMPLEMENTATION
+=======
+  isHidden?: boolean; // TIDECLOAK IMPLEMENTATION
+
+>>>>>>> origin/release/0.13.26
 };
 
 export type NumberComponentProps = ComponentProps & {

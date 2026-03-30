@@ -28,6 +28,7 @@ import org.keycloak.authorization.model.Resource;
 import org.keycloak.authorization.model.ResourceServer;
 import org.keycloak.models.AdminRoles;
 import org.keycloak.models.ClientModel;
+import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleContainerModel;
@@ -59,8 +60,12 @@ class RolePermissionsV2 extends RolePermissions {
 
         if (realmManagementClient != null) {
             RoleModel realmAdminRole = realmManagementClient.getRole(AdminRoles.REALM_ADMIN);
+<<<<<<< HEAD
 
             return realmAdminRole != null && admin.hasRole(realmAdminRole);
+=======
+            return admin.hasRole(realmAdminRole);
+>>>>>>> origin/release/0.13.26
         }
 
         return false;
@@ -68,6 +73,7 @@ class RolePermissionsV2 extends RolePermissions {
 
     @Override
     public boolean canMapRole(RoleModel role) {
+<<<<<<< HEAD
         if (isRealmAdminRole(role)) {
             if (AdminRoles.VIEW_SYSTEM.equals(role.getName()) && !root.isAdmin(getMasterRealm())) {
                 return false;
@@ -78,6 +84,10 @@ class RolePermissionsV2 extends RolePermissions {
             }
             // otherwise, check if the user is granted with manage-users and is granted with the role being granted
             return root.hasOneAdminRole(AdminRoles.MANAGE_USERS) && checkAdminRoles(role);
+=======
+        if (isRealmAdminRole(role) && !isRealmAdmin()) {
+            return false;
+>>>>>>> origin/release/0.13.26
         }
 
         if (root.hasOneAdminRole(AdminRoles.MANAGE_USERS)) {
@@ -96,6 +106,7 @@ class RolePermissionsV2 extends RolePermissions {
 
     @Override
     public boolean canMapComposite(RoleModel role) {
+<<<<<<< HEAD
         if (isRealmAdminRole(role)) {
             if (AdminRoles.VIEW_SYSTEM.equals(role.getName()) && !root.isAdmin(getMasterRealm())) {
                 return false;
@@ -111,6 +122,10 @@ class RolePermissionsV2 extends RolePermissions {
         if (canManageDefault(role)) {
             // user has manage-realm or manage-client roles, so they can map any non-admin composite role
             return checkAdminRoles(role);
+=======
+        if (isRealmAdminRole(role) && !isRealmAdmin()) {
+            return false;
+>>>>>>> origin/release/0.13.26
         }
 
         if (role.getContainer() instanceof ClientModel clientModel) {
@@ -209,6 +224,7 @@ class RolePermissionsV2 extends RolePermissions {
 
     private boolean isRealmAdminRole(RoleModel role) {
         RoleContainerModel container = role.getContainer();
+<<<<<<< HEAD
         boolean isMasterRealmRole = container.equals(getMasterRealm());
         boolean isMasterRealmManagementAdminRole = (container instanceof ClientModel c)
                 && c.getRealm().getName().equals(Config.getAdminRealm())
@@ -216,12 +232,24 @@ class RolePermissionsV2 extends RolePermissions {
         boolean isRealmManagementAdminRole = container.equals(getRealmManagementClient());
 
         if (isMasterRealmRole|| isRealmManagementAdminRole || isMasterRealmManagementAdminRole) {
+=======
+        ClientModel realmManagementClient = getRealmManagementClient();
+
+        if (container.equals(getMasterRealm()) || container.equals(realmManagementClient)) {
+>>>>>>> origin/release/0.13.26
             return AdminRoles.ALL_ROLES.contains(role.getName());
         }
 
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    private ClientModel getRealmManagementClient() {
+        return realm.getClientByClientId(Constants.REALM_MANAGEMENT_CLIENT_ID);
+    }
+
+>>>>>>> origin/release/0.13.26
     private RealmModel getMasterRealm() {
         return root.adminsRealm().getName().equals(Config.getAdminRealm()) ?
                 root.adminsRealm():

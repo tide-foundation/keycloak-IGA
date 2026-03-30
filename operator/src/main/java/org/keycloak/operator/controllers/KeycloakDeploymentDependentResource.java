@@ -650,6 +650,7 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
         toUpdate.getMetadata().getAnnotations().put(Constants.KEYCLOAK_UPDATE_REVISION_ANNOTATION, revision);
     }
 
+<<<<<<< HEAD
     private static void addUpdateHashAnnotation(String hash, StatefulSet toUpdate) {
         toUpdate.getMetadata().getAnnotations().put(Constants.KEYCLOAK_UPDATE_HASH_ANNOTATION, hash);
     }
@@ -660,6 +661,10 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
 
     record ManagementEndpoint(String relativePath, String protocol, int port, String portName) {}
 
+=======
+    record ManagementEndpoint(String relativePath, String protocol, int port, String portName) {}
+
+>>>>>>> origin/release/0.13.26
     static ManagementEndpoint managementEndpoint(Keycloak keycloakCR, Context<Keycloak> context, boolean health) {
         boolean tls = isTlsConfigured(keycloakCR);
         String protocol = tls ? "HTTPS" : "HTTP";

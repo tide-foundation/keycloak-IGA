@@ -315,6 +315,7 @@ public class OrganizationAuthenticationTest extends AbstractOrganizationTest {
         }
     }
 
+<<<<<<< HEAD
     @Test
     public void testUsernameExposureWhenEnteringEmail() {
         OrganizationResource organization = testRealm().organizations().get(createOrganization().getId());
@@ -354,6 +355,8 @@ public class OrganizationAuthenticationTest extends AbstractOrganizationTest {
         testRealm().users().get(memberId).remove();
     }
 
+=======
+>>>>>>> origin/release/0.13.26
     private void runOnServer(RunOnServer function) {
         testingClient.server(bc.consumerRealmName()).run(function);
     }

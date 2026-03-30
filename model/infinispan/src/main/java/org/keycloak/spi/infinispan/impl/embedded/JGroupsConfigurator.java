@@ -75,6 +75,7 @@ import org.jgroups.util.DefaultSocketFactory;
 import org.jgroups.util.ExtendedUUID;
 import org.jgroups.util.SocketFactory;
 import org.jgroups.util.UUID;
+<<<<<<< HEAD
 
 import static org.keycloak.config.CachingOptions.CACHE_EMBEDDED_PREFIX;
 import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.JBOSS_NODE_NAME;
@@ -88,6 +89,28 @@ import static org.keycloak.spi.infinispan.impl.embedded.DefaultCacheEmbeddedConf
 
 import static org.infinispan.configuration.global.TransportConfiguration.CLUSTER_NAME;
 import static org.infinispan.configuration.global.TransportConfiguration.STACK;
+=======
+import org.keycloak.Config;
+import org.keycloak.common.util.Retry;
+import org.keycloak.config.CachingOptions;
+import org.keycloak.config.Option;
+import org.keycloak.connections.infinispan.InfinispanConnectionSpi;
+import org.keycloak.connections.jpa.JpaConnectionProvider;
+import org.keycloak.connections.jpa.JpaConnectionProviderFactory;
+import org.keycloak.connections.jpa.util.JpaUtils;
+import org.keycloak.infinispan.util.InfinispanUtils;
+import org.keycloak.jgroups.protocol.KEYCLOAK_JDBC_PING2;
+import org.keycloak.jgroups.protocol.OPEN_TELEMETRY;
+import org.keycloak.jgroups.header.TracerHeader;
+import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.KeycloakSessionFactory;
+import org.keycloak.models.utils.KeycloakModelUtils;
+import org.keycloak.provider.ProviderConfigProperty;
+import org.keycloak.provider.ProviderConfigurationBuilder;
+import org.keycloak.spi.infinispan.JGroupsCertificateProvider;
+import org.keycloak.spi.infinispan.impl.Util;
+import org.keycloak.storage.configuration.ServerConfigStorageProvider;
+>>>>>>> origin/release/0.13.26
 
 /**
  * Utility class to configure JGroups based on the Keycloak configuration.

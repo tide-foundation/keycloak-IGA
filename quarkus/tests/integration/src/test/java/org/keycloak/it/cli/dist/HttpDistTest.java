@@ -67,8 +67,11 @@ public class HttpDistTest {
     public void preventNonNormalizedURLs() {
         when().get("/realms/master").then().statusCode(200);
         when().get("/realms/xxx/../master").then().statusCode(400);
+<<<<<<< HEAD
         given().urlEncodingEnabled(false)
                 .when().get("/realms/master;xxx").then().statusCode(400);
+=======
+>>>>>>> origin/release/0.13.26
     }
 
     @Test
@@ -76,8 +79,11 @@ public class HttpDistTest {
     public void allowNonNormalizedURLs() {
         when().get("/realms/master").then().statusCode(200);
         when().get("/realms/xxx/../master").then().statusCode(200);
+<<<<<<< HEAD
         given().urlEncodingEnabled(false)
                 .when().get("/realms/master;xxx").then().statusCode(200);
+=======
+>>>>>>> origin/release/0.13.26
     }
 
     @Test

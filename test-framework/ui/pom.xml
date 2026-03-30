@@ -21,7 +21,11 @@
     <parent>
         <artifactId>keycloak-test-framework-parent</artifactId>
         <groupId>org.keycloak.testframework</groupId>
+<<<<<<< HEAD
         <version>26.5.5</version>
+=======
+        <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>

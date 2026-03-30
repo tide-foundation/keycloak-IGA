@@ -5,12 +5,20 @@
     <parent>
         <artifactId>documentation-parent</artifactId>
         <groupId>org.keycloak.documentation</groupId>
+<<<<<<< HEAD
         <version>26.5.5</version>
+=======
+        <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
     </parent>
 
     <groupId>org.keycloak.documentation</groupId>
     <artifactId>header-maven-plugin</artifactId>
+<<<<<<< HEAD
     <version>26.5.5</version>
+=======
+    <version>26.4.7</version>
+>>>>>>> origin/release/0.13.26
     <packaging>maven-plugin</packaging>
 
     <name>header-maven-plugin</name>

@@ -20,12 +20,17 @@ Enforcing access to realm resources only applies when managing resources through
 
 ==== Understanding the different types of realm administrators
 
+<<<<<<< HEAD
 There are three different types of realm administrators when managing a realm:
+=======
+There are two different types of realm administrators when managing a realm:
+>>>>>>> origin/release/0.13.26
 
 * **Server administrators**: These are users (or service accounts) that have been granted with the `admin` role in the master realm.
 
 * **Realm administrators**: These are users (or service accounts) that have been granted with the `realm-admin` role in a specific realm.
 
+<<<<<<< HEAD
 * **Delegated realm administrators**: These are users (or service accounts) that do not have the `realm-admin` role but have been granted access to manage
 a realm through the fine-grained admin permissions feature.
 
@@ -36,6 +41,14 @@ the realm they have been granted access to.
 Delegated realm administrators, on the other hand, can have limited access to a realm based on the permissions defined through this feature.
 They can only access the resources and operations they have been granted access to.
 
+=======
+Both types of administrators can manage a realm with full access to all their resources and
+administrative operations.
+
+The main difference between them is that server administrators can manage any realm in the server, while realm administrators can only manage
+the realm they have been granted access to.
+
+>>>>>>> origin/release/0.13.26
 Be aware that both server and realm administrators are not affected by the permissions you define when managing access to realm resources through this feature.
 Always make sure to review the users granted with the `admin` or `realm-admin` roles to avoid any potential privilege escalation.
 

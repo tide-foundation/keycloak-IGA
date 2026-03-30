@@ -1,7 +1,17 @@
 package org.keycloak.operator.testsuite.integration;
 
+<<<<<<< HEAD
 import java.util.concurrent.TimeUnit;
 
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.operator.controllers.KeycloakServiceMonitorDependentResource;
 import org.keycloak.operator.crds.v2alpha1.deployment.Keycloak;
 import org.keycloak.operator.crds.v2alpha1.deployment.KeycloakStatusCondition;
@@ -10,11 +20,14 @@ import org.keycloak.operator.testsuite.utils.K8sUtils;
 
 import io.fabric8.openshift.api.model.monitoring.v1.ServiceMonitor;
 import io.quarkus.test.junit.QuarkusTest;
+<<<<<<< HEAD
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+=======
+>>>>>>> origin/release/0.13.26
 
 @QuarkusTest
 public class ServiceMonitorUninstalledTest extends BaseOperatorTest {

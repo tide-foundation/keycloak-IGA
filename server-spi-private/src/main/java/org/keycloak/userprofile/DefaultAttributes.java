@@ -263,7 +263,13 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
         for (String name : nameSet()) {
             RealmModel realm = session.getContext().getRealm();
 
+<<<<<<< HEAD
             if ((UserModel.USERNAME.equals(name) && realm.isRegistrationEmailAsUsername())) {
+=======
+            if ((UserModel.USERNAME.equals(name) && realm.isRegistrationEmailAsUsername())
+                || isReadableOrWritableDuringRegistration(name)
+                || !isManagedAttribute(name)) {
+>>>>>>> origin/release/0.13.26
                 continue;
             }
 

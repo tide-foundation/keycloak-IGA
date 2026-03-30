@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 /** TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
 // import { useEffect, useState } from "react";
 // import { Spinner, Card, CardBody, CardTitle, Badge, ExpandableSection } from "@patternfly/react-core";
 // import { useAdminClient } from "../admin-client";

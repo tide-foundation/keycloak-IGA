@@ -23,7 +23,10 @@ import org.keycloak.models.workflow.Workflow;
 import org.keycloak.models.workflow.WorkflowProvider;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.services.ErrorResponse;
+<<<<<<< HEAD
 import org.keycloak.services.resources.KeycloakOpenAPI;
+=======
+>>>>>>> origin/release/0.13.26
 import org.keycloak.services.resources.admin.fgap.AdminPermissionEvaluator;
 
 import com.fasterxml.jackson.jakarta.rs.yaml.YAMLMediaTypes;
@@ -40,7 +43,11 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 public class WorkflowsResource {
 
     private final KeycloakSession session;
+<<<<<<< HEAD
     private final WorkflowProvider provider;
+=======
+    private final WorkflowsManager manager;
+>>>>>>> origin/release/0.13.26
     private final AdminPermissionEvaluator auth;
 
     public WorkflowsResource(KeycloakSession session, AdminPermissionEvaluator auth) {
@@ -48,7 +55,11 @@ public class WorkflowsResource {
             throw new NotFoundException();
         }
         this.session = session;
+<<<<<<< HEAD
         this.provider = session.getProvider(WorkflowProvider.class);
+=======
+        this.manager = new WorkflowsManager(session);
+>>>>>>> origin/release/0.13.26
         this.auth = auth;
     }
 
@@ -74,6 +85,7 @@ public class WorkflowsResource {
         }
     }
 
+<<<<<<< HEAD
     @Path("{id}")
     @Tag(name = KeycloakOpenAPI.Admin.Tags.WORKFLOWS)
     @Operation(
@@ -91,6 +103,25 @@ public class WorkflowsResource {
         auth.realm().requireManageRealm();
 
         Workflow workflow = provider.getWorkflow(id);
+=======
+    @Path("set")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response createAll(WorkflowSetRepresentation workflows) {
+        auth.realm().requireManageRealm();
+
+        for (WorkflowRepresentation workflow : Optional.ofNullable(workflows.getWorkflows()).orElse(List.of())) {
+            create(workflow).close();
+        }
+        return Response.created(session.getContext().getUri().getRequestUri()).build();
+    }
+
+    @Path("{id}")
+    public WorkflowResource get(@PathParam("id") String id) {
+        auth.realm().requireManageRealm();
+
+        Workflow workflow = manager.getWorkflow(id);
+>>>>>>> origin/release/0.13.26
 
         if (workflow == null) {
             throw new NotFoundException("Workflow with id " + id + " not found");
@@ -130,6 +161,7 @@ public class WorkflowsResource {
     @Path("scheduled/{resource-id}")
     @GET
     @Produces(MediaType.APPLICATION_JSON)
+<<<<<<< HEAD
     @Tag(name = KeycloakOpenAPI.Admin.Tags.WORKFLOWS)
     @Operation(
             summary = "List scheduled workflows for resource",
@@ -145,5 +177,11 @@ public class WorkflowsResource {
     ) {
         auth.realm().requireManageRealm();
         return provider.getScheduledWorkflowsByResource(resourceId).toList();
+=======
+    public List<WorkflowRepresentation> list() {
+        auth.realm().requireManageRealm();
+
+        return manager.getWorkflows().stream().map(manager::toRepresentation).toList();
+>>>>>>> origin/release/0.13.26
     }
 }

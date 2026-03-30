@@ -131,6 +131,7 @@ export const ScopeForm = ({ clientScope, save }: ScopeFormProps) => {
     name: "protocol",
   });
 
+<<<<<<< HEAD
   const selectedFormat = useWatch({
     control,
     name: convertAttributeNameToForm<ClientScopeDefaultOptionalType>(
@@ -141,6 +142,8 @@ export const ScopeForm = ({ clientScope, save }: ScopeFormProps) => {
 
   const isOid4vcProtocol = selectedProtocol === OID4VC_PROTOCOL;
   const isOid4vcEnabled = isFeatureEnabled(Feature.OpenId4VCI);
+=======
+>>>>>>> origin/release/0.13.26
   const isNotSaml = selectedProtocol != "saml";
 
   const setDynamicRegex = (value: string, append: boolean) =>

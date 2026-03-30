@@ -1,5 +1,7 @@
-import { TextControl } from "@keycloak/keycloak-ui-shared";
+import { FormGroup, TextInput } from "@patternfly/react-core";
+import { useFormContext } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { HelpItem } from "@keycloak/keycloak-ui-shared";
 import type { ComponentProps } from "./components";
 
 export const StringComponent = ({
@@ -14,8 +16,10 @@ export const StringComponent = ({
   ...props
 }: ComponentProps) => {
   const { t } = useTranslation();
+  const { register } = useFormContext();
 
   return (
+<<<<<<< HEAD
     <div style={{ display: isHidden ? 'none' : undefined }}>{/* TIDECLOAK IMPLEMENTATION */}
       <TextControl
         name={convertToName(name!)}
@@ -33,5 +37,22 @@ export const StringComponent = ({
         {...props}
       />
     </div>
+=======
+    <FormGroup
+      style={{ display: isHidden ? 'none' : undefined }} // TIDECLOAK IMPLEMENTATION
+      label={t(label!)}
+      labelIcon={<HelpItem helpText={t(helpText!)} fieldLabelId={`${label}`} />} // TIDECLOAK IMPLEMENTATION
+      fieldId={name!}
+      isRequired={required}
+    >
+      <TextInput
+        id={convertToName(name!)}
+        data-testid={name}
+        isDisabled={isDisabled} // TIDECLOAK IMPLEMENTATION
+        defaultValue={defaultValue?.toString()} // TIDECLOAK IMPLEMENTATION
+        {...register(convertToName(name!))}
+      />
+    </FormGroup>
+>>>>>>> origin/release/0.13.26
   );
 };

@@ -1,4 +1,5 @@
 import type KeycloakAdminClient from "@keycloak/keycloak-admin-client";
+import { translationFormatter } from "../../utils/translationFormatter";
 import type ClientRepresentation from "@keycloak/keycloak-admin-client/lib/defs/clientRepresentation";
 import type RoleRepresentation from "@keycloak/keycloak-admin-client/lib/defs/roleRepresentation";
 import { useAlerts } from "@keycloak/keycloak-ui-shared";
@@ -16,7 +17,6 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAdminClient } from "../../admin-client";
 import { emptyFormatter, upperCaseFormatter } from "../../util";
-import { translationFormatter } from "../../utils/translationFormatter";
 import { useConfirmDialog } from "../confirm-dialog/ConfirmDialog";
 import { ListEmptyState } from "@keycloak/keycloak-ui-shared";
 import { Action, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
@@ -82,7 +82,11 @@ export const ServiceRole = ({ role, client, id, type }: Row) => {
 
         if (type === "users" ) {
           const result = await adminClient.tideUsersExt.getUserRoleDraftStatus({ userId: id!, roleId: role.id!}); // TIDE IMPLEMENTATION
+<<<<<<< HEAD
 
+=======
+          
+>>>>>>> origin/release/0.13.26
           setRoleStatus(result.draftStatus ?? "");
           setDeleteStatus(result.deleteStatus ?? "");
 
@@ -342,6 +346,8 @@ export const RoleMapping = ({
           <ListEmptyState
             message={t(`noRoles-${type}`)}
             instructions={t(`noRolesInstructions-${type}`)}
+            primaryActionText={t("assignRole")}
+            onPrimaryAction={() => setShowAssign(true)}
             secondaryActions={[
               {
                 text: t("showInheritedRoles"),
@@ -357,7 +363,7 @@ export const RoleMapping = ({
                 setFilterType(type);
                 setShowAssign(true);
               }}
-            />
+          />
           </ListEmptyState>
         }
       />

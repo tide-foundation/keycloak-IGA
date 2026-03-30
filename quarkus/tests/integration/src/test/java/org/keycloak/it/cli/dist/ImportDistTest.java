@@ -81,9 +81,48 @@ public class ImportDistTest {
         newRealm.setId("anotherRealm");
         newRealm.setEnabled(true);
 
+<<<<<<< HEAD
         ObjectMapper mapper = new ObjectMapper();
         try (FileOutputStream fos = new FileOutputStream(file)) {
             mapper.writeValue(fos, newRealm);
+=======
+        createUserFile(dir.getAbsolutePath());
+
+        ExecutorService ex = Executors.newFixedThreadPool(1);
+        Future<CLIResult> result = ex.submit(() -> dist.run("import", "--dir=" + dir.getAbsolutePath()));
+        try {
+            cliResult = result.get(40, TimeUnit.SECONDS);
+            cliResult.assertMessage("Realm 'master' imported");
+            cliResult.assertMessage("Import finished successfully");
+            cliResult.assertMessage("master-users-0.json");
+        } finally {
+            ex.shutdownNow();
+        }
+    }
+
+    void createUserFile(String dir) throws IOException {
+        FileWriter writer = new FileWriter(dir + "/master-users-0.json");
+        writer.write("{\n" + "  \"realm\" : \"master\",\n" + "  \"users\" : [\n");
+
+        for (int i = 0; i < 10000; i++) {
+            if (i > 0) {
+                writer.write("\n,");
+            }
+            writer.write("{\n"
+                    + "    \"id\" : \""+UUID.randomUUID()+"\",\n"
+                    + "    \"username\" : \"bob"+i+"\",\n"
+                    + "    \"emailVerified\" : false,\n"
+                    + "    \"createdTimestamp\" : 1741358612691,\n"
+                    + "    \"enabled\" : true,\n"
+                    + "    \"totp\" : false,\n"
+                    + "    \"credentials\" : [ ],\n"
+                    + "    \"disableableCredentialTypes\" : [ ],\n"
+                    + "    \"requiredActions\" : [ ],\n"
+                    + "    \"realmRoles\" : [ ],\n"
+                    + "    \"notBefore\" : 0,\n"
+                    + "    \"groups\" : [ ]\n"
+                    + "  }");
+>>>>>>> origin/release/0.13.26
         }
 
         var cliResult = dist.run("import", "--file=" + file.getAbsolutePath());

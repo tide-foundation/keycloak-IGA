@@ -32,10 +32,15 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+<<<<<<< HEAD
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntFunction;
+=======
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+>>>>>>> origin/release/0.13.26
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -101,6 +106,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+<<<<<<< HEAD
+=======
+import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.CLIENT_SESSION_CACHE_NAME;
+import static org.keycloak.connections.infinispan.InfinispanConnectionProvider.USER_SESSION_CACHE_NAME;
+>>>>>>> origin/release/0.13.26
 
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
@@ -676,7 +686,13 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
 
         int lastSessionRefresh = withRealm(realmId, (session, realm) -> {
             // Update one of the sessions with lastSessionRefresh of 20 days ahead
+<<<<<<< HEAD
             int newCurrentTime = Time.currentTime() + 1728000;
+=======
+            int lastSessionRefresh = Time.currentTime() + 1728000;
+            RealmModel realm = session.realms().getRealm(realmId);
+            session.getContext().setRealm(realm);
+>>>>>>> origin/release/0.13.26
             UserSessionPersisterProvider persister = session.getProvider(UserSessionPersisterProvider.class);
 
             persister.updateLastSessionRefreshes(realm, newCurrentTime, Collections.singleton(userSession1[0].getId()), true);
@@ -783,7 +799,12 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
         final String userName = "to-remove";
         final int numberOfSessions = 5;
         final int clusterSize = 4;
+<<<<<<< HEAD
         withRealmConsumer(realmId, (session, realm) -> {
+=======
+        inComittedTransaction(session -> {
+            RealmModel realm = getRealm(session);
+>>>>>>> origin/release/0.13.26
             session.sessions().removeUserSessions(realm);
             session.users().addUser(realm, userName).setEmail(userName + "@localhost");
         });
@@ -795,7 +816,12 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
         inIndependentFactories(clusterSize, 60, () -> {
             try {
                 barrier.await(10, TimeUnit.SECONDS);
+<<<<<<< HEAD
                 withRealmConsumer(realmId, (session, realm) -> {
+=======
+                inComittedTransaction(session -> {
+                    RealmModel realm = getRealm(session);
+>>>>>>> origin/release/0.13.26
                     UserModel user = session.users().getUserByUsername(realm, userName);
                     ClientModel testApp = realm.getClientByClientId("test-app");
                     IntStream.range(0, numberOfSessions)
@@ -810,7 +836,12 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
 
                 barrier.await(10, TimeUnit.SECONDS);
                 if (userDeleted.compareAndSet(false, true)) {
+<<<<<<< HEAD
                     withRealmConsumer(realmId, (session, realm) -> {
+=======
+                    inComittedTransaction(session -> {
+                        RealmModel realm = getRealm(session);
+>>>>>>> origin/release/0.13.26
                         UserModel user = session.users().getUserByUsername(realm, userName);
                         new UserManager(session).removeUser(realm, user);
                     });
@@ -828,6 +859,7 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
         });
     }
 
+<<<<<<< HEAD
     @Deprecated(since = "26.5", forRemoval = true)
     @Test
     public void testUserSessionRememberMeMigration() {
@@ -1004,6 +1036,8 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
                 .getSingleResult();
     }
 
+=======
+>>>>>>> origin/release/0.13.26
     private UserSessionCount getUserSessionCount() {
         if (InfinispanUtils.isEmbeddedInfinispan()) {
             return MultiSiteUtils.isPersistentSessionsEnabled() ?
@@ -1031,6 +1065,7 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
     }
 
     private int getRemoteCachedUserSessionsCount() {
+<<<<<<< HEAD
         return withRealm(realmId, (session, ignored) -> session.getProvider(InfinispanConnectionProvider.class).getRemoteCache(USER_SESSION_CACHE_NAME).size());
     }
 
@@ -1252,6 +1287,32 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
     private static Optional<String> findReason(Event event) {
         return Optional.ofNullable(event.getDetails())
                 .map(map -> map.get(Details.REASON));
+=======
+        return inComittedTransaction(session -> {
+            getRealm(session);
+            return session.getProvider(InfinispanConnectionProvider.class).getRemoteCache(USER_SESSION_CACHE_NAME).size();
+        });
+    }
+
+    private int getEmbeddedCachedUserSessionsCount() {
+        return inComittedTransaction(session -> {
+            getRealm(session);
+            return session.getProvider(InfinispanConnectionProvider.class).getCache(USER_SESSION_CACHE_NAME).size();
+        });
+    }
+
+    private int getPersistedUserSessionsCount() {
+        return inComittedTransaction(session -> {
+            getRealm(session);
+            return session.getProvider(UserSessionPersisterProvider.class).getUserSessionsCount(false);
+        });
+    }
+
+    private RealmModel getRealm(KeycloakSession session) {
+        RealmModel realm = session.realms().getRealm(realmId);
+        session.getContext().setRealm(realm);
+        return realm;
+>>>>>>> origin/release/0.13.26
     }
 
     private long countUserSessionsInRealm(KeycloakSession session) {

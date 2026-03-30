@@ -17,6 +17,7 @@
 
 package org.keycloak.tests.admin.authz.fgap;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Set;
 
@@ -51,13 +52,7 @@ import org.keycloak.testframework.util.ApiUtil;
 
 import org.junit.jupiter.api.Test;
 
-import static org.keycloak.authorization.fgap.AdminPermissionsSchema.IMPERSONATE;
-import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MANAGE;
-import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MANAGE_GROUP_MEMBERSHIP;
-import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MAP_ROLES;
-import static org.keycloak.authorization.fgap.AdminPermissionsSchema.RESET_PASSWORD;
-import static org.keycloak.authorization.fgap.AdminPermissionsSchema.VIEW;
-
+=======
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
@@ -66,6 +61,50 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+>>>>>>> origin/release/0.13.26
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.IMPERSONATE;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MANAGE;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MANAGE_GROUP_MEMBERSHIP;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MAP_ROLES;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.RESET_PASSWORD;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.VIEW;
+
+<<<<<<< HEAD
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+=======
+import java.util.List;
+import java.util.Set;
+
+import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.Test;
+import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.KeycloakBuilder;
+import org.keycloak.admin.client.resource.UsersResource;
+import org.keycloak.authorization.fgap.AdminPermissionsSchema;
+import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
+import org.keycloak.representations.idm.authorization.GroupPolicyRepresentation;
+import org.keycloak.representations.idm.authorization.Logic;
+import org.keycloak.representations.idm.authorization.ScopePermissionRepresentation;
+import org.keycloak.representations.idm.authorization.UserPolicyRepresentation;
+import org.keycloak.testframework.annotations.InjectAdminClient;
+import org.keycloak.testframework.annotations.InjectUser;
+import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
+import org.keycloak.testframework.realm.ManagedUser;
+import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.util.ApiUtil;
+>>>>>>> origin/release/0.13.26
 
 @KeycloakIntegrationTest
 public class UserResourceTypeEvaluationTest extends AbstractPermissionTest {
@@ -490,22 +529,35 @@ public class UserResourceTypeEvaluationTest extends AbstractPermissionTest {
         // Create group 'test_admins'
         GroupRepresentation testAdminsGroup = new GroupRepresentation();
         testAdminsGroup.setName("test_admins");
+<<<<<<< HEAD
         testAdminsGroup.setId(ApiUtil.getCreatedId(realm.admin().groups().add(testAdminsGroup)));
+=======
+        testAdminsGroup.setId(ApiUtil.handleCreatedResponse(realm.admin().groups().add(testAdminsGroup)));
+>>>>>>> origin/release/0.13.26
 
         // Add user 'myadmin' as a member of 'test_admins'
         UserRepresentation myadmin = realm.admin().users().search("myadmin").get(0);
         realm.admin().users().get(myadmin.getId()).joinGroup(testAdminsGroup.getId());
 
         // Create user permission allowing to 'view' all users by members of 'test_admins' group
+<<<<<<< HEAD
         GroupPolicyRepresentation allowAdmins = createGroupPolicy(realm, client, "Allow 'test_admins'", Logic.POSITIVE, testAdminsGroup.getId());
         createAllPermission(client, usersType, allowAdmins, Set.of(VIEW));
 
         // Create group permission denying to 'manage' specific group: 'test_admins' by members of 'test_admins'
         GroupPolicyRepresentation denyAdmins = createGroupPolicy(realm, client, "Deny Policy", Logic.NEGATIVE, testAdminsGroup.getId());
+=======
+        GroupPolicyRepresentation allowAdmins = createGroupPolicy(realm, client, "Allow 'test_admins'", testAdminsGroup.getId(), Logic.POSITIVE);
+        createAllPermission(client, usersType, allowAdmins, Set.of(VIEW));
+
+        // Create group permission denying to 'manage' specific group: 'test_admins' by members of 'test_admins'
+        GroupPolicyRepresentation denyAdmins = createGroupPolicy(realm, client, "Deny Policy", testAdminsGroup.getId(), Logic.NEGATIVE);
+>>>>>>> origin/release/0.13.26
         createGroupPermission(testAdminsGroup, Set.of(MANAGE), denyAdmins);
 
         UserRepresentation representation = realmAdminClient.realm(realm.getName()).users().get(myadmin.getId()).toRepresentation();
         assertThat(representation, notNullValue());
+<<<<<<< HEAD
     }
 
     @Test
@@ -542,5 +594,7 @@ public class UserResourceTypeEvaluationTest extends AbstractPermissionTest {
             representation = keycloak.realm(realm.getName()).users().get(userAlice.getId()).toRepresentation();
             assertThat(representation, notNullValue());
         }
+=======
+>>>>>>> origin/release/0.13.26
     }
 }

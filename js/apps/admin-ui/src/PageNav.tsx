@@ -17,6 +17,10 @@ import { toPage } from "./page/routes";
 import { routes } from "./routes";
 import useIsFeatureEnabled, { Feature } from "./utils/useIsFeatureEnabled";
 import { useAdminClient } from "./admin-client";
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/release/0.13.26
 
 import "./page-nav.css";
 
@@ -24,7 +28,11 @@ type LeftNavProps = {
   title: string;
   path: string;
   id?: string;
+<<<<<<< HEAD
   label?: string // TIDECLOAK IMPLEMENTATION
+=======
+  label?: string // tidecloak implementation
+>>>>>>> origin/release/0.13.26
 };
 
 const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
@@ -63,8 +71,13 @@ const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
       {label && (
         <span
           style={{
+<<<<<<< HEAD
             backgroundColor: '#0066cc',
             color: '#fff',
+=======
+            backgroundColor: '#0066cc',      // Blue background for visibility
+            color: '#fff',                   // White text
+>>>>>>> origin/release/0.13.26
             padding: '2px 8px',
             borderRadius: '12px',
             fontSize: '12px',
@@ -84,8 +97,13 @@ const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
 };
 
 export const PageNav = () => {
+<<<<<<< HEAD
   const { adminClient } = useAdminClient();
 
+=======
+    const { adminClient } = useAdminClient();
+  
+>>>>>>> origin/release/0.13.26
   const { t } = useTranslation();
   const { environment } = useEnvironment<Environment>();
   const { hasAccess, hasSomeAccess } = useAccess();
@@ -101,6 +119,7 @@ export const PageNav = () => {
     const getCount = async () => {
       const userRequest = await adminClient.tideUsersExt.getRequestedChangesForUsers();
       const roleRequest = await adminClient.tideUsersExt.getRequestedChangesForRoles();
+<<<<<<< HEAD
       const groupRequest = await adminClient.tideUsersExt.getRequestedChangesForGroups();
       const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
       const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
@@ -112,6 +131,13 @@ export const PageNav = () => {
       } catch (_) { /* ignore */ }
 
       setClientRequestCount(userRequest.length + roleRequest.length + groupRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length + policyCount)
+=======
+      const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
+      const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
+      const realmLicensingRequest = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
+
+      setClientRequestCount(userRequest.length + roleRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length)
+>>>>>>> origin/release/0.13.26
     }
 
     getCount();
@@ -187,8 +213,11 @@ export const PageNav = () => {
                 path="/change-requests"
                 label={changeRequestsCount > 0 ? changeRequestsCount.toString() : undefined}
               />
+<<<<<<< HEAD
               {/** TIDECLOAK IMPLEMENTATION */}
               <LeftNav title="Policies" path="/tide-policies" />
+=======
+>>>>>>> origin/release/0.13.26
             </NavGroup>
           )}
 

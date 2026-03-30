@@ -50,6 +50,15 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.fail;
+<<<<<<< HEAD
+=======
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MAP_ROLE;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MAP_ROLES;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MAP_ROLE_CLIENT_SCOPE;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.MAP_ROLE_COMPOSITE;
+import static org.keycloak.authorization.fgap.AdminPermissionsSchema.VIEW;
+import org.keycloak.models.AdminRoles;
+>>>>>>> origin/release/0.13.26
 
 @KeycloakIntegrationTest
 public class RoleResourceTypeEvaluationTest extends AbstractPermissionTest {

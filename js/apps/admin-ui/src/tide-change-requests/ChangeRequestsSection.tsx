@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 /** TIDECLOAK IMPLEMENTATION */
+=======
+>>>>>>> origin/release/0.13.26
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,11 +17,19 @@ import {
   Button,
   ToolbarItem,
   AlertVariant,
+<<<<<<< HEAD
   ButtonVariant,
   ExpandableSection
 } from "@patternfly/react-core";
 import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 import type { BundledRequest } from './utils/bundleUtils';
+=======
+  ButtonVariant
+} from "@patternfly/react-core";
+import { KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import RoleChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/RoleChangeRequest"
+import RequestChangesUserRecord from "@keycloak/keycloak-admin-client/lib/defs/RequestChangesUserRecord"
+>>>>>>> origin/release/0.13.26
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAdminClient } from "../admin-client";
 import "../events/events.css";
@@ -32,18 +43,27 @@ import { useRealm } from "../context/realm-context/RealmContext";
 import { RolesChangeRequestsList } from "./RolesChangeRequestsList"
 import { ClientChangeRequestsList } from './ClientChangeRequestsList';
 import { SettingsChangeRequestsList } from './SettingsChangeRequestsList';
+<<<<<<< HEAD
 import { PolicyChangeRequestsList } from './PolicyChangeRequestsList';
 import { GroupsChangeRequestsList } from './GroupsChangeRequestsList';
+=======
+>>>>>>> origin/release/0.13.26
 import { groupRequestsByDraftId } from './utils/bundleUtils';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { useAccess } from '../context/access/Access';
 import { useEnvironment, useAlerts } from '@keycloak/keycloak-ui-shared';
+<<<<<<< HEAD
 import { useWhoAmI } from '../context/whoami/WhoAmI';
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
 import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
 import { ActivityPanel } from "./ActivityPanel";
 import { expandRowAndScrollTo } from "./utils/expandAndScroll";
+=======
+import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
+import { findTideComponent } from '../identity-providers/utils/SignSettingsUtil';
+import { base64ToBytes, bytesToBase64 } from "./utils/blockchain/tideSerialization";
+>>>>>>> origin/release/0.13.26
 
 export interface changeSetApprovalRequest {
   message: string,
@@ -59,21 +79,34 @@ export default function ChangeRequestsSection() {
   const { addAlert, addError } = useAlerts();
   const { t } = useTranslation();
   const { realm } = useRealm();
+<<<<<<< HEAD
   const { whoAmI } = useWhoAmI();
+=======
+>>>>>>> origin/release/0.13.26
   const [key, setKey] = useState<number>(0);
   const refresh = () => {
     setSelectedRow([])
     setKey((prev: number) => prev + 1);
+<<<<<<< HEAD
     fetchAllCounts();
   };
 
 
   const [selectedRow, setSelectedRow] = useState<BundledRequest[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+=======
+  };
+
+
+  const [selectedRow, setSelectedRow] = useState<RoleChangeRequest[]>([]);
+  const [commitRecord, setCommitRecord] = useState<boolean>(false);
+  const [approveRecord, setApproveRecord] = useState<boolean>(false);
+>>>>>>> origin/release/0.13.26
   const [userRequestCount, setUserRequestCount] = useState(0);
   const [roleRequestCount, setRoleRequestCount] = useState(0);
   const [clientRequestCount, setClientRequestCount] = useState(0);
   const [realmSettingsRequestCount, setRealmSettingsRequestCount] = useState(0);
+<<<<<<< HEAD
   const [groupRequestCount, setGroupRequestCount] = useState(0);
   const [policyRequestCount, setPolicyRequestCount] = useState(0);
   const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true)
@@ -113,6 +146,11 @@ export default function ChangeRequestsSection() {
     return () => clearInterval(interval);
   }, []);
 
+=======
+  const [isTideEnabled, setIsTideEnabled] = useState<boolean>(true)
+
+
+>>>>>>> origin/release/0.13.26
   useEffect(() => {
     const checkTide = async () => {
       const isTideKeyEnabled = await findTideComponent(adminClient, realm) === undefined ? false : true
@@ -122,6 +160,7 @@ export default function ChangeRequestsSection() {
 
   }, [adminClient, realm])
 
+<<<<<<< HEAD
   const getEffectiveStatus = (bundle: BundledRequest): string => {
     const statuses = [...new Set(bundle.requests.map((r: any) =>
       r.status === "ACTIVE" ? r.deleteStatus || r.status : r.status
@@ -145,6 +184,47 @@ export default function ChangeRequestsSection() {
     const s = getEffectiveStatus(b);
     return s !== "ACTIVE" && (!b.requestedByUserId || b.requestedByUserId === whoAmI.userId);
   });
+=======
+  useEffect(() => {
+    if (!selectedRow || !selectedRow[0]) {
+      setApproveRecord(false);
+      setCommitRecord(false);
+      return;
+    }
+
+    const { status, deleteStatus } = selectedRow[0];
+
+    // Disable both buttons if status is DENIED
+    if (status === "DENIED" || deleteStatus === "DENIED") {
+      setApproveRecord(false);
+      setCommitRecord(false);
+      return;
+    }
+
+    // Enable Approve button if the record is PENDING or DRAFT
+    // Or if the record is ACTIVE and deleteStatus is DRAFT or PENDING
+    if (
+      status === "PENDING" ||
+      status === "DRAFT" ||
+      (status === "ACTIVE" && (deleteStatus === "DRAFT" || deleteStatus === "PENDING"))
+    ) {
+      setApproveRecord(true);
+      setCommitRecord(false); // Ensure commit is off when approve is on
+      return;
+    }
+
+    // Enable Commit button if status or deleteStatus is APPROVED
+    if (status === "APPROVED" || deleteStatus === "APPROVED") {
+      setCommitRecord(true);
+      setApproveRecord(false); // Ensure approve is off when commit is on
+      return;
+    }
+
+    // Default: Disable both buttons
+    setApproveRecord(false);
+    setCommitRecord(false);
+  }, [selectedRow]);
+>>>>>>> origin/release/0.13.26
 
   const ToolbarItemsComponent = () => {
     const { t } = useTranslation();
@@ -156,6 +236,7 @@ export default function ChangeRequestsSection() {
     return (
       <>
         <ToolbarItem>
+<<<<<<< HEAD
           <Button
             variant="primary"
             isDisabled={!canApprove || isProcessing}
@@ -184,6 +265,19 @@ export default function ChangeRequestsSection() {
             isDisabled={!canCancel || isProcessing}
             onClick={() => toggleCancelDialog()}
           >
+=======
+          <Button variant="primary" isDisabled={!approveRecord} onClick={() => handleApproveButtonClick(selectedRow)}>
+            {isTideEnabled ? t("Review Draft") : t("Approve Draft")}
+          </Button>
+        </ToolbarItem>
+        <ToolbarItem>
+          <Button variant="secondary" isDisabled={!commitRecord} onClick={() => handleCommitButtonClick(selectedRow)}>
+            {t("Commit Draft")}
+          </Button>
+        </ToolbarItem>
+        <ToolbarItem>
+          <Button variant="secondary" isDanger onClick={() => toggleCancelDialog()}>
+>>>>>>> origin/release/0.13.26
             {t("Cancel Draft")}
           </Button>
         </ToolbarItem>
@@ -192,6 +286,7 @@ export default function ChangeRequestsSection() {
     );
   };
 
+<<<<<<< HEAD
   const handleApproveButtonClick = async (selectedBundles: BundledRequest[]) => {
     setIsProcessing(true);
     try {
@@ -203,29 +298,56 @@ export default function ChangeRequestsSection() {
         actionType: x.actionType,
       }));
 
+=======
+  const handleApproveButtonClick = async (selectedBundles: RoleChangeRequest[]) => {
+    try {
+      const changeRequests = selectedRow.map(x => {
+        return {
+          changeSetId: x.draftRecordId,
+          changeSetType: x.changeSetType,
+          actionType: x.actionType,
+        }
+      })
+>>>>>>> origin/release/0.13.26
       if (!isTideEnabled) {
         for (const change of changeRequests) {
           await adminClient.tideUsersExt.approveDraftChangeSet({ changeSets: [change] });
         }
+<<<<<<< HEAD
         addAlert(t("Change requests approved successfully"), AlertVariant.success);
+=======
+>>>>>>> origin/release/0.13.26
         refresh();
         return;
       }
 
+<<<<<<< HEAD
       const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
         changeSets: changeRequests,
       });
 
+=======
+      // Tide-enabled path
+      // TODO: type response properly
+      const respObj: any = await adminClient.tideUsersExt.approveDraftChangeSet({
+        changeSets: changeRequests,
+      });
+>>>>>>> origin/release/0.13.26
       if (respObj.length > 0) {
         try {
           const firstRespObj = respObj[0];
           if (firstRespObj.requiresApprovalPopup === true || firstRespObj.requiresApprovalPopup === "true") {
+<<<<<<< HEAD
             const respMetaMap: Record<string, { actionType: string; changeSetType: string }> = {};
             const changereqs = respObj.map((resp: any) => {
               respMetaMap[resp.changesetId] = {
                 actionType: resp.actionType || allRequests[0].actionType,
                 changeSetType: resp.changeSetType || allRequests[0].changeSetType,
               };
+=======
+            // Map through all responses to collect all change requests
+            const changereqs = respObj.map((resp: any) => {
+>>>>>>> origin/release/0.13.26
               return {
                 id: resp.changesetId,
                 request: base64ToBytes(resp.changeSetDraftRequests),
@@ -233,6 +355,7 @@ export default function ChangeRequestsSection() {
             });
             const reviewResponses = await approveTideRequests(changereqs);
 
+<<<<<<< HEAD
             for (const reviewResp of reviewResponses) {
               if (reviewResp.approved) {
                 const meta = respMetaMap[reviewResp.id] || { actionType: allRequests[0].actionType, changeSetType: allRequests[0].changeSetType };
@@ -261,11 +384,32 @@ export default function ChangeRequestsSection() {
         } catch (error: any) {
           addAlert(error.responseData, AlertVariant.danger);
         } finally {
+=======
+            // Process each review response
+            for (const reviewResp of reviewResponses) {
+              if (reviewResp.approved) {
+                const msg = reviewResp.approved.request;
+                const formData = new FormData();
+                formData.append("changeSetId", reviewResp.id);
+                formData.append("actionType", changeRequests[0].actionType);
+                formData.append("changeSetType", changeRequests[0].changeSetType);
+                formData.append("requests", bytesToBase64(msg));
+
+                await adminClient.tideAdmin.addReview(formData);
+              }
+            }
+          }
+        } catch (error: any) {
+          addAlert(error.responseData, AlertVariant.danger);
+        }
+        finally {
+>>>>>>> origin/release/0.13.26
           refresh();
         }
       }
     } catch (error: any) {
       addAlert(error.responseData, AlertVariant.danger);
+<<<<<<< HEAD
     } finally {
       setIsProcessing(false);
     }
@@ -288,6 +432,24 @@ export default function ChangeRequestsSection() {
       addAlert(error.responseData, AlertVariant.danger);
     } finally {
       setIsProcessing(false);
+=======
+    }
+  };
+
+  const handleCommitButtonClick = async (selectedRow: RoleChangeRequest[]) => {
+    try {
+      const changeRequests = selectedRow.map(x => {
+        return {
+          changeSetId: x.draftRecordId,
+          changeSetType: x.changeSetType,
+          actionType: x.actionType,
+        }
+      })
+      await adminClient.tideUsersExt.commitDraftChangeSet({ changeSets: changeRequests });
+      refresh();
+    } catch (error: any) {
+      addAlert(error.responseData, AlertVariant.danger);
+>>>>>>> origin/release/0.13.26
     }
   };
 
@@ -325,6 +487,7 @@ export default function ChangeRequestsSection() {
       }
     },
     {
+<<<<<<< HEAD
       name: 'Requested By',
       displayKey: 'Requested By',
       cellRenderer: (bundle: BundledRequest) => (
@@ -332,10 +495,13 @@ export default function ChangeRequestsSection() {
       )
     },
     {
+=======
+>>>>>>> origin/release/0.13.26
       name: 'Status',
       displayKey: 'Status',
       cellRenderer: (bundle: any) => bundleStatusLabel(bundle)
     },
+<<<<<<< HEAD
     {
       name: 'Reviews',
       displayKey: 'Reviews',
@@ -381,6 +547,8 @@ export default function ChangeRequestsSection() {
         </span>
       )
     },
+=======
+>>>>>>> origin/release/0.13.26
   ];
 
   const bundleStatusLabel = (bundle: any) => {
@@ -435,6 +603,7 @@ export default function ChangeRequestsSection() {
   };
 
   const DetailCell = (bundle: any) => (
+<<<<<<< HEAD
     <>
       <ExpandableSection toggleText="Change Requests" isIndented>
         <Table
@@ -480,6 +649,48 @@ export default function ChangeRequestsSection() {
       </ExpandableSection>
       <ActivityPanel changesetRequestId={bundle.draftRecordId} />
     </>
+=======
+    <Table
+      aria-label="Bundle details"
+      variant={'compact'}
+      borders={false}
+      isStriped
+    >
+      <Thead>
+        <Tr>
+          <Th width={10}>Action</Th>
+          <Th width={10}>Role</Th>
+          <Th width={10}>Client ID</Th>
+          <Th width={10}>Type</Th>
+          <Th width={10}>Status</Th>
+          <Th width={15} modifier="wrap">Affected User</Th>
+          <Th width={15} modifier="wrap">Affected Client</Th>
+          <Th width={40}>Access Draft</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {bundle.requests.map((request: any, index: number) =>
+          request.userRecord.map((userRecord: any, userIndex: number) => (
+            <Tr key={`${index}-${userIndex}`}>
+              <Td dataLabel="Action">{request.action}</Td>
+              <Td dataLabel="Role">{request.role}</Td>
+              <Td dataLabel="Client ID">{request.clientId}</Td>
+              <Td dataLabel="Type">{request.requestType}</Td>
+              <Td dataLabel="Status">{statusLabel(request)}</Td>
+              <Td dataLabel="Affected User">{userRecord.username}</Td>
+              <Td dataLabel="Affected Client">{userRecord.clientId}</Td>
+              <Td dataLabel={columnNames.accessDraft}>
+                <ClipboardCopy isCode isReadOnly hoverTip="Copy" clickTip="Copied" variant={ClipboardCopyVariant.expansion}>
+                  {parseAndFormatJson(userRecord.accessDraft)}
+                </ClipboardCopy>
+              </Td>
+
+            </Tr>
+          ))
+        )}
+      </Tbody>
+    </Table>
+>>>>>>> origin/release/0.13.26
   );
 
   const updateClientCounter = (counter: number) => {
@@ -492,11 +703,14 @@ export default function ChangeRequestsSection() {
       setRoleRequestCount(counter);
     }
   }
+<<<<<<< HEAD
   const updateGroupCounter = (counter: number) => {
     if (counter != groupRequestCount) {
       setGroupRequestCount(counter);
     }
   }
+=======
+>>>>>>> origin/release/0.13.26
   const updateRealmSettingsCounter = (counter: number) => {
     if (counter != realmSettingsRequestCount) {
       setRealmSettingsRequestCount(counter);
@@ -525,15 +739,21 @@ export default function ChangeRequestsSection() {
 
   const userRequestsTab = useTab("users");
   const roleRequestsTab = useTab("roles");
+<<<<<<< HEAD
   const groupRequestsTab = useTab("groups");
   const clientRequestsTab = useTab("clients");
   const settingsRequestsTab = useTab("settings");
   const policiesTab = useTab("policies");
+=======
+  const clientRequestsTab = useTab("clients");
+  const settingsRequestsTab = useTab("settings");
+>>>>>>> origin/release/0.13.26
 
   const [toggleCancelDialog, CancelConfirm] = useConfirmDialog({
     titleKey: "Cancel Change Request",
     children: (
       <>
+<<<<<<< HEAD
         {selectedRow.length > 1
           ? `Are you sure you want to cancel these ${selectedRow.length} change requests?`
           : "Are you sure you want to cancel this change request?"}
@@ -550,6 +770,23 @@ export default function ChangeRequestsSection() {
           changeSetType: row.changeSetType,
           actionType: row.actionType
         }));
+=======
+        {"Are you sure you want to cancel this change request?"}
+      </>
+    ),
+    continueButtonLabel: "cancel",
+    cancelButtonLabel: "back",
+    continueButtonVariant: ButtonVariant.danger,
+    onConfirm: async () => {
+      try {
+        const changeSetArray = selectedRow.map((row: { draftRecordId: any; changeSetType: any; actionType: any; }) => {
+          return {
+            changeSetId: row.draftRecordId,
+            changeSetType: row.changeSetType,
+            actionType: row.actionType
+          }
+        })
+>>>>>>> origin/release/0.13.26
 
         await adminClient.tideUsersExt.cancelDraftChangeSet({ changeSets: changeSetArray });
         addAlert(t("Change request cancelled"), AlertVariant.success);
@@ -566,11 +803,14 @@ export default function ChangeRequestsSection() {
       setRealmSettingsRequestCount(counter);
     }
   };
+<<<<<<< HEAD
   const updatePolicyCounter = (counter: number) => {
     if (counter !== policyRequestCount) {
       setPolicyRequestCount(counter);
     }
   };
+=======
+>>>>>>> origin/release/0.13.26
 
   return (
     <>
@@ -607,6 +847,10 @@ export default function ChangeRequestsSection() {
               <KeycloakDataTable
                 key={key}
                 toolbarItem={<ToolbarItemsComponent />}
+<<<<<<< HEAD
+=======
+                isRadio={isTideEnabled}
+>>>>>>> origin/release/0.13.26
                 loader={loader}
                 ariaLabelKey="Requested Changes"
                 detailColumns={[
@@ -618,7 +862,15 @@ export default function ChangeRequestsSection() {
                 ]}
                 columns={columns}
                 isPaginated
+<<<<<<< HEAD
                 onSelect={(value: BundledRequest[]) => setSelectedRow([...value])}
+=======
+                onSelect={(value: any[]) => {
+                  // Flatten the selected bundles into individual requests for the toolbar
+                  const flattenedRequests = value.flatMap(bundle => bundle.requests);
+                  setSelectedRow(flattenedRequests);
+                }}
+>>>>>>> origin/release/0.13.26
                 emptyState={
                   <EmptyState variant="lg">
                     <TextContent>
@@ -642,6 +894,7 @@ export default function ChangeRequestsSection() {
             }
             {...roleRequestsTab}
           >
+<<<<<<< HEAD
             <RolesChangeRequestsList updateCounter={updateRoleCounter} onActionComplete={fetchAllCounts} />
           </Tab>
           <Tab
@@ -658,6 +911,9 @@ export default function ChangeRequestsSection() {
             {...groupRequestsTab}
           >
             <GroupsChangeRequestsList updateCounter={updateGroupCounter} onActionComplete={fetchAllCounts} />
+=======
+            <RolesChangeRequestsList updateCounter={updateRoleCounter} />
+>>>>>>> origin/release/0.13.26
           </Tab>
           <Tab
             title={
@@ -672,7 +928,11 @@ export default function ChangeRequestsSection() {
             }
             {...clientRequestsTab}
           >
+<<<<<<< HEAD
             <ClientChangeRequestsList updateCounter={updateClientCounter} onActionComplete={fetchAllCounts} />
+=======
+            <ClientChangeRequestsList updateCounter={updateClientCounter} />
+>>>>>>> origin/release/0.13.26
           </Tab>
           <Tab
             title={
@@ -687,6 +947,7 @@ export default function ChangeRequestsSection() {
             }
             {...settingsRequestsTab}
           >
+<<<<<<< HEAD
             <SettingsChangeRequestsList updateCounter={updateSettingsCounter} onActionComplete={fetchAllCounts} />
           </Tab>
           <Tab
@@ -703,6 +964,9 @@ export default function ChangeRequestsSection() {
             {...policiesTab}
           >
             <PolicyChangeRequestsList updateCounter={updatePolicyCounter} onActionComplete={fetchAllCounts} />
+=======
+            <SettingsChangeRequestsList updateCounter={updateSettingsCounter} />
+>>>>>>> origin/release/0.13.26
           </Tab>
         </RoutableTabs>
       </PageSection>

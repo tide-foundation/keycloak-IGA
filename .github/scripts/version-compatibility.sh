@@ -23,8 +23,12 @@ ALL_RELEASES=$(gh release list \
 MAJOR_MINOR=${TARGET_BRANCH#"release/"}
 MAJOR_MINOR_RELEASES=$(echo "${ALL_RELEASES}" | (grep "${MAJOR_MINOR}" || true))
 
+<<<<<<< HEAD
 if [[ -z "${MAJOR_MINOR_RELEASES}" ]]; then
   echo "skip"
 else
   echo -n "${MAJOR_MINOR_RELEASES}" | jq -cnMR '[inputs] | map({version: .})'
 fi
+=======
+echo -n "${MAJOR_MINOR_RELEASES}" | jq -cnR '[inputs] | map({version: .})'
+>>>>>>> origin/release/0.13.26

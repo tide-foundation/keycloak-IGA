@@ -10,6 +10,10 @@ import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil"
 /** TIDECLOAK IMPLEMENTATION START */
 import { useState, useEffect } from "react";
 /** TIDECLOAK IMPLEMENTATION END */
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/release/0.13.26
 
 type RealmSettingsLoginTabProps = {
   realm: RealmRepresentation;
@@ -40,6 +44,10 @@ export const RealmSettingsLoginTab = ({
         const backupEnabled = tideIdp?.config?.backupOn === "true";
         setIsTideBackupEnabled(backupEnabled);
       } catch (error) {
+<<<<<<< HEAD
+=======
+        // If error fetching tide IDP, default to not disabling toggles
+>>>>>>> origin/release/0.13.26
         setIsTideBackupEnabled(false);
       } finally {
         setIsLoadingTideConfig(false);

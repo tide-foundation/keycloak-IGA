@@ -31,6 +31,21 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
+=======
+import io.reactivex.rxjava3.core.Flowable;
+import org.infinispan.Cache;
+import org.infinispan.client.hotrod.RemoteCache;
+import org.infinispan.client.hotrod.exceptions.HotRodClientException;
+import org.infinispan.commons.api.AsyncCache;
+import org.infinispan.commons.api.BasicCache;
+import org.infinispan.commons.util.ByRef;
+import org.infinispan.commons.util.concurrent.CompletionStages;
+import org.infinispan.context.Flag;
+import org.infinispan.factories.ComponentRegistry;
+import org.infinispan.persistence.manager.PersistenceManager;
+import org.jboss.logging.Logger;
+>>>>>>> origin/release/0.13.26
 import org.keycloak.cluster.ClusterProvider;
 import org.keycloak.common.Profile;
 import org.keycloak.common.Profile.Feature;
@@ -68,7 +83,10 @@ import org.keycloak.models.sessions.infinispan.entities.UserSessionEntity;
 import org.keycloak.models.sessions.infinispan.events.RealmRemovedSessionEvent;
 import org.keycloak.models.sessions.infinispan.events.RemoveUserSessionsEvent;
 import org.keycloak.models.sessions.infinispan.events.SessionEventsSenderTransaction;
+<<<<<<< HEAD
 import org.keycloak.models.sessions.infinispan.stream.ClientSessionFilterByUser;
+=======
+>>>>>>> origin/release/0.13.26
 import org.keycloak.models.sessions.infinispan.stream.MapEntryToKeyMapper;
 import org.keycloak.models.sessions.infinispan.stream.Mappers;
 import org.keycloak.models.sessions.infinispan.stream.RemoveKeyConsumer;
@@ -113,6 +131,11 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
 
     protected final SessionEventsSenderTransaction clusterEventsSenderTx;
     protected final UserSessionPersisterProvider userSessionPersister;
+<<<<<<< HEAD
+=======
+
+    protected final InfinispanKeyGenerator keyGenerator;
+>>>>>>> origin/release/0.13.26
 
     public PersistentUserSessionProvider(KeycloakSession session,
                                          UserSessionPersistentChangelogBasedTransaction sessionTx,
@@ -982,11 +1005,18 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
             // caching disabled
             return;
         }
+<<<<<<< HEAD
+=======
+
+        var stage = CompletionStages.aggregateCompletionStage();
+
+>>>>>>> origin/release/0.13.26
         try (var stream = getCache(offline).getAdvancedCache()
                 .entrySet()
                 .stream()
                 .filter(UserSessionPredicate.create(realmId).user(userId))
                 .map(MapEntryToKeyMapper.getInstance())) {
+<<<<<<< HEAD
             stream.forEach(RemoveKeyConsumer.getInstance());
         }
         try (var stream = getClientSessionCache(offline) .getAdvancedCache()
@@ -996,5 +1026,29 @@ public class PersistentUserSessionProvider implements UserSessionProvider, Sessi
                 .map(MapEntryToKeyMapper.getInstance())) {
             stream.forEach(RemoveKeyConsumer.getInstance());
         }
+=======
+            var rmCache = getCache(offline).getAdvancedCache()
+                    .withFlags(Flag.ZERO_LOCK_ACQUISITION_TIMEOUT, Flag.FAIL_SILENTLY, Flag.IGNORE_RETURN_VALUES);
+            stream.iterator().forEachRemaining(id -> stage.dependsOn(rmCache.removeAsync(id)));
+        }
+        try (var stream = getClientSessionCache(offline).getAdvancedCache()
+                .entrySet()
+                .stream()
+                .filter(SessionWrapperPredicate.create(realmId))) {
+            var rmCache = getClientSessionCache(offline).getAdvancedCache()
+                    .withFlags(Flag.ZERO_LOCK_ACQUISITION_TIMEOUT, Flag.FAIL_SILENTLY, Flag.IGNORE_RETURN_VALUES);
+            // We can filter remotely by realm ID but, in the worst case scenario,
+            // we have to fetch all client session to this node.
+            // Infinispan uses batches internally (state transfer chunk-size attribute, defaults to 512),
+            // so it should be safe.
+            stream.iterator().forEachRemaining(entry -> {
+                if (Objects.equals(userId, entry.getValue().getEntity().getUserId())) {
+                    stage.dependsOn(rmCache.removeAsync(entry.getKey()));
+                }
+            });
+        }
+
+        CompletionStages.join(stage.freeze());
+>>>>>>> origin/release/0.13.26
     }
 }
