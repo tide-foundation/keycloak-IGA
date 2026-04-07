@@ -503,11 +503,11 @@ export default function DetailSettings() {
         );
 
       await adminClient.identityProviders.update(
-        { alias },
+        { alias: provider?.alias || alias },
         {
           ...p,
           config: { ...provider?.config, ...p.config },
-          alias,
+          alias: provider?.alias || alias,
           providerId,
         },
       );
