@@ -27,11 +27,11 @@ import tideKeyRoute from "./realm-settings/keys/routes"; // TIDECLOAK IMPLEMENTA
 
 export type AppRouteObjectHandle = {
   access: AccessType | AccessType[];
+  breadcrumb?: (t: TFunction) => string | ComponentType<any>;
 };
 
 export interface AppRouteObject extends NonIndexRouteObject {
   path: string;
-  breadcrumb?: (t: TFunction) => string | ComponentType<any>;
   handle: AppRouteObjectHandle;
 }
 
