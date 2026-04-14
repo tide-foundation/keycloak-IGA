@@ -7,7 +7,6 @@ import {
   PageSection,
   Switch,
 } from "@patternfly/react-core";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HelpItem } from "@keycloak/keycloak-ui-shared";
 import { useAdminClient } from "../../admin-client";
@@ -18,17 +17,14 @@ import { useAccess } from "../../context/access/Access";
 
 type DedicatedScopeProps = {
   client: ClientRepresentation;
+  onChange?: (client: ClientRepresentation) => void;
 };
 
-export const DedicatedScope = ({
-  client: initialClient,
-}: DedicatedScopeProps) => {
+export const DedicatedScope = ({ client, onChange }: DedicatedScopeProps) => {
   const { adminClient } = useAdminClient();
 
   const { t } = useTranslation();
   const { addAlert, addError } = useAlerts();
-
-  const [client, setClient] = useState<ClientRepresentation>(initialClient);
 
   const { hasAccess } = useAccess();
   const isManager = hasAccess("manage-clients") || client.access?.manage;
@@ -69,15 +65,8 @@ export const DedicatedScope = ({
     const newClient = { ...client, fullScopeAllowed: !client.fullScopeAllowed };
     try {
       await adminClient.clients.update({ id: client.id! }, newClient);
-      // TIDECLOAK IMPLEMENTATION START
-      const clientModel = await adminClient.clients.findOne({ id: client.id! })
-      if(newClient!.fullScopeAllowed === clientModel!.fullScopeAllowed) {
-        addAlert(t("clientScopeSuccess"), AlertVariant.success);
-      } else {
-        addAlert(t("Change request created, pending review."), AlertVariant.success);
-      }
-      setClient(clientModel!);
-      // TIDECLOAK IMPLEMENTATION END
+      addAlert(t("clientScopeSuccess"), AlertVariant.success);
+      onChange?.(newClient);
     } catch (error) {
       addError("clientScopeError", error);
     }
