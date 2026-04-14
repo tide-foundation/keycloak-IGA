@@ -52,7 +52,7 @@ import { ClientPoliciesTab, toClientPolicies } from "./routes/ClientPolicies";
 import { RealmSettingsTab, toRealmSettings } from "./routes/RealmSettings";
 import { SecurityDefenses } from "./security-defences/SecurityDefenses";
 import { UserProfileTab } from "./user-profile/UserProfileTab";
-import { ServerCertsTab } from "./ServerCertsTab";
+import { ServerIdentityTab } from "./ServerIdentityTab";
 
 export interface UIRealmRepresentation extends RealmRepresentation {
   upConfig?: UserProfileConfig;
@@ -288,7 +288,7 @@ export const RealmSettingsTabs = () => {
   const clientPoliciesTab = useTab("client-policies");
   const userProfileTab = useTab("user-profile");
   const userRegistrationTab = useTab("user-registration");
-  const serverCertsTab = useTab("server-certs");
+  const serverIdentityTab = useTab("server-identity");
   const { hasAccess, hasSomeAccess } = useAccess();
   const canViewOrManageEvents =
     hasAccess("view-realm") && hasSomeAccess("view-events", "manage-events");
@@ -471,11 +471,11 @@ export const RealmSettingsTabs = () => {
             </Tab>
           )}
           <Tab
-            title={<TabTitleText>Server Certs</TabTitleText>}
-            data-testid="rs-server-certs-tab"
-            {...serverCertsTab}
+            title={<TabTitleText>Server Identity</TabTitleText>}
+            data-testid="rs-server-identity-tab"
+            {...serverIdentityTab}
           >
-            <ServerCertsTab />
+            <ServerIdentityTab />
           </Tab>
         </RoutableTabs>
       </PageSection>

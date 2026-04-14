@@ -17,7 +17,7 @@ export type RealmSettingsTab =
   | "client-policies"
   | "user-profile"
   | "user-registration"
-  | "server-certs";
+  | "server-identity";
 
 export type RealmSettingsParams = {
   realm: string;
