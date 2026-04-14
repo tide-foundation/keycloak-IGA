@@ -64,9 +64,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   const fieldNames = [
     "config.gVRK",
     "config.payerPublic",
-    "config.vendorId",
     "config.pendingGVRK",
-    "config.pendingVendorId",
     "config.vvkId",
     "config.customerId",
     "config.maxUserAcc",
@@ -138,9 +136,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   const {
     ["config.gVRK"]: watchConfigGVRK,
     ["config.payerPublic"]: watchConfigPayerPub,
-    ["config.vendorId"]: watchConfigVendorId,
     ["config.pendingGVRK"]: watchConfigPendingGVRK,
-    ["config.pendingVendorId"]: watchConfigPendingVendorId,
     ["config.vvkId"]: watchConfigVVKId,
     ["config.customerId"]: watchConfigCustomerId,
     ["config.maxUserAcc"]: watchConfigMaxUserAcc,
@@ -231,12 +227,12 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       }
     };
 
-    if (!isPendingResign && hasValue(watchConfigPendingVendorId)) {
+    if (!isPendingResign && hasValue(watchConfigPendingGVRK)) {
       setIsPendingResign(true);
       setIsLoading(true);
       activateLicense();
     }
-  }, [watchConfigPendingVendorId]);
+  }, [watchConfigPendingGVRK]);
 
   useEffect(() => {
     const licenseDetails = JSON.stringify(
@@ -244,14 +240,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         vvkId: watchConfigVVKId,
         customerId: watchConfigCustomerId,
         gVRK: watchConfigGVRK,
-        vendorId: watchConfigVendorId,
         payerPub: watchConfigPayerPub
       },
       null,
       2
     );
     setActiveLicenseDetails(licenseDetails);
-  }, [watchConfigGVRK, watchConfigPayerPub, watchConfigVendorId, watchConfigVVKId]);
+  }, [watchConfigGVRK, watchConfigPayerPub, watchConfigVVKId]);
 
   useEffect(() => {
     const fetchLicenseDetails = async () => {
@@ -268,10 +263,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         setLicenseExpiry(formattedDate);
       }
     };
-    if (hasValue(watchConfigVVKId) !== undefined && hasValue(watchConfigVendorId)) {
+    if (hasValue(watchConfigVVKId) !== undefined && hasValue(watchConfigVVKId)) {
       fetchLicenseDetails();
     }
-  }, [watchConfigVVKId, watchConfigMaxUserAcc, key, watchConfigVendorId, activeLicenseDetails]);
+  }, [watchConfigVVKId, watchConfigMaxUserAcc, key, activeLicenseDetails]);
 
   const checkLicenseActive = async () => {
     try {
@@ -357,10 +352,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     const updatedProvider = await adminClient.components.findOne({ id });
     reset(updatedProvider);
     const pendingGVRK = updatedProvider?.config?.pendingGVRK !== undefined ? getSingleValue(updatedProvider?.config?.pendingGVRK) : undefined;
-    const pendingVendorId = updatedProvider?.config?.pendingVendorId !== undefined ? getSingleValue(updatedProvider?.config?.pendingVendorId) : undefined
 
-    if (pendingGVRK !== undefined && hasValue(pendingGVRK) && pendingVendorId !== undefined && hasValue(pendingVendorId)) {
-      return { GVRK: pendingGVRK, VendorId: pendingVendorId };
+    if (pendingGVRK !== undefined && hasValue(pendingGVRK)) {
+      return { GVRK: pendingGVRK };
     } else {
       return null;
     }
@@ -379,11 +373,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     }
     // Check if these values match the temp license request
     const gVRK = activationPackageJson.gVRK;
-    const vendorId = activationPackageJson.licenseId;
     const pendingGVRK = getSingleValue(getValues("config.pendingGVRK"));
-    const pendingVendorId = getSingleValue(getValues("config.pendingVendorId"));
 
-    if ((hasValue(pendingGVRK) && gVRK !== pendingGVRK) || (hasValue(pendingVendorId) && vendorId !== pendingVendorId)) {
+    if (hasValue(pendingGVRK) && gVRK !== pendingGVRK) {
       throw new Error("Incorrect activation package provided, this is for the wrong license request");
     }
 
@@ -434,7 +426,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       vvkId: watchConfigVVKId,
       customerId: watchConfigCustomerId,
       gVRK: watchConfigPendingGVRK,
-      vendorId: watchConfigPendingVendorId,
       payerPub: watchConfigPayerPub
     };
     const utcNowTimestamp = Date.now();
@@ -468,7 +459,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
 
   useEffect(() => {
     getLicenseHistory()
-  }, [watchConfigPendingVendorId, watchConfigPayerPub, watchConfigPendingGVRK, watchConfigVVKId, watchConfigVendorId, key]);
+  }, [watchConfigPayerPub, watchConfigPendingGVRK, watchConfigVVKId, key]);
 
   const isConfigUnsecured = hasTideIdpPresent && missingSigKeys.length > 0 && hasValue(watchConfigVVKId);
   const secureStatus: "secure" | "failed" = isConfigUnsecured ? "failed" : "secure";
