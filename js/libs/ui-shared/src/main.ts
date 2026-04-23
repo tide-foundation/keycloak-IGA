@@ -86,6 +86,7 @@ export type {
   Field,
   DetailField,
   LoaderFunction,
+  SignaledLoader,
 } from "./controls/table/KeycloakDataTable";
 export { PaginatingTableToolbar } from "./controls/table/PaginatingTableToolbar";
 export { TableToolbar } from "./controls/table/TableToolbar";
