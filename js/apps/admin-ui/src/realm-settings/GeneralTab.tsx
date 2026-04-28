@@ -220,32 +220,11 @@ function RealmSettingsGeneralTabForm({
               />
             )}
           </FormGroup>
-          {/* TIDECLOAK IMPLEMENTATION */}
-          <FormGroup
-              label={t("Identity Governance and Administration (IGA)")}
-              fieldId="tide-iga"
-              labelIcon={
-                <HelpItem
-                  helpText={t("some help text for iga")}
-                  fieldLabelId="igaEnabled"
-                />
-              }
-              hasNoPaddingTop
-            >
-            <Switch
-              id="tide-realm-iga-switch"
-              data-testid="realm-iga-switch"
-              value={realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? "on" : "off"}
-              label={t("on")}
-              labelOff={t("off")}
-              isChecked={realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? true : false}
-              onChange={(_event, value) => {
-                updateSwitchValue(value);
-              }}
-              aria-label={t("igaEnabled")}
-            />
-          </FormGroup>
-          <TextControl name="displayName" label={t("displayName")} />
+          <TextControl
+            name="displayName"
+            label={t("displayName")}
+            labelIcon={t("realmDisplayNameHelp")}
+          />
           <TextControl name="displayNameHtml" label={t("htmlDisplayName")} />
           <TextControl
             name={convertAttributeNameToForm("attributes.frontendUrl")}
