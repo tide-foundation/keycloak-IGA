@@ -10,6 +10,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAdminClient } from "../../admin-client";
+import { notifyIfPendingChangeRequest } from "../../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { FormAccess } from "../../components/form/FormAccess";
 import { ViewHeader } from "../../components/view-header/ViewHeader";
@@ -89,6 +90,14 @@ export default function NewClientForm() {
         ...client,
         clientId: client.clientId?.trim(),
       });
+
+      // TIDECLOAK IMPLEMENTATION: IGA may intercept the create and return a
+      // pending change request instead of a real client id.
+      if (notifyIfPendingChangeRequest(newClient, t, addAlert)) {
+        navigate(toClients({ realm }));
+        return;
+      }
+
       addAlert(t("createClientSuccess"), AlertVariant.success);
 
       // TIDECLOAK IMPLEMENTATION
@@ -102,10 +111,9 @@ export default function NewClientForm() {
             addError("SignSettingsError", error);
           }
         }
+      };
 
-      }
-
-      signSettings();
+      void signSettings();
 
       navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
     } catch (error) {

@@ -23,6 +23,7 @@ import {
   convertToFormValues,
 } from "../../util";
 import { getAuthorizationHeaders } from "../../utils/getAuthorizationHeaders";
+import { notifyIfPendingChangeRequest } from "../../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { ClientDescription } from "../ClientDescription";
 import { FormFields } from "../ClientDetails";
 import { CapabilityConfig } from "../add/CapabilityConfig";
@@ -90,6 +91,11 @@ export default function ImportForm() {
           attributes: client.attributes || {},
         }),
       });
+      // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
+      if (notifyIfPendingChangeRequest(newClient, t, addAlert)) {
+        navigate(toClients({ realm }));
+        return;
+      }
       addAlert(t("clientImportSuccess"), AlertVariant.success);
       navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
     } catch (error) {

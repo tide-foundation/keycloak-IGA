@@ -6,6 +6,7 @@ import {
   parseResponse,
 } from "../utils/fetchWithError.js";
 import { joinPath } from "../utils/joinPath.js";
+import { pendingChangeRequestFromResponse } from "../utils/pendingChangeRequest.js";
 import { stringifyQueryParams } from "../utils/stringifyQueryParams.js";
 
 // constants
@@ -252,6 +253,27 @@ export class Agent {
           ? { signal: AbortSignal.timeout(this.#client.timeout) }
           : {}),
       });
+
+      // TIDECLOAK IMPLEMENTATION
+      // The backend can intercept entity-create calls for IGA approval and
+      // respond with HTTP 202 + a `PendingChangeRequest` JSON body in place of
+      // the usual 201 + Location header. Surface that body to callers so they
+      // can show a friendly notice and skip post-create navigation.
+      if (res.status === 202) {
+        const body = await parseResponse(res);
+        const pending = pendingChangeRequestFromResponse(body);
+        if (pending) {
+          return pending;
+        }
+        // Not a recognised pending-change-request payload — fall through to
+        // the original behaviour so legitimate 202 responses still work.
+        if (returnResourceIdInLocationHeader) {
+          throw new Error(
+            `location header is not found in request: ${res.url}`,
+          );
+        }
+        return body;
+      }
 
       // now we get the response of the http request
       // if `resourceIdInLocationHeader` is true, we'll get the resourceId from the location header field

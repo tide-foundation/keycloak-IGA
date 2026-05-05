@@ -16,9 +16,11 @@ import { useAdminClient } from "../admin-client";
 import { KeycloakSpinner } from "@keycloak/keycloak-ui-shared";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { UserForm } from "./UserForm";
 import { UserFormFields, toUserRepresentation } from "./form-state";
 import { toUser } from "./routes/User";
+import { toUsers } from "./routes/Users";
 
 import "./user-section.css";
 
@@ -53,6 +55,12 @@ export default function CreateUser() {
         groups: addedGroups.map((group) => group.path!),
         enabled: true,
       });
+
+      // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
+      if (notifyIfPendingChangeRequest(createdUser, t, addAlert)) {
+        navigate(toUsers({ realm: realmName }));
+        return;
+      }
 
       addAlert(t("userCreated"), AlertVariant.success);
       navigate(
