@@ -8,6 +8,7 @@ import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { AttributeForm } from "../../components/key-value-form/AttributeForm";
 import { RoleForm } from "../../components/role-form/RoleForm";
 import { useRealm } from "../../context/realm-context/RealmContext";
+import { notifyIfPendingChangeRequest } from "../../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { toClient } from "../routes/Client";
 import { toClientRole } from "../routes/ClientRole";
 import { NewRoleParams } from "../routes/NewRole";
@@ -30,10 +31,22 @@ export default function CreateClientRole() {
     };
 
     try {
-      await adminClient.clients.createRole({
+      const createResult = await adminClient.clients.createRole({
         id: clientId,
         ...role,
       });
+
+      // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
+      if (notifyIfPendingChangeRequest(createResult, t, addAlert)) {
+        navigate(
+          toClient({
+            realm,
+            clientId: clientId!,
+            tab: "roles",
+          }),
+        );
+        return;
+      }
 
       const createdRole = (await adminClient.clients.findRole({
         id: clientId!,
