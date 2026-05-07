@@ -161,7 +161,9 @@ const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDi
         fromUrl: metadataDescriptorUrl,
       });
       if (result.signingCertificate) {
-        setValue(`config.signingCertificate`, result.signingCertificate);
+        setValue(`config.signingCertificate`, result.signingCertificate, {
+          shouldDirty: true,
+        });
         addAlert(t("importKeysSuccess"), AlertVariant.success);
       } else {
         addError("importKeysError", t("importKeysErrorNoSigningCertificate"));
@@ -285,7 +287,13 @@ export default function DetailSettings() {
   const { alias, providerId } = useParams<IdentityProviderParams>();
   const isFeatureEnabled = useIsFeatureEnabled();
   const form = useForm<IdentityProviderRepresentation>();
-  const { handleSubmit, getValues, reset, setValue } = form;
+  const {
+    handleSubmit,
+    getValues,
+    reset,
+    control,
+    formState: { isDirty },
+  } = form;
   const [provider, setProvider] = useState<IdentityProviderRepresentation>();
   const [selectedMapper, setSelectedMapper] =
     useState<IdPWithMapperAttributes>();
@@ -862,7 +870,12 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           <SpiffeSettings />
-          <FixedButtonsGroup name="idp-details" isSubmit reset={reset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </Form>
       ),
     },
@@ -876,7 +889,12 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           <JWTAuthorizationGrantSettings />
-          <FixedButtonsGroup name="idp-details" isSubmit reset={reset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </Form>
       ),
     },
@@ -890,7 +908,12 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           <KubernetesSettings />
-          <FixedButtonsGroup name="idp-details" isSubmit reset={reset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </Form>
       ),
     },
@@ -927,7 +950,12 @@ export default function DetailSettings() {
             isOAuth2={isOAuth2!}
           />
 
-          <FixedButtonsGroup name="idp-details" isSubmit reset={handleReset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </FormAccess>
       ),
     },
