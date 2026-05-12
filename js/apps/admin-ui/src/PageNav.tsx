@@ -161,7 +161,7 @@ export const PageNav = () => {
             style={{ wordWrap: "break-word" }}
           >
             <span data-testid="currentRealm">
-              {resolveDisplayName(t, realmRepresentation?.displayName, realm)}
+              {resolveDisplayName(t, realmRepresentation.displayName, realm)}
             </span>{" "}
             <Label color="blue">{t("currentRealm")}</Label>
           </h2>
@@ -173,7 +173,7 @@ export const PageNav = () => {
           {showManage && (
             <NavGroup aria-label={t("manage")} title={t("manage")}>
               {isFeatureEnabled(Feature.Organizations) &&
-                realmRepresentation?.organizationsEnabled && (
+                realmRepresentation.organizationsEnabled && (
                   <LeftNav title="organizations" path="/organizations" />
                 )}
               <LeftNav title="clients" path="/clients" />
@@ -199,7 +199,7 @@ export const PageNav = () => {
               <LeftNav title="realmSettings" path="/realm-settings" />
               <LeftNav title="authentication" path="/authentication" />
               {isFeatureEnabled(Feature.AdminFineGrainedAuthzV2) &&
-                realmRepresentation?.adminPermissionsEnabled && (
+                realmRepresentation.adminPermissionsEnabled && (
                   <LeftNav title="permissions" path="/permissions" />
                 )}
               <LeftNav title="identityProviders" path="/identity-providers" />

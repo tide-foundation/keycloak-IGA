@@ -33,7 +33,7 @@ const NewClientFooter = (newClientForm: any) => {
     if (!(await trigger())) {
       return;
     }
-    onNext?.();
+    onNext();
   };
 
   return (
