@@ -319,10 +319,7 @@ export * as PermissionsConfigurationSection from "./permissions-configuration/Pe
 export { routes } from "./routes";
 
 /** TIDECLOAK IMPLEMENTATION */
-export { default as ChangeRequestsSection } from "./tide-change-requests/ChangeRequestsSection";
-export { ClientChangeRequestsList } from "./tide-change-requests/ClientChangeRequestsList";
-export { GenerateDefaultUserContextModal } from "./tide-change-requests/GenerateDefaultUserContextModal";
-export { RolesChangeRequestsList } from "./tide-change-requests/RolesChangeRequestsList";
+export { default as ChangeRequestsSection } from "./change-requests/ChangeRequestsSection";
 export { TideLicenseHistory } from "./components/tide-licensing-tab/TideLicenseHistory";
 export { TideLicensingTab } from "./components/tide-licensing-tab/TideLicensingTab";
 export { TideScheduledTasks } from "./components/tide-licensing-tab/TideScheduledTasks";

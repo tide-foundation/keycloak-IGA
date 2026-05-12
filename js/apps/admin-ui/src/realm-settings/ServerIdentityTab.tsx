@@ -25,7 +25,7 @@ import { useEnvironment, useAlerts } from "@keycloak/keycloak-ui-shared";
 import {
   base64ToBytes,
   bytesToBase64,
-} from "../tide-change-requests/utils/blockchain/tideSerialization";
+} from "../utils/tideSerialization";
 import {
   CheckCircleIcon,
   BanIcon,
