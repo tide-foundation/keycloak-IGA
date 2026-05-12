@@ -28,7 +28,7 @@ import { useAdminClient } from "../admin-client";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { useNavigate } from "react-router-dom";
 import { useRealm } from "../context/realm-context/RealmContext";
-import { toChangeRequests } from "../tide-change-requests/routes/ChangeRequests";
+import { toChangeRequests } from "../change-requests/routes/ChangeRequests";
 import CodeEditor from "../components/form/CodeEditor";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -319,7 +319,7 @@ export const ActiveRealmPolicyTab = () => {
                     variant={ButtonVariant.primary}
                     onClick={() =>
                       navigate(
-                        toChangeRequests({ realm, tab: "policies" }).pathname!
+                        toChangeRequests({ realm }).pathname!
                       )
                     }
                   >
@@ -354,8 +354,8 @@ export const ActiveRealmPolicyTab = () => {
                   <DescriptionListGroup>
                     <DescriptionListTerm>Status</DescriptionListTerm>
                     <DescriptionListDescription>
-                      Deletion pending approval — review and approve in Change
-                      Requests
+                      Deletion pending approval — review and approve in
+                      Change Requests
                     </DescriptionListDescription>
                   </DescriptionListGroup>
                 </DescriptionList>
@@ -365,7 +365,7 @@ export const ActiveRealmPolicyTab = () => {
                     variant={ButtonVariant.primary}
                     onClick={() =>
                       navigate(
-                        toChangeRequests({ realm, tab: "policies" }).pathname!,
+                        toChangeRequests({ realm }).pathname!,
                       )
                     }
                   >
