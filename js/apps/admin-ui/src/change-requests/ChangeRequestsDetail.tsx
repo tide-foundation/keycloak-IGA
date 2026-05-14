@@ -29,7 +29,12 @@ import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaC
 import type IgaComment from "@keycloak/keycloak-admin-client/lib/defs/igaCommentRepresentation";
 
 import { canApprove } from "./canApprove";
-import { actionTypeLabel, entityTypeLabel, formatTime } from "./formatters";
+import {
+  actionTypeLabel,
+  entityTypeLabel,
+  errorMessage,
+  formatTime,
+} from "./formatters";
 
 type Props = {
   id: string;
@@ -71,7 +76,7 @@ export function ChangeRequestsDetail({
       setCr(next);
       setComments(nextComments);
     } catch (err) {
-      addError("Failed to load change request", err);
+      addError(`Failed to load change request: ${errorMessage(err)}`, err);
     }
   }, [adminClient, id, addError]);
 
@@ -87,7 +92,7 @@ export function ChangeRequestsDetail({
       addAlert("Change request authorized.", AlertVariant.success);
       onChanged();
     } catch (err) {
-      addError("Failed to authorize change request", err);
+      addError(`Failed to authorize change request: ${errorMessage(err)}`, err);
     } finally {
       setIsWorking(false);
     }
@@ -104,7 +109,7 @@ export function ChangeRequestsDetail({
       addAlert("Change request denied.", AlertVariant.success);
       onChanged();
     } catch (err) {
-      addError("Failed to deny change request", err);
+      addError(`Failed to deny change request: ${errorMessage(err)}`, err);
     } finally {
       setIsWorking(false);
       setDenyOpen(false);
@@ -122,7 +127,7 @@ export function ChangeRequestsDetail({
       setCommentDraft("");
       await fetchAll();
     } catch (err) {
-      addError("Failed to add comment", err);
+      addError(`Failed to add comment: ${errorMessage(err)}`, err);
     } finally {
       setIsWorking(false);
     }

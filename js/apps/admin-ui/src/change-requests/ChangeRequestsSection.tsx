@@ -29,7 +29,12 @@ import type { IgaChangeRequestStatus } from "@keycloak/keycloak-admin-client/lib
 
 import { canApprove } from "./canApprove";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
-import { actionTypeLabel, entityTypeLabel, formatTime } from "./formatters";
+import {
+  actionTypeLabel,
+  entityTypeLabel,
+  errorMessage,
+  formatTime,
+} from "./formatters";
 import { ChangeRequestsDetail } from "./ChangeRequestsDetail";
 
 const TAB_KEYS: IgaChangeRequestStatus[] = ["PENDING", "APPROVED", "DENIED"];
@@ -38,7 +43,7 @@ const POLL_INTERVAL_MS = 5000;
 type AuthorizeResult = {
   id: string;
   ok: boolean;
-  error?: string;
+  message?: string;
 };
 
 function RequiredRolesCell({ cr }: { cr: IgaChangeRequest }) {
@@ -142,7 +147,7 @@ export default function ChangeRequestsSection() {
       if (activeStatus !== "PENDING" || !onlyMine) return rows;
       return rows.filter((cr) => canApprove(cr, userRoles));
     } catch (err) {
-      addError("Failed to load change requests", err);
+      addError(`Failed to load change requests: ${errorMessage(err)}`, err);
       return [];
     }
   }, [adminClient, activeStatus, onlyMine, userRoles, addError]);
@@ -178,11 +183,11 @@ export default function ChangeRequestsSection() {
         try {
           await adminClient.iga.authorize({ id: cr.id });
           results.push({ id: cr.id, ok: true });
-        } catch (err: any) {
+        } catch (err) {
           results.push({
             id: cr.id,
             ok: false,
-            error: err?.responseData || err?.message || String(err),
+            message: errorMessage(err),
           });
         }
       }
@@ -222,7 +227,10 @@ export default function ChangeRequestsSection() {
         addAlert("Change request authorized.", AlertVariant.success);
         refresh();
       } catch (err) {
-        addError("Failed to authorize change request", err);
+        addError(
+          `Failed to authorize change request: ${errorMessage(err)}`,
+          err,
+        );
       } finally {
         setIsProcessing(false);
       }
@@ -404,7 +412,7 @@ export default function ChangeRequestsSection() {
                 .filter((r) => !r.ok)
                 .map((r) => (
                   <li key={r.id}>
-                    <code>{r.id}</code>: {r.error || "unknown error"}
+                    <code>{r.id}</code>: {r.message || "unknown error"}
                   </li>
                 ))}
             </ul>
