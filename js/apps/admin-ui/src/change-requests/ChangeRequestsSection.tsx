@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertVariant,
-  Badge,
   Button,
   ButtonVariant,
   Chip,
@@ -13,9 +12,6 @@ import {
   Modal,
   ModalVariant,
   PageSection,
-  Tab,
-  TabTitleText,
-  Tabs,
   Text,
   TextContent,
   ToolbarItem,
@@ -28,7 +24,10 @@ import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
-import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
+import type {
+  IgaChangeRequestStatus,
+  IgaCrAuthorizerRepresentation,
+} from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
 import { canApprove } from "./canApprove";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
@@ -39,12 +38,17 @@ import {
   errorMessage,
   formatRelativeTime,
   formatTime,
-  humanReadableSummary,
 } from "./formatters";
 import { ChangeRequestsDetail } from "./ChangeRequestsDetail";
 
-type InboxTab = "awaiting" | "pending" | "history";
-type HistoryFilter = "all" | "approved" | "denied";
+type ChipFilter = "PENDING" | "APPROVED" | "DENIED" | "ALL";
+
+const CHIP_OPTIONS: { key: ChipFilter; label: string }[] = [
+  { key: "PENDING", label: "Pending" },
+  { key: "APPROVED", label: "Approved" },
+  { key: "DENIED", label: "Denied" },
+  { key: "ALL", label: "All" },
+];
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -58,18 +62,6 @@ function hasSigned(cr: IgaChangeRequest, username: string): boolean {
   if (!username) return false;
   const authorizers: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
   return authorizers.some((a) => a.username === username);
-}
-
-function isAwaitingMe(
-  cr: IgaChangeRequest,
-  userRoles: string[],
-  username: string,
-): boolean {
-  return (
-    cr.status === "PENDING" &&
-    canApprove(cr, userRoles) &&
-    !hasSigned(cr, username)
-  );
 }
 
 function RequiredRolesCell({ cr }: { cr: IgaChangeRequest }) {
@@ -131,70 +123,133 @@ function AuthorizationsCell({ cr }: { cr: IgaChangeRequest }) {
   );
 }
 
+function StatusCell({ cr }: { cr: IgaChangeRequest }) {
+  const color: "grey" | "green" | "red" =
+    cr.status === "PENDING"
+      ? "grey"
+      : cr.status === "APPROVED"
+        ? "green"
+        : "red";
+  const label =
+    cr.status === "PENDING"
+      ? "Pending"
+      : cr.status === "APPROVED"
+        ? "Approved"
+        : "Denied";
+  return (
+    <Label isCompact color={color}>
+      {label}
+    </Label>
+  );
+}
+
 type ToolbarProps = {
-  inboxTab: InboxTab;
+  chipFilter: ChipFilter;
+  setChipFilter: (v: ChipFilter) => void;
   authorizableCount: number;
   committableCount: number;
+  selectedCount: number;
   isProcessing: boolean;
   onAuthorizeBulk: () => void;
   onCommitBulk: () => void;
-  historyFilter: HistoryFilter;
-  setHistoryFilter: (v: HistoryFilter) => void;
 };
 
 function ChangeRequestsToolbar({
-  inboxTab,
+  chipFilter,
+  setChipFilter,
   authorizableCount,
   committableCount,
+  selectedCount,
   isProcessing,
   onAuthorizeBulk,
   onCommitBulk,
-  historyFilter,
-  setHistoryFilter,
 }: ToolbarProps) {
-  if (inboxTab === "history") {
-    return (
-      <ToolbarItem>
-        <ChipGroup categoryName="Show">
-          {(["all", "approved", "denied"] as const).map((f) => (
-            <Chip
-              key={f}
-              isReadOnly={historyFilter === f}
-              onClick={() => setHistoryFilter(f)}
-            >
-              {f === "all" ? "All" : f === "approved" ? "Approved" : "Denied"}
-            </Chip>
-          ))}
-        </ChipGroup>
-      </ToolbarItem>
-    );
-  }
+  const noSelection = selectedCount === 0;
+  const authorizeTip = noSelection
+    ? "Select pending change requests you can authorize"
+    : authorizableCount === 0
+      ? "None of the selected rows can be authorized — already signed, missing role, or not pending"
+      : "";
+  const commitTip = noSelection
+    ? "Select change requests that are ready to commit"
+    : committableCount === 0
+      ? "None of the selected rows are ready to commit — threshold not met or you lack the required role"
+      : "";
+
+  const authorizeDisabled =
+    authorizableCount === 0 || isProcessing || noSelection;
+  const commitDisabled = committableCount === 0 || isProcessing || noSelection;
 
   return (
     <>
       <ToolbarItem>
-        <Button
-          variant="primary"
-          isDisabled={authorizableCount === 0 || isProcessing}
-          isLoading={isProcessing}
-          onClick={onAuthorizeBulk}
-        >
-          {`Authorize selected${
-            authorizableCount > 0 ? ` (${authorizableCount})` : ""
-          }`}
-        </Button>
+        <ChipGroup categoryName="Show">
+          {CHIP_OPTIONS.map((opt) => (
+            <Chip
+              key={opt.key}
+              isReadOnly={chipFilter === opt.key}
+              onClick={() => setChipFilter(opt.key)}
+            >
+              {opt.label}
+            </Chip>
+          ))}
+        </ChipGroup>
       </ToolbarItem>
       <ToolbarItem>
-        <Button
-          variant="secondary"
-          isDisabled={committableCount === 0 || isProcessing}
-          isLoading={isProcessing}
-          onClick={onCommitBulk}
-        >
-          {`Commit selected${
-            committableCount > 0 ? ` (${committableCount})` : ""
-          }`}
-        </Button>
+        {authorizeDisabled ? (
+          <Tooltip content={authorizeTip || "Select rows to authorize"}>
+            <span>
+              <Button
+                variant="primary"
+                isAriaDisabled
+                isLoading={isProcessing}
+                onClick={() => {
+                  /* disabled */
+                }}
+              >
+                {`Bulk Authorize${
+                  authorizableCount > 0 ? ` (${authorizableCount})` : ""
+                }`}
+              </Button>
+            </span>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="primary"
+            isLoading={isProcessing}
+            onClick={onAuthorizeBulk}
+          >
+            {`Bulk Authorize (${authorizableCount})`}
+          </Button>
+        )}
+      </ToolbarItem>
+      <ToolbarItem>
+        {commitDisabled ? (
+          <Tooltip content={commitTip || "Select rows to commit"}>
+            <span>
+              <Button
+                variant="secondary"
+                isAriaDisabled
+                isLoading={isProcessing}
+                onClick={() => {
+                  /* disabled */
+                }}
+              >
+                {`Bulk Commit${
+                  committableCount > 0 ? ` (${committableCount})` : ""
+                }`}
+              </Button>
+            </span>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="secondary"
+            isLoading={isProcessing}
+            onClick={onCommitBulk}
+          >
+            {`Bulk Commit (${committableCount})`}
+          </Button>
+        )}
       </ToolbarItem>
     </>
   );
@@ -206,8 +261,7 @@ export default function ChangeRequestsSection() {
   const userRoles = useCurrentUserRoles();
   const username = useCurrentUsername();
 
-  const [inboxTab, setInboxTab] = useState<InboxTab>("awaiting");
-  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  const [chipFilter, setChipFilter] = useState<ChipFilter>("PENDING");
   const [selected, setSelected] = useState<IgaChangeRequest[]>([]);
   const [tableKey, setTableKey] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -216,79 +270,39 @@ export default function ChangeRequestsSection() {
     op: "authorize" | "commit";
     results: BulkResult[];
   } | null>(null);
-  const [awaitingCount, setAwaitingCount] = useState(0);
 
   const refresh = useCallback(() => {
     setSelected([]);
     setTableKey((k) => k + 1);
   }, []);
 
-  // Polling refresh of the active tab.
+  // Light polling refresh while viewing the table.
   useEffect(() => {
     const interval = setInterval(() => {
       setTableKey((k) => k + 1);
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [inboxTab, historyFilter]);
+  }, [chipFilter]);
 
-  // Background poll of the awaiting-me count for the tab badge (kept light:
-  // we only re-list PENDING; client filters from there).
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
+  const loader = useCallback(
+    async (status?: IgaChangeRequestStatus): Promise<IgaChangeRequest[]> => {
       try {
-        const rows = await adminClient.iga.listChangeRequests({
-          status: "PENDING",
-        });
-        if (cancelled) return;
-        setAwaitingCount(
-          rows.filter((cr) => isAwaitingMe(cr, userRoles, username)).length,
-        );
-      } catch {
-        /* ignored — badge is best-effort */
-      }
-    };
-    void tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [adminClient, userRoles, username]);
-
-  const loader = useCallback(async (): Promise<IgaChangeRequest[]> => {
-    try {
-      if (inboxTab === "history") {
-        if (historyFilter === "approved") {
-          return await adminClient.iga.listChangeRequests({
-            status: "APPROVED",
-          });
+        if (status) {
+          return await adminClient.iga.listChangeRequests({ status });
         }
-        if (historyFilter === "denied") {
-          return await adminClient.iga.listChangeRequests({ status: "DENIED" });
-        }
-        const [approved, denied] = await Promise.all([
-          adminClient.iga.listChangeRequests({ status: "APPROVED" }),
-          adminClient.iga.listChangeRequests({ status: "DENIED" }),
-        ]);
-        // Newest first; backend may already sort but we defensively re-sort.
-        return [...approved, ...denied].sort(
-          (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
-        );
+        return await adminClient.iga.listChangeRequests();
+      } catch (err) {
+        addError(`Failed to load change requests: ${errorMessage(err)}`, err);
+        return [];
       }
+    },
+    [adminClient, addError],
+  );
 
-      const pending = await adminClient.iga.listChangeRequests({
-        status: "PENDING",
-      });
-      if (inboxTab === "awaiting") {
-        return pending.filter((cr) => isAwaitingMe(cr, userRoles, username));
-      }
-      return pending;
-    } catch (err) {
-      addError(`Failed to load change requests: ${errorMessage(err)}`, err);
-      return [];
-    }
-  }, [adminClient, inboxTab, historyFilter, userRoles, username, addError]);
+  const tableLoader = useCallback(
+    () => loader(chipFilter === "ALL" ? undefined : chipFilter),
+    [loader, chipFilter],
+  );
 
   /* ---- selection-derived counts ---- */
 
@@ -330,7 +344,7 @@ export default function ChangeRequestsSection() {
         {skippedFromAuthorize > 0 && (
           <>
             {" "}
-            {`(${skippedFromAuthorize} of ${selected.length} selected cannot be authorized — already signed or missing role — and will be skipped.)`}
+            {`(${skippedFromAuthorize} of ${selected.length} selected cannot be authorized — already signed, missing role, or not pending — and will be skipped.)`}
           </>
         )}
       </>
@@ -486,18 +500,15 @@ export default function ChangeRequestsSection() {
     [adminClient, userRoles, addAlert, addError, refresh],
   );
 
-  /* ---- columns ---- */
+  /* ---- columns ----
+     Order: Status, Action, Entity, Authorizations, Required roles, Created. */
 
   const columns = useMemo(
     () => [
       {
-        name: "summary",
-        displayKey: "Change",
-        cellRenderer: (cr: IgaChangeRequest) => (
-          <span title={humanReadableSummary(cr)}>
-            {humanReadableSummary(cr)}
-          </span>
-        ),
+        name: "status",
+        displayKey: "Status",
+        cellRenderer: (cr: IgaChangeRequest) => <StatusCell cr={cr} />,
       },
       {
         name: "actionType",
@@ -506,18 +517,8 @@ export default function ChangeRequestsSection() {
       },
       {
         name: "entityType",
-        displayKey: "Entity Type",
+        displayKey: "Entity",
         cellRenderer: (cr: IgaChangeRequest) => entityTypeLabel(cr.entityType),
-      },
-      {
-        name: "createdBy",
-        displayKey: "Created By",
-        cellRenderer: (cr: IgaChangeRequest) => cr.createdBy ?? "-",
-      },
-      {
-        name: "createdAt",
-        displayKey: "Created At",
-        cellRenderer: (cr: IgaChangeRequest) => formatTime(cr.createdAt),
       },
       {
         name: "authorizations",
@@ -526,26 +527,13 @@ export default function ChangeRequestsSection() {
       },
       {
         name: "requiredApproverRoles",
-        displayKey: "Required Roles",
+        displayKey: "Required roles",
         cellRenderer: (cr: IgaChangeRequest) => <RequiredRolesCell cr={cr} />,
       },
       {
-        name: "status",
-        displayKey: "Status",
-        cellRenderer: (cr: IgaChangeRequest) => (
-          <Label
-            isCompact
-            color={
-              cr.status === "PENDING"
-                ? "orange"
-                : cr.status === "APPROVED"
-                  ? "blue"
-                  : "red"
-            }
-          >
-            {cr.status}
-          </Label>
-        ),
+        name: "createdAt",
+        displayKey: "Created",
+        cellRenderer: (cr: IgaChangeRequest) => formatTime(cr.createdAt),
       },
     ],
     [],
@@ -619,9 +607,6 @@ export default function ChangeRequestsSection() {
     [userRoles, username, isProcessing, onAuthorizeRow, onCommitRow, onDenyRow],
   );
 
-  const tabKey = `${inboxTab}-${inboxTab === "history" ? historyFilter : ""}-${tableKey}`;
-  const canSelect = inboxTab === "awaiting";
-
   return (
     <>
       <ViewHeader
@@ -630,70 +615,42 @@ export default function ChangeRequestsSection() {
         divider={false}
       />
       <PageSection variant="light" className="pf-v5-u-p-0">
-        <Tabs
-          activeKey={inboxTab}
-          onSelect={(_e, key) => {
-            setInboxTab(key as InboxTab);
-            setSelected([]);
-          }}
-          isBox
-        >
-          <Tab
-            eventKey="awaiting"
-            title={
-              <TabTitleText>
-                Awaiting me{" "}
-                {awaitingCount > 0 && (
-                  <Badge isRead={false}>{awaitingCount}</Badge>
-                )}
-              </TabTitleText>
-            }
-          />
-          <Tab
-            eventKey="pending"
-            title={<TabTitleText>All pending</TabTitleText>}
-          />
-          <Tab
-            eventKey="history"
-            title={<TabTitleText>History</TabTitleText>}
-          />
-        </Tabs>
-
         <div className="keycloak__events_table">
           <KeycloakDataTable
-            key={tabKey}
-            loader={loader}
+            key={`${chipFilter}-${tableKey}`}
+            loader={tableLoader}
             ariaLabelKey="Change Requests"
             toolbarItem={
               <ChangeRequestsToolbar
-                inboxTab={inboxTab}
+                chipFilter={chipFilter}
+                setChipFilter={(v) => {
+                  setChipFilter(v);
+                  setSelected([]);
+                }}
                 authorizableCount={authorizableSelection.length}
                 committableCount={committableSelection.length}
+                selectedCount={selected.length}
                 isProcessing={isProcessing}
                 onAuthorizeBulk={onAuthorizeBulk}
                 onCommitBulk={onCommitBulk}
-                historyFilter={historyFilter}
-                setHistoryFilter={setHistoryFilter}
               />
             }
             columns={columns}
             actionResolver={actionResolver}
             isPaginated
-            canSelectAll={canSelect}
-            onSelect={
-              canSelect
-                ? (value: IgaChangeRequest[]) => setSelected([...value])
-                : undefined
-            }
+            canSelectAll
+            onSelect={(value: IgaChangeRequest[]) => setSelected([...value])}
             emptyState={
               <EmptyState variant="lg">
                 <TextContent>
                   <Text>
-                    {inboxTab === "awaiting"
-                      ? "Nothing awaiting your action."
-                      : inboxTab === "pending"
-                        ? "No pending change requests."
-                        : "No change requests in history."}
+                    {chipFilter === "PENDING"
+                      ? "No pending change requests."
+                      : chipFilter === "APPROVED"
+                        ? "No approved change requests."
+                        : chipFilter === "DENIED"
+                          ? "No denied change requests."
+                          : "No change requests."}
                   </Text>
                 </TextContent>
               </EmptyState>
