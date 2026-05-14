@@ -3,20 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertVariant,
+  Badge,
   Button,
   ButtonVariant,
+  Chip,
+  ChipGroup,
   EmptyState,
   Label,
   Modal,
   ModalVariant,
   PageSection,
-  Switch,
   Tab,
   TabTitleText,
   Tabs,
   Text,
   TextContent,
   ToolbarItem,
+  Tooltip,
 } from "@patternfly/react-core";
 import { useAlerts, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 
@@ -25,26 +28,49 @@ import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
-import type { IgaChangeRequestStatus } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
+import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
 import { canApprove } from "./canApprove";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
+import { useCurrentUsername } from "./useCurrentUsername";
 import {
   actionTypeLabel,
   entityTypeLabel,
   errorMessage,
+  formatRelativeTime,
   formatTime,
+  humanReadableSummary,
 } from "./formatters";
 import { ChangeRequestsDetail } from "./ChangeRequestsDetail";
 
-const TAB_KEYS: IgaChangeRequestStatus[] = ["PENDING", "APPROVED", "DENIED"];
+type InboxTab = "awaiting" | "pending" | "history";
+type HistoryFilter = "all" | "approved" | "denied";
+
 const POLL_INTERVAL_MS = 5000;
 
-type AuthorizeResult = {
+type BulkResult = {
   id: string;
   ok: boolean;
   message?: string;
 };
+
+function hasSigned(cr: IgaChangeRequest, username: string): boolean {
+  if (!username) return false;
+  const authorizers: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
+  return authorizers.some((a) => a.username === username);
+}
+
+function isAwaitingMe(
+  cr: IgaChangeRequest,
+  userRoles: string[],
+  username: string,
+): boolean {
+  return (
+    cr.status === "PENDING" &&
+    canApprove(cr, userRoles) &&
+    !hasSigned(cr, username)
+  );
+}
 
 function RequiredRolesCell({ cr }: { cr: IgaChangeRequest }) {
   const roles = cr.requiredApproverRoles ?? [];
@@ -66,43 +92,107 @@ function RequiredRolesCell({ cr }: { cr: IgaChangeRequest }) {
   );
 }
 
+function AuthorizationsCell({ cr }: { cr: IgaChangeRequest }) {
+  const signers: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
+  const remaining = Math.max(cr.threshold - cr.authCount, 0);
+
+  const tip = (
+    <div style={{ maxWidth: 280 }}>
+      {signers.length === 0 ? (
+        <div>Not signed yet.</div>
+      ) : (
+        <div>
+          Signed by:{" "}
+          {signers
+            .map((s) => `${s.username} (${formatRelativeTime(s.timestamp)})`)
+            .join(", ")}
+          .
+        </div>
+      )}
+      {remaining > 0 && cr.status === "PENDING" && (
+        <div>{`Still needed: ${remaining}.`}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <Tooltip content={tip}>
+        <span style={{ fontVariantNumeric: "tabular-nums" }}>
+          {cr.authCount} / {cr.threshold}
+        </span>
+      </Tooltip>
+      {cr.readyToCommit && (
+        <Label isCompact color="green">
+          Ready to commit
+        </Label>
+      )}
+    </span>
+  );
+}
+
 type ToolbarProps = {
-  activeStatus: IgaChangeRequestStatus;
-  onlyMine: boolean;
-  setOnlyMine: (v: boolean) => void;
-  approvableCount: number;
+  inboxTab: InboxTab;
+  authorizableCount: number;
+  committableCount: number;
   isProcessing: boolean;
   onAuthorizeBulk: () => void;
+  onCommitBulk: () => void;
+  historyFilter: HistoryFilter;
+  setHistoryFilter: (v: HistoryFilter) => void;
 };
 
 function ChangeRequestsToolbar({
-  activeStatus,
-  onlyMine,
-  setOnlyMine,
-  approvableCount,
+  inboxTab,
+  authorizableCount,
+  committableCount,
   isProcessing,
   onAuthorizeBulk,
+  onCommitBulk,
+  historyFilter,
+  setHistoryFilter,
 }: ToolbarProps) {
-  if (activeStatus !== "PENDING") return null;
+  if (inboxTab === "history") {
+    return (
+      <ToolbarItem>
+        <ChipGroup categoryName="Show">
+          {(["all", "approved", "denied"] as const).map((f) => (
+            <Chip
+              key={f}
+              isReadOnly={historyFilter === f}
+              onClick={() => setHistoryFilter(f)}
+            >
+              {f === "all" ? "All" : f === "approved" ? "Approved" : "Denied"}
+            </Chip>
+          ))}
+        </ChipGroup>
+      </ToolbarItem>
+    );
+  }
+
   return (
     <>
       <ToolbarItem>
-        <Switch
-          id="change-requests-only-mine"
-          label="Only show CRs I can approve"
-          isChecked={onlyMine}
-          onChange={(_e, v) => setOnlyMine(v)}
-        />
-      </ToolbarItem>
-      <ToolbarItem>
         <Button
           variant="primary"
-          isDisabled={approvableCount === 0 || isProcessing}
+          isDisabled={authorizableCount === 0 || isProcessing}
           isLoading={isProcessing}
           onClick={onAuthorizeBulk}
         >
           {`Authorize selected${
-            approvableCount > 0 ? ` (${approvableCount})` : ""
+            authorizableCount > 0 ? ` (${authorizableCount})` : ""
+          }`}
+        </Button>
+      </ToolbarItem>
+      <ToolbarItem>
+        <Button
+          variant="secondary"
+          isDisabled={committableCount === 0 || isProcessing}
+          isLoading={isProcessing}
+          onClick={onCommitBulk}
+        >
+          {`Commit selected${
+            committableCount > 0 ? ` (${committableCount})` : ""
           }`}
         </Button>
       </ToolbarItem>
@@ -114,49 +204,118 @@ export default function ChangeRequestsSection() {
   const { adminClient } = useAdminClient();
   const { addAlert, addError } = useAlerts();
   const userRoles = useCurrentUserRoles();
+  const username = useCurrentUsername();
 
-  const [activeStatus, setActiveStatus] =
-    useState<IgaChangeRequestStatus>("PENDING");
-  const [onlyMine, setOnlyMine] = useState(false);
+  const [inboxTab, setInboxTab] = useState<InboxTab>("awaiting");
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [selected, setSelected] = useState<IgaChangeRequest[]>([]);
   const [tableKey, setTableKey] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [bulkResults, setBulkResults] = useState<AuthorizeResult[] | null>(
-    null,
-  );
+  const [bulkResults, setBulkResults] = useState<{
+    op: "authorize" | "commit";
+    results: BulkResult[];
+  } | null>(null);
+  const [awaitingCount, setAwaitingCount] = useState(0);
 
   const refresh = useCallback(() => {
     setSelected([]);
     setTableKey((k) => k + 1);
   }, []);
 
-  // Polling refresh while a tab is active.
+  // Polling refresh of the active tab.
   useEffect(() => {
     const interval = setInterval(() => {
       setTableKey((k) => k + 1);
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [activeStatus]);
+  }, [inboxTab, historyFilter]);
+
+  // Background poll of the awaiting-me count for the tab badge (kept light:
+  // we only re-list PENDING; client filters from there).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const rows = await adminClient.iga.listChangeRequests({
+          status: "PENDING",
+        });
+        if (cancelled) return;
+        setAwaitingCount(
+          rows.filter((cr) => isAwaitingMe(cr, userRoles, username)).length,
+        );
+      } catch {
+        /* ignored — badge is best-effort */
+      }
+    };
+    void tick();
+    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [adminClient, userRoles, username]);
 
   const loader = useCallback(async (): Promise<IgaChangeRequest[]> => {
     try {
-      const rows = await adminClient.iga.listChangeRequests({
-        status: activeStatus,
+      if (inboxTab === "history") {
+        if (historyFilter === "approved") {
+          return await adminClient.iga.listChangeRequests({
+            status: "APPROVED",
+          });
+        }
+        if (historyFilter === "denied") {
+          return await adminClient.iga.listChangeRequests({ status: "DENIED" });
+        }
+        const [approved, denied] = await Promise.all([
+          adminClient.iga.listChangeRequests({ status: "APPROVED" }),
+          adminClient.iga.listChangeRequests({ status: "DENIED" }),
+        ]);
+        // Newest first; backend may already sort but we defensively re-sort.
+        return [...approved, ...denied].sort(
+          (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
+        );
+      }
+
+      const pending = await adminClient.iga.listChangeRequests({
+        status: "PENDING",
       });
-      if (activeStatus !== "PENDING" || !onlyMine) return rows;
-      return rows.filter((cr) => canApprove(cr, userRoles));
+      if (inboxTab === "awaiting") {
+        return pending.filter((cr) => isAwaitingMe(cr, userRoles, username));
+      }
+      return pending;
     } catch (err) {
       addError(`Failed to load change requests: ${errorMessage(err)}`, err);
       return [];
     }
-  }, [adminClient, activeStatus, onlyMine, userRoles, addError]);
+  }, [adminClient, inboxTab, historyFilter, userRoles, username, addError]);
 
-  const approvableSelection = useMemo(
-    () => selected.filter((cr) => canApprove(cr, userRoles)),
+  /* ---- selection-derived counts ---- */
+
+  const authorizableSelection = useMemo(
+    () =>
+      selected.filter(
+        (cr) =>
+          cr.status === "PENDING" &&
+          canApprove(cr, userRoles) &&
+          !hasSigned(cr, username),
+      ),
+    [selected, userRoles, username],
+  );
+  const committableSelection = useMemo(
+    () =>
+      selected.filter(
+        (cr) =>
+          cr.status === "PENDING" &&
+          canApprove(cr, userRoles) &&
+          cr.readyToCommit,
+      ),
     [selected, userRoles],
   );
-  const nonApprovableCount = selected.length - approvableSelection.length;
+  const skippedFromAuthorize = selected.length - authorizableSelection.length;
+  const skippedFromCommit = selected.length - committableSelection.length;
+
+  /* ---- bulk authorize ---- */
 
   const [toggleAuthorizeDialog, AuthorizeConfirm] = useConfirmDialog({
     titleKey: "Authorize change requests",
@@ -165,36 +324,32 @@ export default function ChangeRequestsSection() {
     cancelButtonLabel: "Cancel",
     children: (
       <>
-        {`Authorize ${approvableSelection.length} change request${
-          approvableSelection.length === 1 ? "" : "s"
+        {`Authorize ${authorizableSelection.length} change request${
+          authorizableSelection.length === 1 ? "" : "s"
         }?`}
-        {nonApprovableCount > 0 && (
+        {skippedFromAuthorize > 0 && (
           <>
             {" "}
-            {`(${nonApprovableCount} of ${selected.length} selected cannot be authorized with your current roles and will be skipped.)`}
+            {`(${skippedFromAuthorize} of ${selected.length} selected cannot be authorized — already signed or missing role — and will be skipped.)`}
           </>
         )}
       </>
     ),
     onConfirm: async () => {
       setIsProcessing(true);
-      const results: AuthorizeResult[] = [];
-      for (const cr of approvableSelection) {
+      const results: BulkResult[] = [];
+      for (const cr of authorizableSelection) {
         try {
           await adminClient.iga.authorize({ id: cr.id });
           results.push({ id: cr.id, ok: true });
         } catch (err) {
-          results.push({
-            id: cr.id,
-            ok: false,
-            message: errorMessage(err),
-          });
+          results.push({ id: cr.id, ok: false, message: errorMessage(err) });
         }
       }
       setIsProcessing(false);
-      setBulkResults(results);
+      setBulkResults({ op: "authorize", results });
       const okCount = results.filter((r) => r.ok).length;
-      if (okCount === results.length) {
+      if (okCount === results.length && okCount > 0) {
         addAlert(
           `${okCount} change request${okCount === 1 ? "" : "s"} authorized.`,
           AlertVariant.success,
@@ -213,14 +368,73 @@ export default function ChangeRequestsSection() {
     },
   });
 
+  /* ---- bulk commit ---- */
+
+  const [toggleCommitDialog, CommitConfirm] = useConfirmDialog({
+    titleKey: "Commit change requests",
+    continueButtonLabel: "Commit",
+    continueButtonVariant: ButtonVariant.primary,
+    cancelButtonLabel: "Cancel",
+    children: (
+      <>
+        {`Commit ${committableSelection.length} change request${
+          committableSelection.length === 1 ? "" : "s"
+        }?`}
+        {skippedFromCommit > 0 && (
+          <>
+            {" "}
+            {`(${skippedFromCommit} of ${selected.length} selected are not ready to commit — threshold not met or you lack the required role — and will be skipped.)`}
+          </>
+        )}
+      </>
+    ),
+    onConfirm: async () => {
+      setIsProcessing(true);
+      const results: BulkResult[] = [];
+      for (const cr of committableSelection) {
+        try {
+          await adminClient.iga.commit({ id: cr.id });
+          results.push({ id: cr.id, ok: true });
+        } catch (err) {
+          results.push({ id: cr.id, ok: false, message: errorMessage(err) });
+        }
+      }
+      setIsProcessing(false);
+      setBulkResults({ op: "commit", results });
+      const okCount = results.filter((r) => r.ok).length;
+      if (okCount === results.length && okCount > 0) {
+        addAlert(
+          `${okCount} change request${okCount === 1 ? "" : "s"} committed.`,
+          AlertVariant.success,
+        );
+      } else if (okCount > 0) {
+        addAlert(
+          `${okCount} of ${results.length} change request${
+            results.length === 1 ? "" : "s"
+          } committed.`,
+          AlertVariant.warning,
+        );
+      } else {
+        addAlert("No change requests were committed.", AlertVariant.danger);
+      }
+      refresh();
+    },
+  });
+
   const onAuthorizeBulk = () => {
-    if (approvableSelection.length === 0) return;
+    if (authorizableSelection.length === 0) return;
     toggleAuthorizeDialog();
   };
+  const onCommitBulk = () => {
+    if (committableSelection.length === 0) return;
+    toggleCommitDialog();
+  };
+
+  /* ---- per-row actions ---- */
 
   const onAuthorizeRow = useCallback(
     async (cr: IgaChangeRequest) => {
-      if (!canApprove(cr, userRoles)) return;
+      if (!canApprove(cr, userRoles) || hasSigned(cr, username)) return;
       setIsProcessing(true);
       try {
         await adminClient.iga.authorize({ id: cr.id });
@@ -235,11 +449,56 @@ export default function ChangeRequestsSection() {
         setIsProcessing(false);
       }
     },
+    [adminClient, userRoles, username, addAlert, addError, refresh],
+  );
+
+  const onCommitRow = useCallback(
+    async (cr: IgaChangeRequest) => {
+      if (!canApprove(cr, userRoles) || !cr.readyToCommit) return;
+      setIsProcessing(true);
+      try {
+        await adminClient.iga.commit({ id: cr.id });
+        addAlert("Change request committed.", AlertVariant.success);
+        refresh();
+      } catch (err) {
+        addError(`Cannot commit yet: ${errorMessage(err)}`, err);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
     [adminClient, userRoles, addAlert, addError, refresh],
   );
 
+  const onDenyRow = useCallback(
+    async (cr: IgaChangeRequest) => {
+      if (!canApprove(cr, userRoles)) return;
+      setIsProcessing(true);
+      try {
+        await adminClient.iga.deny({ id: cr.id });
+        addAlert("Change request denied.", AlertVariant.success);
+        refresh();
+      } catch (err) {
+        addError(`Failed to deny change request: ${errorMessage(err)}`, err);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [adminClient, userRoles, addAlert, addError, refresh],
+  );
+
+  /* ---- columns ---- */
+
   const columns = useMemo(
     () => [
+      {
+        name: "summary",
+        displayKey: "Change",
+        cellRenderer: (cr: IgaChangeRequest) => (
+          <span title={humanReadableSummary(cr)}>
+            {humanReadableSummary(cr)}
+          </span>
+        ),
+      },
       {
         name: "actionType",
         displayKey: "Action",
@@ -249,11 +508,6 @@ export default function ChangeRequestsSection() {
         name: "entityType",
         displayKey: "Entity Type",
         cellRenderer: (cr: IgaChangeRequest) => entityTypeLabel(cr.entityType),
-      },
-      {
-        name: "entityId",
-        displayKey: "Entity",
-        cellRenderer: (cr: IgaChangeRequest) => cr.entityId ?? "-",
       },
       {
         name: "createdBy",
@@ -268,11 +522,7 @@ export default function ChangeRequestsSection() {
       {
         name: "authorizations",
         displayKey: "Authorizations",
-        cellRenderer: (cr: IgaChangeRequest) => (
-          <span>
-            {cr.authCount} / {cr.threshold}
-          </span>
-        ),
+        cellRenderer: (cr: IgaChangeRequest) => <AuthorizationsCell cr={cr} />,
       },
       {
         name: "requiredApproverRoles",
@@ -280,17 +530,28 @@ export default function ChangeRequestsSection() {
         cellRenderer: (cr: IgaChangeRequest) => <RequiredRolesCell cr={cr} />,
       },
       {
-        name: "scopeMode",
-        displayKey: "Scope",
+        name: "status",
+        displayKey: "Status",
         cellRenderer: (cr: IgaChangeRequest) => (
-          <Label isCompact color={cr.scopeMode === "all" ? "orange" : "grey"}>
-            {cr.scopeMode === "all" ? "all required" : "any one"}
+          <Label
+            isCompact
+            color={
+              cr.status === "PENDING"
+                ? "orange"
+                : cr.status === "APPROVED"
+                  ? "blue"
+                  : "red"
+            }
+          >
+            {cr.status}
           </Label>
         ),
       },
     ],
     [],
   );
+
+  /* ---- row action menu (Open / Authorize / Commit / Deny) ---- */
 
   const actionResolver = useCallback(
     (rowData: any) => {
@@ -299,25 +560,67 @@ export default function ChangeRequestsSection() {
         title: string;
         onClick: () => void;
         isDisabled?: boolean;
-      }[] = [
-        {
-          title: "Open",
-          onClick: () => setDetailId(cr.id),
-        },
-      ];
-      if (activeStatus === "PENDING") {
-        actions.push({
-          title: "Authorize",
-          isDisabled: !canApprove(cr, userRoles) || isProcessing,
-          onClick: () => {
-            void onAuthorizeRow(cr);
-          },
-        });
+        tooltipProps?: { content: string };
+      }[] = [{ title: "Open", onClick: () => setDetailId(cr.id) }];
+
+      if (cr.status !== "PENDING") return actions;
+
+      const isApprover = canApprove(cr, userRoles);
+      const alreadySigned = hasSigned(cr, username);
+
+      // Authorize
+      let authTip: string | null = null;
+      if (!isApprover) {
+        authTip = "You are not in the required approver role(s)";
+      } else if (alreadySigned) {
+        authTip = "You have already signed this change request";
       }
+      actions.push({
+        title: "Authorize",
+        isDisabled: !!authTip || isProcessing,
+        tooltipProps: authTip ? { content: authTip } : undefined,
+        onClick: () => {
+          void onAuthorizeRow(cr);
+        },
+      });
+
+      // Commit
+      let commitTip: string | null = null;
+      if (!isApprover) {
+        commitTip = "You are not in the required approver role(s)";
+      } else if (!cr.readyToCommit) {
+        commitTip = `Threshold not met (${cr.authCount}/${cr.threshold})`;
+      }
+      actions.push({
+        title: "Commit",
+        isDisabled: !!commitTip || isProcessing,
+        tooltipProps: commitTip
+          ? { content: commitTip }
+          : { content: "Threshold met — apply this change now." },
+        onClick: () => {
+          void onCommitRow(cr);
+        },
+      });
+
+      // Deny
+      actions.push({
+        title: "Deny",
+        isDisabled: !isApprover || isProcessing,
+        tooltipProps: !isApprover
+          ? { content: "You are not in the required approver role(s)" }
+          : undefined,
+        onClick: () => {
+          void onDenyRow(cr);
+        },
+      });
+
       return actions;
     },
-    [activeStatus, userRoles, isProcessing, onAuthorizeRow],
+    [userRoles, username, isProcessing, onAuthorizeRow, onCommitRow, onDenyRow],
   );
+
+  const tabKey = `${inboxTab}-${inboxTab === "history" ? historyFilter : ""}-${tableKey}`;
+  const canSelect = inboxTab === "awaiting";
 
   return (
     <>
@@ -328,65 +631,88 @@ export default function ChangeRequestsSection() {
       />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <Tabs
-          activeKey={activeStatus}
+          activeKey={inboxTab}
           onSelect={(_e, key) => {
-            setActiveStatus(key as IgaChangeRequestStatus);
+            setInboxTab(key as InboxTab);
             setSelected([]);
           }}
           isBox
         >
-          {TAB_KEYS.map((status) => (
-            <Tab
-              key={status}
-              eventKey={status}
-              title={<TabTitleText>{actionTypeLabel(status)}</TabTitleText>}
-            >
-              {activeStatus === status && (
-                <div className="keycloak__events_table">
-                  <KeycloakDataTable
-                    key={`${status}-${tableKey}`}
-                    loader={loader}
-                    ariaLabelKey="Change Requests"
-                    toolbarItem={
-                      <ChangeRequestsToolbar
-                        activeStatus={activeStatus}
-                        onlyMine={onlyMine}
-                        setOnlyMine={setOnlyMine}
-                        approvableCount={approvableSelection.length}
-                        isProcessing={isProcessing}
-                        onAuthorizeBulk={onAuthorizeBulk}
-                      />
-                    }
-                    columns={columns}
-                    actionResolver={actionResolver}
-                    isPaginated
-                    canSelectAll={status === "PENDING"}
-                    onSelect={
-                      status === "PENDING"
-                        ? (value: IgaChangeRequest[]) => setSelected([...value])
-                        : undefined
-                    }
-                    emptyState={
-                      <EmptyState variant="lg">
-                        <TextContent>
-                          <Text>{`No ${status.toLowerCase()} change requests.`}</Text>
-                        </TextContent>
-                      </EmptyState>
-                    }
-                  />
-                </div>
-              )}
-            </Tab>
-          ))}
+          <Tab
+            eventKey="awaiting"
+            title={
+              <TabTitleText>
+                Awaiting me{" "}
+                {awaitingCount > 0 && (
+                  <Badge isRead={false}>{awaitingCount}</Badge>
+                )}
+              </TabTitleText>
+            }
+          />
+          <Tab
+            eventKey="pending"
+            title={<TabTitleText>All pending</TabTitleText>}
+          />
+          <Tab
+            eventKey="history"
+            title={<TabTitleText>History</TabTitleText>}
+          />
         </Tabs>
+
+        <div className="keycloak__events_table">
+          <KeycloakDataTable
+            key={tabKey}
+            loader={loader}
+            ariaLabelKey="Change Requests"
+            toolbarItem={
+              <ChangeRequestsToolbar
+                inboxTab={inboxTab}
+                authorizableCount={authorizableSelection.length}
+                committableCount={committableSelection.length}
+                isProcessing={isProcessing}
+                onAuthorizeBulk={onAuthorizeBulk}
+                onCommitBulk={onCommitBulk}
+                historyFilter={historyFilter}
+                setHistoryFilter={setHistoryFilter}
+              />
+            }
+            columns={columns}
+            actionResolver={actionResolver}
+            isPaginated
+            canSelectAll={canSelect}
+            onSelect={
+              canSelect
+                ? (value: IgaChangeRequest[]) => setSelected([...value])
+                : undefined
+            }
+            emptyState={
+              <EmptyState variant="lg">
+                <TextContent>
+                  <Text>
+                    {inboxTab === "awaiting"
+                      ? "Nothing awaiting your action."
+                      : inboxTab === "pending"
+                        ? "No pending change requests."
+                        : "No change requests in history."}
+                  </Text>
+                </TextContent>
+              </EmptyState>
+            }
+          />
+        </div>
       </PageSection>
 
       <AuthorizeConfirm />
+      <CommitConfirm />
 
       {bulkResults && (
         <Modal
           variant={ModalVariant.small}
-          title="Bulk authorize results"
+          title={
+            bulkResults.op === "authorize"
+              ? "Bulk authorize results"
+              : "Bulk commit results"
+          }
           isOpen
           onClose={() => setBulkResults(null)}
           actions={[
@@ -401,14 +727,14 @@ export default function ChangeRequestsSection() {
         >
           <TextContent>
             <Text>
-              {`${bulkResults.filter((r) => r.ok).length} succeeded, ${
-                bulkResults.filter((r) => !r.ok).length
+              {`${bulkResults.results.filter((r) => r.ok).length} succeeded, ${
+                bulkResults.results.filter((r) => !r.ok).length
               } failed.`}
             </Text>
           </TextContent>
-          {bulkResults.filter((r) => !r.ok).length > 0 && (
+          {bulkResults.results.filter((r) => !r.ok).length > 0 && (
             <ul style={{ marginTop: 8 }}>
-              {bulkResults
+              {bulkResults.results
                 .filter((r) => !r.ok)
                 .map((r) => (
                   <li key={r.id}>
@@ -424,6 +750,7 @@ export default function ChangeRequestsSection() {
         <ChangeRequestsDetail
           id={detailId}
           userRoles={userRoles}
+          username={username}
           onClose={() => setDetailId(null)}
           onChanged={() => {
             setDetailId(null);
