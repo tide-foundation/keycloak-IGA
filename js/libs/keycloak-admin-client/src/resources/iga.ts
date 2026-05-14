@@ -21,9 +21,15 @@ export class Iga extends Resource<{ realm?: string }> {
     urlParamKeys: ["id"],
   });
 
-  public authorize = this.makeRequest<{ id: string }, void>({
+  public authorize = this.makeRequest<{ id: string }, IgaChangeRequest>({
     method: "POST",
     path: "/iga/change-requests/{id}/authorize",
+    urlParamKeys: ["id"],
+  });
+
+  public commit = this.makeRequest<{ id: string }, IgaChangeRequest>({
+    method: "POST",
+    path: "/iga/change-requests/{id}/commit",
     urlParamKeys: ["id"],
   });
 
@@ -39,7 +45,10 @@ export class Iga extends Resource<{ realm?: string }> {
     urlParamKeys: ["id"],
   });
 
-  public addComment = this.makeRequest<{ id: string; body: string }, IgaComment>({
+  public addComment = this.makeRequest<
+    { id: string; body: string },
+    IgaComment
+  >({
     method: "POST",
     path: "/iga/change-requests/{id}/comments",
     urlParamKeys: ["id"],

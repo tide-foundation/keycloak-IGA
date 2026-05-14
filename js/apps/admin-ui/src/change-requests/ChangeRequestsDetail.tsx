@@ -1,6 +1,6 @@
 /** TIDECLOAK IMPLEMENTATION */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
 import {
   AlertVariant,
   Button,
@@ -12,6 +12,7 @@ import {
   DescriptionListGroup,
   DescriptionListTerm,
   Divider,
+  ExpandableSection,
   Label,
   Modal,
   ModalVariant,
@@ -26,6 +27,7 @@ import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { useAdminClient } from "../admin-client";
 
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
+import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 import type IgaComment from "@keycloak/keycloak-admin-client/lib/defs/igaCommentRepresentation";
 
 import { canApprove } from "./canApprove";
@@ -33,12 +35,15 @@ import {
   actionTypeLabel,
   entityTypeLabel,
   errorMessage,
+  formatRelativeTime,
   formatTime,
+  humanReadableSummary,
 } from "./formatters";
 
 type Props = {
   id: string;
   userRoles: string[];
+  username: string;
   onClose: () => void;
   onChanged: () => void;
 };
@@ -51,9 +56,16 @@ function pretty(json: string): string {
   }
 }
 
+function hasSigned(cr: IgaChangeRequest | null, username: string): boolean {
+  if (!cr || !username) return false;
+  const a: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
+  return a.some((x) => x.username === username);
+}
+
 export function ChangeRequestsDetail({
   id,
   userRoles,
+  username,
   onClose,
   onChanged,
 }: Props) {
@@ -98,6 +110,20 @@ export function ChangeRequestsDetail({
     }
   };
 
+  const onCommit = async () => {
+    if (!cr) return;
+    setIsWorking(true);
+    try {
+      await adminClient.iga.commit({ id: cr.id });
+      addAlert("Change request committed.", AlertVariant.success);
+      onChanged();
+    } catch (err) {
+      addError(`Cannot commit yet: ${errorMessage(err)}`, err);
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
   const onDeny = async () => {
     if (!cr) return;
     setIsWorking(true);
@@ -134,6 +160,7 @@ export function ChangeRequestsDetail({
   };
 
   const approvable = cr ? canApprove(cr, userRoles) : false;
+  const alreadySigned = hasSigned(cr, username);
   const requiredRolesText = cr?.requiredApproverRoles?.length
     ? `Requires role${
         cr.requiredApproverRoles.length > 1 ? "s" : ""
@@ -141,6 +168,73 @@ export function ChangeRequestsDetail({
         cr.scopeMode === "all" ? " (all required)" : " (any one)"
       }`
     : "";
+
+  // Pick the most useful primary CTA: Commit > Authorize. Never both.
+  const showCommitCta =
+    !!cr && cr.status === "PENDING" && approvable && cr.readyToCommit;
+  const showAuthorizeCta =
+    !!cr &&
+    cr.status === "PENDING" &&
+    approvable &&
+    !cr.readyToCommit &&
+    !alreadySigned;
+
+  const primaryCta = (() => {
+    if (!cr) return null;
+    if (showCommitCta) {
+      return (
+        <Tooltip
+          key="commit-tip"
+          content="Threshold met — apply this change now."
+        >
+          <Button
+            key="commit"
+            variant="primary"
+            isLoading={isWorking}
+            isDisabled={isWorking}
+            onClick={onCommit}
+          >
+            Commit
+          </Button>
+        </Tooltip>
+      );
+    }
+    if (showAuthorizeCta) {
+      return (
+        <Button
+          key="authorize"
+          variant="primary"
+          isLoading={isWorking}
+          isDisabled={isWorking}
+          onClick={onAuthorize}
+        >
+          Authorize
+        </Button>
+      );
+    }
+    // Disabled placeholder with a tooltip explaining why.
+    if (cr.status !== "PENDING") return null;
+    let tip = requiredRolesText || "Cannot act on this change request";
+    if (approvable && alreadySigned && !cr.readyToCommit) {
+      tip = "You have already signed; awaiting other approvers.";
+    } else if (approvable && !cr.readyToCommit) {
+      tip = `Threshold not met (${cr.authCount}/${cr.threshold})`;
+    }
+    const noop = () => {
+      /* disabled placeholder */
+    };
+    return (
+      <Tooltip key="cta-disabled-tip" content={tip}>
+        <span>
+          <Button variant="primary" isAriaDisabled onClick={noop}>
+            Authorize
+          </Button>
+        </span>
+      </Tooltip>
+    );
+  })();
+
+  const signers: IgaCrAuthorizerRepresentation[] = cr?.authorizers ?? [];
 
   return (
     <>
@@ -151,41 +245,14 @@ export function ChangeRequestsDetail({
         onClose={onClose}
         actions={
           cr
-            ? [
-                approvable ? (
-                  <Button
-                    key="authorize"
-                    variant="primary"
-                    isLoading={isWorking}
-                    isDisabled={
-                      isWorking || cr.status !== "PENDING" || !approvable
-                    }
-                    onClick={onAuthorize}
-                  >
-                    Authorize
-                  </Button>
-                ) : (
-                  <Tooltip
-                    key="authorize-disabled-tip"
-                    content={requiredRolesText || "Cannot authorize"}
-                  >
-                    <span>
-                      <Button
-                        variant="primary"
-                        isAriaDisabled
-                        onClick={() => {
-                          /* disabled */
-                        }}
-                      >
-                        Authorize
-                      </Button>
-                    </span>
-                  </Tooltip>
-                ),
+            ? ([
+                primaryCta,
                 <Button
                   key="deny"
                   variant={ButtonVariant.danger}
-                  isDisabled={isWorking || cr.status !== "PENDING"}
+                  isDisabled={
+                    isWorking || cr.status !== "PENDING" || !approvable
+                  }
                   onClick={() => setDenyOpen(true)}
                 >
                   Deny
@@ -193,7 +260,7 @@ export function ChangeRequestsDetail({
                 <Button key="close" variant="link" onClick={onClose}>
                   Close
                 </Button>,
-              ]
+              ].filter(Boolean) as ReactElement[])
             : [
                 <Button key="close" variant="link" onClick={onClose}>
                   Close
@@ -204,6 +271,14 @@ export function ChangeRequestsDetail({
         {!cr && <Spinner />}
         {cr && (
           <>
+            {/* ---- Human-readable summary ---- */}
+            <TextContent>
+              <Text component="h3">Summary</Text>
+              <Text>{humanReadableSummary(cr)}</Text>
+            </TextContent>
+
+            <Divider style={{ margin: "1rem 0" }} />
+
             <DescriptionList isHorizontal>
               <DescriptionListGroup>
                 <DescriptionListTerm>Status</DescriptionListTerm>
@@ -219,6 +294,14 @@ export function ChangeRequestsDetail({
                   >
                     {cr.status}
                   </Label>
+                  {cr.readyToCommit && cr.status === "PENDING" && (
+                    <>
+                      {" "}
+                      <Label isCompact color="green">
+                        Ready to commit
+                      </Label>
+                    </>
+                  )}
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
@@ -247,12 +330,6 @@ export function ChangeRequestsDetail({
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Authorizations</DescriptionListTerm>
-                <DescriptionListDescription>
-                  {cr.authCount} / {cr.threshold}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
                 <DescriptionListTerm>Required Roles</DescriptionListTerm>
                 <DescriptionListDescription>
                   {cr.requiredApproverRoles?.length
@@ -274,15 +351,55 @@ export function ChangeRequestsDetail({
 
             <Divider style={{ margin: "1rem 0" }} />
 
+            {/* ---- Signature progress ---- */}
             <TextContent>
-              <Text component="h3">Payload</Text>
+              <Text component="h3">Signatures</Text>
+              <Text
+                component="p"
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {cr.authCount} of {cr.threshold}
+              </Text>
             </TextContent>
-            <CodeBlock>
-              <CodeBlockCode>{pretty(cr.rowsJson)}</CodeBlockCode>
-            </CodeBlock>
+            {signers.length === 0 ? (
+              <TextContent>
+                <Text className="pf-v5-u-color-200">Not signed yet.</Text>
+              </TextContent>
+            ) : (
+              <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
+                {signers.map((s) => (
+                  <li
+                    key={`${s.username}-${s.timestamp}`}
+                    style={{ padding: "0.25rem 0" }}
+                  >
+                    <span className="pf-v5-u-font-weight-bold">
+                      {s.username}
+                    </span>{" "}
+                    <span className="pf-v5-u-color-200 pf-v5-u-font-size-sm">
+                      {formatRelativeTime(s.timestamp)} ·{" "}
+                      {formatTime(s.timestamp)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <Divider style={{ margin: "1rem 0" }} />
 
+            {/* ---- Raw payload ---- */}
+            <ExpandableSection toggleText="Raw payload (rowsJson)" isIndented>
+              <CodeBlock>
+                <CodeBlockCode>{pretty(cr.rowsJson)}</CodeBlockCode>
+              </CodeBlock>
+            </ExpandableSection>
+
+            <Divider style={{ margin: "1rem 0" }} />
+
+            {/* ---- Comments ---- */}
             <TextContent>
               <Text component="h3">Comments</Text>
             </TextContent>
@@ -329,6 +446,9 @@ export function ChangeRequestsDetail({
             >
               Add comment
             </Button>
+            {/* Suppress unused-var lint for requiredRolesText if no tooltip
+                path consumed it — referencing here is cheap and intentional. */}
+            <span style={{ display: "none" }}>{requiredRolesText}</span>
           </>
         )}
       </Modal>
