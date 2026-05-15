@@ -214,7 +214,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
           setIsLoading(false);
         }
       } catch (err) {
-        console.error(err);
+        // TIDECLOAK IMPLEMENTATION: standard-logging slice — surface the
+        // underlying error to the user instead of swallowing to console only.
+        addError("tideLicenseRenewError", err);
         await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: true });
         setIsLoading(false);
         setIsInitialCheckout(true);

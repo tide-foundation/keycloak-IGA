@@ -70,7 +70,7 @@ export const PolicyChangeRequestsList = ({
 }: PolicyChangeRequestsListProps) => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
-  const { addAlert } = useAlerts();
+  const { addAlert, addError } = useAlerts();
   const { whoAmI } = useWhoAmI();
   const [selectedRow, setSelectedRow] = useState<PolicyBundle[]>([]);
   const [key, setKey] = useState<number>(0);
@@ -130,7 +130,9 @@ export const PolicyChangeRequestsList = ({
       updateCounter(1);
       return [bundle];
     } catch (error) {
-      console.error("Failed to load policy change requests:", error);
+      // TIDECLOAK IMPLEMENTATION: standard-logging slice — surface the
+      // failure to the user via the standard error toast (was silent before).
+      addError("policyChangeRequestsFetchError", error);
       updateCounter(0);
       return [];
     }
