@@ -1,6 +1,7 @@
 /** TIDECLOAK IMPLEMENTATION */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertVariant,
   Button,
@@ -283,6 +284,59 @@ export default function ChangeRequestsSection() {
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [chipFilter]);
+
+  /* ---- deep-link: ?cr=<id> opens the existing detail modal directly ----
+     Triggered by the "View change request" link on the 202 create toast.
+     Fetches the CR straight from the SDK so it opens regardless of the
+     active status-chip filter (which defaults to Pending). */
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const crParam = searchParams.get("cr");
+  // Guard so a transient re-render / poll tick doesn't re-fetch the same id.
+  const handledCrParam = useRef<string | null>(null);
+
+  const clearCrParam = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("cr");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (!crParam) {
+      handledCrParam.current = null;
+      return;
+    }
+    if (handledCrParam.current === crParam) return;
+    handledCrParam.current = crParam;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        // Direct fetch — do NOT depend on the row being in the filtered list.
+        const cr = await adminClient.iga.getChangeRequest({ id: crParam });
+        if (cancelled) return;
+        // Reuse the exact "open detail for CR X" path the row action uses.
+        setDetailId(cr.id);
+      } catch {
+        // 403 / 404 / already committed-or-denied / no access — non-fatal.
+        if (cancelled) return;
+        addAlert(
+          "Change request not found or no longer available.",
+          AlertVariant.warning,
+        );
+        // Land on the list (no modal); drop the stale param.
+        clearCrParam();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [crParam, adminClient, addAlert, clearCrParam]);
 
   const loader = useCallback(
     async (status?: IgaChangeRequestStatus): Promise<IgaChangeRequest[]> => {
@@ -708,9 +762,15 @@ export default function ChangeRequestsSection() {
           id={detailId}
           userRoles={userRoles}
           username={username}
-          onClose={() => setDetailId(null)}
+          onClose={() => {
+            setDetailId(null);
+            // If this modal was opened via the ?cr deep link, drop the
+            // param so a refresh / back doesn't immediately reopen it.
+            if (crParam) clearCrParam();
+          }}
           onChanged={() => {
             setDetailId(null);
+            if (crParam) clearCrParam();
             refresh();
           }}
         />
