@@ -33,6 +33,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -339,6 +340,7 @@ export default function EditUser() {
         isEnabled={user.enabled}
       />
 
+      <IgaPageBanner entityType="user" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <UserProfileProvider>
           <FormProvider {...form}>

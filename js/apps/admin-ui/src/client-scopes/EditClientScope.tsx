@@ -33,6 +33,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { convertFormValuesToObject } from "../util";
@@ -233,6 +234,7 @@ export default function EditClientScope() {
         divider={false}
       />
 
+      <IgaPageBanner entityType="client scope" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <RoutableTabs isBox mountOnEnter unmountOnExit>
           <Tab

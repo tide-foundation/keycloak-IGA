@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { PageSection, Tab, TabTitleText } from "@patternfly/react-core";
 
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import helpUrls from "../help-urls";
@@ -44,6 +45,7 @@ export default function UsersSection() {
         helpUrl={helpUrls.usersUrl}
         divider={false}
       />
+      <IgaPageBanner entityType="user" />
       <PageSection
         data-testid="users-page"
         variant="light"
