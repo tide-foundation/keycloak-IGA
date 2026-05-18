@@ -36,6 +36,7 @@ import {
   ViewHeader,
   ViewHeaderBadge,
 } from "../components/view-header/ViewHeader";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
 import {
@@ -395,10 +396,9 @@ export default function ClientDetails() {
             addError("SignSettingsError", error);
           }
         }
+      };
 
-      }
-
-      signSettings();
+      void signSettings();
       addAlert(t(messageKey), AlertVariant.success);
     } catch (error) {
       addError("clientSaveError", error);
@@ -451,6 +451,7 @@ export default function ClientDetails() {
           />
         )}
       />
+      <IgaPageBanner entityType="client" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <FormProvider {...form}>
           <RoutableTabs

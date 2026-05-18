@@ -25,6 +25,7 @@ import {
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
 import { Action, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -192,6 +193,7 @@ export default function ClientsSection() {
         helpUrl={helpUrls.clientsUrl}
         divider={false}
       />
+      <IgaPageBanner entityType="client" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <RoutableTabs
           mountOnEnter

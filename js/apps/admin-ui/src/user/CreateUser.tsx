@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import { KeycloakSpinner } from "@keycloak/keycloak-ui-shared";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
@@ -86,6 +87,7 @@ export default function CreateUser() {
         titleKey={t("createUser")}
         className="kc-username-view-header"
       />
+      <IgaPageBanner entityType="user" />
       <PageSection variant="light">
         <UserForm
           form={form}

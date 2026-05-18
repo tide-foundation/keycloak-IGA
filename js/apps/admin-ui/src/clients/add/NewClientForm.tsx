@@ -13,6 +13,7 @@ import { useAdminClient } from "../../admin-client";
 import { notifyIfPendingChangeRequest } from "../../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { FormAccess } from "../../components/form/FormAccess";
+import { IgaPageBanner } from "../../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../../components/view-header/ViewHeader";
 import { useRealm } from "../../context/realm-context/RealmContext";
 import { convertFormValuesToObject } from "../../util";
@@ -127,6 +128,7 @@ export default function NewClientForm() {
   return (
     <>
       <ViewHeader titleKey="createClient" subKey="clientsExplain" />
+      <IgaPageBanner entityType="client" />
       <PageSection variant="light">
         <FormProvider {...form}>
           <Wizard

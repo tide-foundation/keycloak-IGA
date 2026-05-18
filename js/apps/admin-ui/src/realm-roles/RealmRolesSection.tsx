@@ -1,5 +1,6 @@
 import { PageSection } from "@patternfly/react-core";
 import { useAdminClient } from "../admin-client";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { RolesList } from "../components/roles-list/RolesList";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
@@ -37,6 +38,7 @@ export default function RealmRolesSection() {
         subKey="roleExplain"
         helpUrl={helpUrls.realmRolesUrl}
       />
+      <IgaPageBanner entityType="role" />
       <PageSection variant="light" padding={{ default: "noPadding" }}>
         <RolesList
           loader={loader}

@@ -46,6 +46,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -270,6 +271,7 @@ export default function RealmRoleTabs() {
         ]}
         divider={false}
       />
+      <IgaPageBanner entityType="role" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <FormProvider {...form}>
           <RoutableTabs isBox mountOnEnter defaultLocation={toTab("details")}>

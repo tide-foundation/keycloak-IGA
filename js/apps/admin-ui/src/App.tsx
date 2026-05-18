@@ -26,6 +26,7 @@ import type { Environment } from "./environment";
 import { SubGroups } from "./groups/SubGroupsContext";
 import { AuthWall } from "./root/AuthWall";
 import { Banners } from "./Banners";
+import { IgaBanner } from "./components/iga-banner/IgaBanner";
 
 export const AppContexts = ({ children }: PropsWithChildren) => (
   <ErrorBoundaryProvider>
@@ -86,6 +87,7 @@ export const App = () => {
               <ErrorBoundaryFallback fallback={ErrorRenderer}>
                 <Suspense fallback={<KeycloakSpinner />}>
                   <AuthWall>
+                    <IgaBanner />
                     <Outlet />
                   </AuthWall>
                 </Suspense>

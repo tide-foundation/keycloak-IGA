@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import { GroupBreadCrumbs } from "../components/bread-crumb/GroupBreadCrumbs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { PermissionsTab } from "../components/permission-tab/PermissionTab";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
@@ -132,6 +133,7 @@ export default function GroupsSection() {
           handleModalToggle={() => setRename(undefined)}
         />
       )}
+      <IgaPageBanner entityType="group" />
       <PageSection variant={PageSectionVariants.light} className="pf-v5-u-p-0">
         <Drawer isInline isExpanded={open} key={key} position="left">
           <DrawerContent

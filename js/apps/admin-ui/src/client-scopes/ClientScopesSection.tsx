@@ -29,6 +29,7 @@ import {
 } from "../components/client-scope/ClientScopeTypes";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { Action, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import helpUrls from "../help-urls";
@@ -193,6 +194,7 @@ export default function ClientScopesSection() {
         subKey="clientScopeExplain"
         helpUrl={helpUrls.clientScopesUrl}
       />
+      <IgaPageBanner entityType="client scope" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <KeycloakDataTable
           key={key}
