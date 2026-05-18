@@ -8,7 +8,6 @@ import {
   ButtonVariant,
   Chip,
   ChipGroup,
-  EmptyState,
   Label,
   Modal,
   ModalVariant,
@@ -19,7 +18,11 @@ import {
   Tooltip,
 } from "@patternfly/react-core";
 import { QuestionCircleIcon } from "@patternfly/react-icons";
-import { useAlerts, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import {
+  useAlerts,
+  KeycloakDataTable,
+  ListEmptyState,
+} from "@keycloak/keycloak-ui-shared";
 
 import { useAdminClient } from "../admin-client";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
@@ -155,7 +158,6 @@ type ToolbarProps = {
   isProcessing: boolean;
   onAuthorizeBulk: () => void;
   onCommitBulk: () => void;
-  onShowHelp: () => void;
 };
 
 function ChangeRequestsToolbar({
@@ -167,7 +169,6 @@ function ChangeRequestsToolbar({
   isProcessing,
   onAuthorizeBulk,
   onCommitBulk,
-  onShowHelp,
 }: ToolbarProps) {
   const noSelection = selectedCount === 0;
   const authorizeTip = noSelection
@@ -255,16 +256,6 @@ function ChangeRequestsToolbar({
             {`Bulk Commit (${committableCount})`}
           </Button>
         )}
-      </ToolbarItem>
-      <ToolbarItem align={{ default: "alignRight" }}>
-        <Button
-          variant="secondary"
-          icon={<QuestionCircleIcon />}
-          onClick={onShowHelp}
-          data-testid="change-requests-help"
-        >
-          How IGA works
-        </Button>
       </ToolbarItem>
     </>
   );
@@ -683,6 +674,16 @@ export default function ChangeRequestsSection() {
         subKey="Review and authorize change requests that require administrator approval."
         divider={false}
       />
+      <PageSection variant="light" className="pf-v5-u-pt-0 pf-v5-u-pb-0">
+        <Button
+          variant="secondary"
+          icon={<QuestionCircleIcon />}
+          onClick={() => setIsHelpOpen(true)}
+          data-testid="change-requests-help"
+        >
+          How IGA works
+        </Button>
+      </PageSection>
       <PageSection variant="light" className="pf-v5-u-p-0">
         <div className="keycloak__events_table">
           <KeycloakDataTable
@@ -702,7 +703,6 @@ export default function ChangeRequestsSection() {
                 isProcessing={isProcessing}
                 onAuthorizeBulk={onAuthorizeBulk}
                 onCommitBulk={onCommitBulk}
-                onShowHelp={() => setIsHelpOpen(true)}
               />
             }
             columns={columns}
@@ -711,19 +711,13 @@ export default function ChangeRequestsSection() {
             canSelectAll
             onSelect={(value: IgaChangeRequest[]) => setSelected([...value])}
             emptyState={
-              <EmptyState variant="lg">
-                <TextContent>
-                  <Text>
-                    {chipFilter === "PENDING"
-                      ? "No pending change requests."
-                      : chipFilter === "APPROVED"
-                        ? "No approved change requests."
-                        : chipFilter === "DENIED"
-                          ? "No denied change requests."
-                          : "No change requests."}
-                  </Text>
-                </TextContent>
-              </EmptyState>
+              <ListEmptyState
+                icon={QuestionCircleIcon}
+                message="No change requests"
+                instructions="When IGA is enabled, administrative changes appear here as change requests awaiting approval. There's nothing here right now."
+                primaryActionText="How IGA works"
+                onPrimaryAction={() => setIsHelpOpen(true)}
+              />
             }
           />
         </div>
