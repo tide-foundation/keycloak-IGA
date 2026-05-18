@@ -23,7 +23,7 @@ type LeftNavProps = {
   title: string;
   path: string;
   id?: string;
-  label?: string // TIDECLOAK IMPLEMENTATION
+  label?: string; // TIDECLOAK IMPLEMENTATION
 };
 
 const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
@@ -57,26 +57,32 @@ const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
           `pf-v5-c-nav__link${isActive ? " pf-m-current" : ""}`
         }
       >
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-        {t(title)}
-      {label && (
         <span
           style={{
-            backgroundColor: '#0066cc',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            minWidth: '20px',
-            textAlign: 'center',
-            lineHeight: '1.2'
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
           }}
         >
-          {label}
+          {t(title)}
+          {label && (
+            <span
+              style={{
+                backgroundColor: "#0066cc",
+                color: "#fff",
+                padding: "2px 8px",
+                borderRadius: "12px",
+                fontSize: "12px",
+                fontWeight: "bold",
+                minWidth: "20px",
+                textAlign: "center",
+                lineHeight: "1.2",
+              }}
+            >
+              {label}
+            </span>
+          )}
         </span>
-      )}
-    </span>
       </NavLink>
     </li>
   );
@@ -157,8 +163,6 @@ export const PageNav = () => {
               <LeftNav title="events" path="/events" />
               {/** TIDECLOAK IMPLEMENTATION */}
               <LeftNav title="Change Requests" path="/change-requests" />
-              {/** TIDECLOAK IMPLEMENTATION */}
-              <LeftNav title="Policies" path="/tide-policies" />
             </NavGroup>
           )}
 
