@@ -22,7 +22,6 @@ import userFederationRoutes from "./user-federation/routes";
 import userRoutes from "./user/routes";
 import workflowRoutes from "./workflows/routes";
 import changeRequestsRoutes from "./change-requests/routes"; // TIDECLOAK IMPLEMENTATION
-import tidePoliciesRoutes from "./tide-policies/routes"; // TIDECLOAK IMPLEMENTATION
 import tideKeyRoute from "./realm-settings/keys/routes"; // TIDECLOAK IMPLEMENTATION
 
 export type AppRouteObjectHandle = {
@@ -62,7 +61,6 @@ export const routes: AppRouteObject[] = [
   ...dashboardRoutes,
   ...pageRoutes,
   ...changeRequestsRoutes, // TIDECLOAK IMPLEMENTATION
-  ...tidePoliciesRoutes, // TIDECLOAK IMPLEMENTATION
   ...tideKeyRoute, // TIDECLOAK IMPLEMENTATION
   NotFoundRoute,
 ];
