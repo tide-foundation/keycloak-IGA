@@ -69,6 +69,8 @@ export {
   getErrorMessage,
   getNetworkErrorMessage,
   getNetworkErrorDescription,
+  getTideErrorInfo,
+  type TideErrorInfo,
 } from "./utils/errors";
 export { isDefined } from "./utils/isDefined";
 export { useRequiredContext } from "./utils/useRequiredContext";
