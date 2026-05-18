@@ -27,9 +27,10 @@ type AddAlert = (
  * "View change request" action link that navigates within the SPA (via
  * react-router) to the Change Requests screen — no full page reload.
  *
- * The Change Requests screen does not currently support deep-linking to a
- * specific change request id, so the link targets the list page even though
- * the 202 response does carry `changeRequestId`.
+ * The link deep-links to the specific change request: `toChangeRequests`
+ * is given the 202 response's `changeRequestId` as `crId`, producing a
+ * `?cr=<id>` query that the Change Requests screen reads to open the
+ * matching detail modal directly.
  */
 type NotifyNav = {
   realm: string;
@@ -54,10 +55,15 @@ export function notifyIfPendingChangeRequest(
   let actionLinks: ReactNode | undefined;
   if (nav) {
     const { realm, navigate } = nav;
+    const target = toChangeRequests({ realm, crId: result.changeRequestId });
     actionLinks = createElement(
       AlertActionLink,
       {
-        onClick: () => navigate(toChangeRequests({ realm }).pathname!),
+        onClick: () =>
+          navigate({
+            pathname: target.pathname!,
+            search: target.search ?? "",
+          }),
       },
       t("viewChangeRequest"),
     );
