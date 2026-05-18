@@ -32,7 +32,12 @@ export default function CreateRealmRole() {
       const createResult = await adminClient.roles.create(role);
 
       // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
-      if (notifyIfPendingChangeRequest(createResult, t, addAlert)) {
+      if (
+        notifyIfPendingChangeRequest(createResult, t, addAlert, {
+          realm,
+          navigate,
+        })
+      ) {
         navigate(toRealmRoles({ realm }));
         return;
       }

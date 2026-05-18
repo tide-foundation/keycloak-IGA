@@ -37,7 +37,12 @@ export default function CreateClientRole() {
       });
 
       // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
-      if (notifyIfPendingChangeRequest(createResult, t, addAlert)) {
+      if (
+        notifyIfPendingChangeRequest(createResult, t, addAlert, {
+          realm,
+          navigate,
+        })
+      ) {
         navigate(
           toClient({
             realm,

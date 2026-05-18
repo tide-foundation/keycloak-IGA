@@ -94,7 +94,12 @@ export default function NewClientForm() {
 
       // TIDECLOAK IMPLEMENTATION: IGA may intercept the create and return a
       // pending change request instead of a real client id.
-      if (notifyIfPendingChangeRequest(newClient, t, addAlert)) {
+      if (
+        notifyIfPendingChangeRequest(newClient, t, addAlert, {
+          realm,
+          navigate,
+        })
+      ) {
         navigate(toClients({ realm }));
         return;
       }

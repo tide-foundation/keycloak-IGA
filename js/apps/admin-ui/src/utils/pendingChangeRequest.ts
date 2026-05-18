@@ -4,18 +4,37 @@
 // normal `{ id }`-style response. Use this helper at create call sites to
 // surface a friendly toast and skip post-create navigation.
 
-import { AlertVariant } from "@patternfly/react-core";
+import { AlertActionLink, AlertVariant } from "@patternfly/react-core";
 import {
   isPendingChangeRequest,
   type PendingChangeRequest,
 } from "@keycloak/keycloak-admin-client/lib/utils/pendingChangeRequest";
 import type { TFunction } from "i18next";
+import { createElement, type ReactNode } from "react";
+import type { NavigateFunction } from "react-router-dom";
+
+import { toChangeRequests } from "../change-requests/routes/ChangeRequests";
 
 type AddAlert = (
   message: string,
   variant?: AlertVariant,
   description?: string,
+  actionLinks?: ReactNode,
 ) => void;
+
+/**
+ * Optional in-app navigation context. When supplied, the toast gets a
+ * "View change request" action link that navigates within the SPA (via
+ * react-router) to the Change Requests screen — no full page reload.
+ *
+ * The Change Requests screen does not currently support deep-linking to a
+ * specific change request id, so the link targets the list page even though
+ * the 202 response does carry `changeRequestId`.
+ */
+type NotifyNav = {
+  realm: string;
+  navigate: NavigateFunction;
+};
 
 /**
  * If `result` is a pending change-request envelope, show the standard toast
@@ -26,13 +45,29 @@ export function notifyIfPendingChangeRequest(
   result: unknown,
   t: TFunction,
   addAlert: AddAlert,
+  nav?: NotifyNav,
 ): PendingChangeRequest | undefined {
   if (!isPendingChangeRequest(result)) {
     return undefined;
   }
+
+  let actionLinks: ReactNode | undefined;
+  if (nav) {
+    const { realm, navigate } = nav;
+    actionLinks = createElement(
+      AlertActionLink,
+      {
+        onClick: () => navigate(toChangeRequests({ realm }).pathname!),
+      },
+      t("viewChangeRequest"),
+    );
+  }
+
   addAlert(
     t("pendingChangeRequestCreated", { id: result.changeRequestId }),
     AlertVariant.info,
+    undefined,
+    actionLinks,
   );
   return result;
 }
