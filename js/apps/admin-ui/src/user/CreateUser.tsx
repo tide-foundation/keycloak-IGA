@@ -58,7 +58,12 @@ export default function CreateUser() {
       });
 
       // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
-      if (notifyIfPendingChangeRequest(createdUser, t, addAlert)) {
+      if (
+        notifyIfPendingChangeRequest(createdUser, t, addAlert, {
+          realm: realmName,
+          navigate,
+        })
+      ) {
         navigate(toUsers({ realm: realmName }));
         return;
       }

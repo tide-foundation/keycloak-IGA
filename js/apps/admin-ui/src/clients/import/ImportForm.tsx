@@ -92,7 +92,12 @@ export default function ImportForm() {
         }),
       });
       // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
-      if (notifyIfPendingChangeRequest(newClient, t, addAlert)) {
+      if (
+        notifyIfPendingChangeRequest(newClient, t, addAlert, {
+          realm,
+          navigate,
+        })
+      ) {
         navigate(toClients({ realm }));
         return;
       }

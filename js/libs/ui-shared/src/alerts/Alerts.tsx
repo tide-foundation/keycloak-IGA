@@ -1,5 +1,11 @@
 import { AlertVariant } from "@patternfly/react-core";
-import { PropsWithChildren, useCallback, useMemo, useState } from "react";
+import {
+  PropsWithChildren,
+  ReactNode,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { createNamedContext } from "../utils/createNamedContext";
@@ -15,6 +21,10 @@ export type AddAlertFunction = (
   message: string,
   variant?: AlertVariant,
   description?: string,
+  // TIDECLOAK IMPLEMENTATION: optional PatternFly action links (e.g. an
+  // in-app navigation link) rendered in the toast. Backward compatible —
+  // existing 3-arg callers are unaffected.
+  actionLinks?: ReactNode,
 ) => void;
 
 export type AddErrorFunction = (messageKey: string, error: unknown) => void;
@@ -36,6 +46,8 @@ export type AlertEntry = {
   message: string;
   variant: AlertVariant;
   description?: string;
+  // TIDECLOAK IMPLEMENTATION
+  actionLinks?: ReactNode;
 };
 
 export const AlertProvider = ({ children }: PropsWithChildren) => {
@@ -47,12 +59,13 @@ export const AlertProvider = ({ children }: PropsWithChildren) => {
     setAlerts((alerts) => alerts.filter((alert) => alert.id !== id));
 
   const addAlert = useCallback<AddAlertFunction>(
-    (message, variant = AlertVariant.success, description) => {
+    (message, variant = AlertVariant.success, description, actionLinks) => {
       const alert: AlertEntry = {
         id: generateId(),
         message,
         variant,
         description,
+        actionLinks,
       };
 
       setAlerts((alerts) => [alert, ...alerts]);
