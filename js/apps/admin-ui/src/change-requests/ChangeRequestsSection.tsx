@@ -18,11 +18,13 @@ import {
   ToolbarItem,
   Tooltip,
 } from "@patternfly/react-core";
+import { QuestionCircleIcon } from "@patternfly/react-icons";
 import { useAlerts, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
 
 import { useAdminClient } from "../admin-client";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { ViewHeader } from "../components/view-header/ViewHeader";
+import { ChangeRequestsHelpModal } from "./ChangeRequestsHelpModal";
 
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 import type {
@@ -153,6 +155,7 @@ type ToolbarProps = {
   isProcessing: boolean;
   onAuthorizeBulk: () => void;
   onCommitBulk: () => void;
+  onShowHelp: () => void;
 };
 
 function ChangeRequestsToolbar({
@@ -164,6 +167,7 @@ function ChangeRequestsToolbar({
   isProcessing,
   onAuthorizeBulk,
   onCommitBulk,
+  onShowHelp,
 }: ToolbarProps) {
   const noSelection = selectedCount === 0;
   const authorizeTip = noSelection
@@ -252,6 +256,16 @@ function ChangeRequestsToolbar({
           </Button>
         )}
       </ToolbarItem>
+      <ToolbarItem align={{ default: "alignRight" }}>
+        <Button
+          variant="secondary"
+          icon={<QuestionCircleIcon />}
+          onClick={onShowHelp}
+          data-testid="change-requests-help"
+        >
+          How IGA works
+        </Button>
+      </ToolbarItem>
     </>
   );
 }
@@ -267,6 +281,7 @@ export default function ChangeRequestsSection() {
   const [tableKey, setTableKey] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<{
     op: "authorize" | "commit";
     results: BulkResult[];
@@ -687,6 +702,7 @@ export default function ChangeRequestsSection() {
                 isProcessing={isProcessing}
                 onAuthorizeBulk={onAuthorizeBulk}
                 onCommitBulk={onCommitBulk}
+                onShowHelp={() => setIsHelpOpen(true)}
               />
             }
             columns={columns}
@@ -755,6 +771,10 @@ export default function ChangeRequestsSection() {
             </ul>
           )}
         </Modal>
+      )}
+
+      {isHelpOpen && (
+        <ChangeRequestsHelpModal onClose={() => setIsHelpOpen(false)} />
       )}
 
       {detailId && (
