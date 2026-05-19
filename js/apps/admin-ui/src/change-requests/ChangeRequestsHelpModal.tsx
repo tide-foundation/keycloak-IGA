@@ -258,10 +258,12 @@ export function ChangeRequestsHelpModal({
             </Text>
             <TextList component={TextListVariants.ol}>
               <TextListItem component={TextListItemVariants.li}>
-                Admin console: go to <strong>Realm settings</strong> and open
-                the section that exposes the realm attribute map (the realm
-                Attributes area). Add a key <code>iga.threshold</code> with the
-                positive integer you want, for example <code>2</code>.
+                Admin console: go to <strong>Realm settings → General</strong>{" "}
+                and find the{" "}
+                <strong>Identity Governance and Administration (IGA)</strong>{" "}
+                section. Set <strong>IGA approval threshold</strong> to the
+                positive integer you want, for example <code>2</code>, then
+                Save.
               </TextListItem>
               <TextListItem component={TextListItemVariants.li}>
                 Admin REST equivalent: update the realm representation{" "}
@@ -278,7 +280,7 @@ export function ChangeRequestsHelpModal({
                 per-entity threshold now requires 2 distinct admin signatures.
               </TextListItem>
             </TextList>
-            <ScreenshotPlaceholder caption="Screenshot: Realm settings → Attributes (add key iga.threshold = 2)" />
+            <ScreenshotPlaceholder caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA approval threshold = 2)" />
 
             <Text component={TextVariants.h2}>Set a per-entity threshold</Text>
             <Text component={TextVariants.p}>
@@ -383,14 +385,16 @@ export function ChangeRequestsHelpModal({
               </TextListItem>
             </TextList>
             <Text component={TextVariants.p}>
-              Admin console: <strong>Realm settings</strong>, attributes area,
-              add key <code>iga.scopeMode</code> with value <code>all</code> (or
-              remove it / leave unset for <code>any</code>). Admin REST: include{" "}
+              Admin console: go to <strong>Realm settings → General</strong> and
+              in the{" "}
+              <strong>Identity Governance and Administration (IGA)</strong>{" "}
+              section set <strong>IGA scope mode</strong> to <code>all</code>{" "}
+              (or leave it at <code>any</code>), then Save. Admin REST: include{" "}
               <code>&quot;iga.scopeMode&quot;: &quot;all&quot;</code> in the
               realm representation <code>attributes</code> map via{" "}
               <code>PUT /admin/realms/&#123;realm&#125;</code>.
             </Text>
-            <ScreenshotPlaceholder caption="Screenshot: Realm settings → Attributes (add key iga.scopeMode = all)" />
+            <ScreenshotPlaceholder caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA scope mode = all)" />
 
             <Text component={TextVariants.h2}>
               Worked example: only HR can approve changes to the HR group

@@ -11,17 +11,16 @@ import {
   TextControl,
   useEnvironment,
   useFetch,
-  useAlerts
+  useAlerts,
 } from "@keycloak/keycloak-ui-shared";
 import {
-  ActionGroup,
-  Button,
   ClipboardCopy,
   FormGroup,
   PageSection,
   Stack,
   StackItem,
-  Switch
+  Switch,
+  Text,
 } from "@patternfly/react-core";
 import { useEffect, useState } from "react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
@@ -117,7 +116,7 @@ function RealmSettingsGeneralTabForm({
     control,
     handleSubmit,
     setValue,
-    formState: { isDirty, errors },
+    formState: { errors },
   } = form;
   const isFeatureEnabled = useIsFeatureEnabled();
   const isOrganizationsEnabled = isFeatureEnabled(Feature.Organizations);
@@ -134,7 +133,7 @@ function RealmSettingsGeneralTabForm({
       const data = new FormData();
       data.append("isIGAEnabled", value.toString());
 
-      await adminClient.tideAdmin.toggleIGA(data)
+      await adminClient.tideAdmin.toggleIGA(data);
       addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
       refresh();
     } catch (error) {
@@ -210,31 +209,79 @@ function RealmSettingsGeneralTabForm({
               />
             )}
           </FormGroup>
-          {/* TIDECLOAK IMPLEMENTATION */}
+          {/* TIDECLOAK IMPLEMENTATION - IGA section */}
           <FormGroup
-              label={t("Identity Governance and Administration (IGA)")}
-              fieldId="tide-iga"
-              labelIcon={
-                <HelpItem
-                  helpText={t("some help text for iga")}
-                  fieldLabelId="igaEnabled"
-                />
-              }
-              hasNoPaddingTop
-            >
+            label={t("Identity Governance and Administration (IGA)")}
+            fieldId="tide-iga-section"
+            hasNoPaddingTop
+          >
+            <Text component="p" className="pf-v5-u-color-200">
+              {t(
+                "Changing these while IGA is enabled creates a change request that must be approved.",
+              )}
+            </Text>
+          </FormGroup>
+          <FormGroup
+            label={t("IGA enabled")}
+            fieldId="tide-iga"
+            labelIcon={
+              <HelpItem
+                helpText={t("some help text for iga")}
+                fieldLabelId="igaEnabled"
+              />
+            }
+            hasNoPaddingTop
+          >
             <Switch
               id="tide-realm-iga-switch"
               data-testid="realm-iga-switch"
-              value={realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? "on" : "off"}
+              value={
+                realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true"
+                  ? "on"
+                  : "off"
+              }
               label={t("on")}
               labelOff={t("off")}
-              isChecked={realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true" ? true : false}
+              isChecked={
+                realm.attributes?.["isIGAEnabled"]?.toLowerCase() === "true"
+                  ? true
+                  : false
+              }
               onChange={(_event, value) => {
-                updateSwitchValue(value);
+                void updateSwitchValue(value);
               }}
               aria-label={t("igaEnabled")}
             />
           </FormGroup>
+          <TextControl
+            name={convertAttributeNameToForm<FormFields>(
+              "attributes.iga.threshold",
+            )}
+            type="number"
+            label={t("IGA approval threshold")}
+            labelIcon={t(
+              "Number of distinct admin signatures required before a change request can be committed. A group/role/client/organization may override this with a higher per-entity iga.threshold. Values below 1 are treated as 1.",
+            )}
+            min={1}
+            defaultValue={"1" as any}
+          />
+          <SelectControl
+            name={convertAttributeNameToForm<FormFields>(
+              "attributes.iga.scopeMode",
+            )}
+            label={t("IGA scope mode")}
+            labelIcon={t(
+              "any: an approver needs at least one of the required approver roles. all: the approver must hold every required role.",
+            )}
+            controller={{
+              defaultValue: "any",
+            }}
+            options={[
+              { key: "any", value: "any" },
+              { key: "all", value: "all" },
+            ]}
+          />
+          {/* TIDECLOAK IMPLEMENTATION - end IGA section */}
           <TextControl name="displayName" label={t("displayName")} />
           <TextControl name="displayNameHtml" label={t("htmlDisplayName")} />
           <TextControl
