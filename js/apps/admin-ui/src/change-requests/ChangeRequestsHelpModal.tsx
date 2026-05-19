@@ -16,6 +16,8 @@ import {
   TextVariants,
 } from "@patternfly/react-core";
 import { useState } from "react";
+import groupIgaThresholdImg from "./assets/group-iga-threshold.png";
+import userRoleMappingHrApproverImg from "./assets/user-role-mapping-hr-approver.png";
 
 type ChangeRequestsHelpModalProps = {
   onClose: () => void;
@@ -24,6 +26,38 @@ type ChangeRequestsHelpModalProps = {
 type ScreenshotPlaceholderProps = {
   caption: string;
 };
+
+type ScreenshotProps = {
+  src: string;
+  caption: string;
+};
+
+/**
+ * A real captured admin-console screenshot with its caption, styled to match
+ * the placeholder it replaces (bordered, constrained width, captioned).
+ */
+function Screenshot({ src, caption }: ScreenshotProps) {
+  return (
+    <div className="pf-v5-u-my-md pf-v5-u-text-align-center">
+      <img
+        src={src}
+        alt={caption}
+        style={{
+          maxWidth: "100%",
+          height: "auto",
+          border: "1px solid var(--pf-v5-global--BorderColor--100)",
+          borderRadius: "var(--pf-v5-global--BorderRadius--sm)",
+        }}
+      />
+      <Text
+        component={TextVariants.small}
+        className="pf-v5-u-color-200 pf-v5-u-mt-xs"
+      >
+        {caption}
+      </Text>
+    </div>
+  );
+}
 
 /**
  * A clearly-labeled "image goes here" placeholder. Not an <img> and not an
@@ -282,7 +316,10 @@ export function ChangeRequestsHelpModal({
                 together on the same entity.
               </TextListItem>
             </TextList>
-            <ScreenshotPlaceholder caption="Screenshot: Group → Attributes tab (add key iga.threshold = 3)" />
+            <Screenshot
+              src={groupIgaThresholdImg}
+              caption="Screenshot: Group → Attributes tab (add key iga.threshold = 3)"
+            />
 
             <Text component={TextVariants.h2}>Restrict who can approve</Text>
             <Text component={TextVariants.p}>
@@ -322,7 +359,10 @@ export function ChangeRequestsHelpModal({
                 same entity so multiple holders of that role are required.
               </TextListItem>
             </TextList>
-            <ScreenshotPlaceholder caption="Screenshot: Users → (user) → Role mapping → Assign role (assign hr-approver)" />
+            <Screenshot
+              src={userRoleMappingHrApproverImg}
+              caption="Screenshot: Users → (user) → Role mapping → Assign role (assign hr-approver)"
+            />
 
             <Text component={TextVariants.h2}>Set the realm scope mode</Text>
             <Text component={TextVariants.p}>
