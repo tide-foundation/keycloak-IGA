@@ -17,14 +17,12 @@ import {
 } from "@patternfly/react-core";
 import { useState } from "react";
 import groupIgaThresholdImg from "./assets/group-iga-threshold.png";
+import realmIgaScopeModeImg from "./assets/realm-iga-scope-mode.png";
+import realmIgaThresholdImg from "./assets/realm-iga-threshold.png";
 import userRoleMappingHrApproverImg from "./assets/user-role-mapping-hr-approver.png";
 
 type ChangeRequestsHelpModalProps = {
   onClose: () => void;
-};
-
-type ScreenshotPlaceholderProps = {
-  caption: string;
 };
 
 type ScreenshotProps = {
@@ -52,37 +50,6 @@ function Screenshot({ src, caption }: ScreenshotProps) {
       <Text
         component={TextVariants.small}
         className="pf-v5-u-color-200 pf-v5-u-mt-xs"
-      >
-        {caption}
-      </Text>
-    </div>
-  );
-}
-
-/**
- * A clearly-labeled "image goes here" placeholder. Not an <img> and not an
- * external URL — a bordered, greyed box with caption text. Real screenshots
- * are swapped in later.
- */
-function ScreenshotPlaceholder({ caption }: ScreenshotPlaceholderProps) {
-  return (
-    <div
-      className="pf-v5-u-my-md pf-v5-u-p-lg pf-v5-u-text-align-center pf-v5-u-color-200"
-      style={{
-        border: "2px dashed var(--pf-v5-global--BorderColor--100)",
-        borderRadius: "var(--pf-v5-global--BorderRadius--sm)",
-        background: "var(--pf-v5-global--BackgroundColor--200)",
-      }}
-    >
-      <Text
-        component={TextVariants.small}
-        className="pf-v5-u-color-200 pf-v5-u-mb-xs"
-      >
-        Screenshot placeholder
-      </Text>
-      <Text
-        component={TextVariants.p}
-        className="pf-v5-u-font-weight-bold pf-v5-u-color-200"
       >
         {caption}
       </Text>
@@ -280,7 +247,10 @@ export function ChangeRequestsHelpModal({
                 per-entity threshold now requires 2 distinct admin signatures.
               </TextListItem>
             </TextList>
-            <ScreenshotPlaceholder caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA approval threshold = 2)" />
+            <Screenshot
+              src={realmIgaThresholdImg}
+              caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA approval threshold = 2)"
+            />
 
             <Text component={TextVariants.h2}>Set a per-entity threshold</Text>
             <Text component={TextVariants.p}>
@@ -394,7 +364,10 @@ export function ChangeRequestsHelpModal({
               realm representation <code>attributes</code> map via{" "}
               <code>PUT /admin/realms/&#123;realm&#125;</code>.
             </Text>
-            <ScreenshotPlaceholder caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA scope mode = all)" />
+            <Screenshot
+              src={realmIgaScopeModeImg}
+              caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA scope mode = all)"
+            />
 
             <Text component={TextVariants.h2}>
               Worked example: only HR can approve changes to the HR group
