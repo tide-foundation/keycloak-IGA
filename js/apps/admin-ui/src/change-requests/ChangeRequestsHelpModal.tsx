@@ -1,12 +1,8 @@
 /** TIDECLOAK IMPLEMENTATION */
 
 import {
-  Button,
   Modal,
   ModalVariant,
-  Tab,
-  Tabs,
-  TabTitleText,
   Text,
   TextContent,
   TextList,
@@ -14,8 +10,12 @@ import {
   TextListItemVariants,
   TextListVariants,
   TextVariants,
+  useWizardContext,
+  Wizard,
+  WizardFooter,
+  WizardStep,
 } from "@patternfly/react-core";
-import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import groupIgaThresholdImg from "./assets/group-iga-threshold.png";
 import realmIgaScopeModeImg from "./assets/realm-iga-scope-mode.png";
 import realmIgaThresholdImg from "./assets/realm-iga-threshold.png";
@@ -57,34 +57,51 @@ function Screenshot({ src, caption }: ScreenshotProps) {
   );
 }
 
+/**
+ * Custom wizard footer matching the in-app pattern
+ * (see UserFederationKerberosWizard / NewClientForm). The wizard's "close"
+ * action is wired to dismiss the surrounding modal, and the final step shows
+ * a Finish button that also closes the modal.
+ */
+function HelpWizardFooter({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  const { activeStep, steps, goToNextStep, goToPrevStep } = useWizardContext();
+  const isLastStep = activeStep.index === steps.length;
+
+  return (
+    <WizardFooter
+      activeStep={activeStep}
+      onNext={isLastStep ? onClose : goToNextStep}
+      onBack={goToPrevStep}
+      onClose={onClose}
+      isBackDisabled={activeStep.index === 1}
+      backButtonText={t("back")}
+      nextButtonText={isLastStep ? t("finish") : t("next")}
+      cancelButtonText={t("close")}
+    />
+  );
+}
+
 export function ChangeRequestsHelpModal({
   onClose,
 }: ChangeRequestsHelpModalProps) {
-  const [activeTab, setActiveTab] = useState<number>(0);
-
   return (
     <Modal
       variant={ModalVariant.medium}
       title="How IGA works"
       isOpen
       onClose={onClose}
-      actions={[
-        <Button key="close" variant="link" onClick={onClose}>
-          Close
-        </Button>,
-      ]}
+      hasNoBodyWrapper
+      aria-label="How IGA works"
     >
-      <Tabs
-        activeKey={activeTab}
-        onSelect={(_, key) => setActiveTab(key as number)}
-        aria-label="IGA help tabs"
+      <Wizard
+        height={520}
+        footer={<HelpWizardFooter onClose={onClose} />}
+        onClose={onClose}
       >
-        <Tab
-          eventKey={0}
-          title={<TabTitleText>How it works</TabTitleText>}
-          aria-label="How IGA works"
-        >
-          <TextContent className="pf-v5-u-mt-md">
+        {/* Step 1 — What IGA does */}
+        <WizardStep name="What IGA does" id="iga-help-what">
+          <TextContent>
             <Text component={TextVariants.p}>
               When IGA is enabled for this realm, administrative changes
               (creating or editing users, roles, groups, clients, client scopes,
@@ -121,8 +138,8 @@ export function ChangeRequestsHelpModal({
               By default any admin with realm-manage permission can authorize
               and commit, with a threshold of 1. Administrators can restrict
               approval to specific roles and raise the threshold per realm or
-              per group, role, or client. See the Configuring access tab for how
-              to set this up.
+              per group, role, or client. The following steps explain how to set
+              this up.
             </Text>
 
             <Text component={TextVariants.h3}>Where</Text>
@@ -133,59 +150,11 @@ export function ChangeRequestsHelpModal({
               are available on the Pending list.
             </Text>
           </TextContent>
-        </Tab>
+        </WizardStep>
 
-        <Tab
-          eventKey={1}
-          title={<TabTitleText>Configuring access</TabTitleText>}
-          aria-label="Configuring IGA access"
-        >
-          <TextContent className="pf-v5-u-mt-md">
-            <Text component={TextVariants.p}>
-              This tab describes how to configure the IGA approval policy:
-              thresholds, approver roles, and scope mode. Exact admin console
-              menu labels can differ slightly between Keycloak releases and
-              admin themes; where a label may differ in your build, the path is
-              described generically and the equivalent Admin REST call is given
-              alongside.
-            </Text>
-
-            <Text component={TextVariants.h2}>
-              Configure governance before enabling IGA
-            </Text>
-            <Text component={TextVariants.p}>
-              Set thresholds and approver roles <strong>before</strong> enabling
-              IGA. Once IGA is on, changing the realm <code>iga.threshold</code>{" "}
-              (or any realm attribute) is itself a governed{" "}
-              <code>SET_REALM_ATTRIBUTE</code> change request that must be
-              authorized and committed. If you tighten policy only after
-              enabling, those governance changes are blocked behind the
-              (possibly weak) policy in force at enable time. The{" "}
-              <code>master</code> realm is the escape hatch: IGA is never
-              enforced there, so a master realm admin can recover a self-locked
-              realm.
-            </Text>
-            <Text component={TextVariants.p}>Recommended order:</Text>
-            <TextList component={TextListVariants.ol}>
-              <TextListItem component={TextListItemVariants.li}>
-                Decide and set the realm-wide <code>iga.threshold</code>.
-              </TextListItem>
-              <TextListItem component={TextListItemVariants.li}>
-                Decide and set <code>iga.scopeMode</code>.
-              </TextListItem>
-              <TextListItem component={TextListItemVariants.li}>
-                Create approver roles and assign them.
-              </TextListItem>
-              <TextListItem component={TextListItemVariants.li}>
-                Set <code>iga.approverRole</code> / <code>iga.threshold</code>{" "}
-                on every sensitive group, role, client, or organization.
-              </TextListItem>
-              <TextListItem component={TextListItemVariants.li}>
-                Enable IGA last.
-              </TextListItem>
-            </TextList>
-
-            <Text component={TextVariants.h2}>Enabling and disabling IGA</Text>
+        {/* Step 2 — Enable or disable IGA */}
+        <WizardStep name="Enable or disable IGA" id="iga-help-enable">
+          <TextContent>
             <Text component={TextVariants.p}>
               IGA is controlled by the case-sensitive realm attribute{" "}
               <code>isIGAEnabled</code>; it is on only when the value is exactly
@@ -212,16 +181,22 @@ export function ChangeRequestsHelpModal({
                 cannot unilaterally disable governance once it is active.
               </TextListItem>
             </TextList>
+          </TextContent>
+        </WizardStep>
 
-            <Text component={TextVariants.h2}>
-              Set the realm-wide threshold
-            </Text>
+        {/* Step 3 — Set the approval threshold */}
+        <WizardStep name="Set the approval threshold" id="iga-help-threshold">
+          <TextContent>
             <Text component={TextVariants.p}>
               The threshold is the number of distinct admin signatures required
               before a change request can be committed. The default is{" "}
               <strong>1</strong>. A non-integer value, or a value less than 1,
               is ignored and treated as 1 (enforced) — a bad value can never
               disable the commit gate.
+            </Text>
+
+            <Text component={TextVariants.h3}>
+              Set the realm-wide threshold
             </Text>
             <TextList component={TextListVariants.ol}>
               <TextListItem component={TextListItemVariants.li}>
@@ -252,7 +227,7 @@ export function ChangeRequestsHelpModal({
               caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA approval threshold = 2)"
             />
 
-            <Text component={TextVariants.h2}>Set a per-entity threshold</Text>
+            <Text component={TextVariants.h3}>Set a per-entity threshold</Text>
             <Text component={TextVariants.p}>
               You can override the realm default on a specific group, role,
               client, or organization. If multiple affected entities declare a
@@ -288,12 +263,12 @@ export function ChangeRequestsHelpModal({
                 together on the same entity.
               </TextListItem>
             </TextList>
-            <Screenshot
-              src={groupIgaThresholdImg}
-              caption="Screenshot: Group → Attributes tab (add key iga.threshold = 3)"
-            />
+          </TextContent>
+        </WizardStep>
 
-            <Text component={TextVariants.h2}>Restrict who can approve</Text>
+        {/* Step 4 — Restrict who can approve */}
+        <WizardStep name="Restrict who can approve" id="iga-help-approver-role">
+          <TextContent>
             <Text component={TextVariants.p}>
               By default any admin with <code>manage-realm</code> can authorize
               and commit any change request. To restrict approval, mark the
@@ -332,44 +307,15 @@ export function ChangeRequestsHelpModal({
               </TextListItem>
             </TextList>
             <Screenshot
+              src={groupIgaThresholdImg}
+              caption="Screenshot: Group → Attributes tab (add key iga.threshold = 3)"
+            />
+            <Screenshot
               src={userRoleMappingHrApproverImg}
               caption="Screenshot: Users → (user) → Role mapping → Assign role (assign hr-approver)"
             />
 
-            <Text component={TextVariants.h2}>Set the realm scope mode</Text>
-            <Text component={TextVariants.p}>
-              Scope mode is the realm attribute <code>iga.scopeMode</code>. It
-              decides, when more than one approver role is required, whether an
-              approver must hold any or all of them. It is realm-level only —
-              there is no per-entity scope mode.
-            </Text>
-            <TextList component={TextListVariants.ul}>
-              <TextListItem component={TextListItemVariants.li}>
-                <code>any</code> (default; any value other than <code>all</code>
-                , or unset): the approver needs at least one of the required
-                roles.
-              </TextListItem>
-              <TextListItem component={TextListItemVariants.li}>
-                <code>all</code> (case-insensitive): the approver must hold
-                every required role.
-              </TextListItem>
-            </TextList>
-            <Text component={TextVariants.p}>
-              Admin console: go to <strong>Realm settings → General</strong> and
-              in the{" "}
-              <strong>Identity Governance and Administration (IGA)</strong>{" "}
-              section set <strong>IGA scope mode</strong> to <code>all</code>{" "}
-              (or leave it at <code>any</code>), then Save. Admin REST: include{" "}
-              <code>&quot;iga.scopeMode&quot;: &quot;all&quot;</code> in the
-              realm representation <code>attributes</code> map via{" "}
-              <code>PUT /admin/realms/&#123;realm&#125;</code>.
-            </Text>
-            <Screenshot
-              src={realmIgaScopeModeImg}
-              caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA scope mode = all)"
-            />
-
-            <Text component={TextVariants.h2}>
+            <Text component={TextVariants.h3}>
               Worked example: only HR can approve changes to the HR group
             </Text>
             <Text component={TextVariants.p}>
@@ -403,8 +349,92 @@ export function ChangeRequestsHelpModal({
                 <code>hr-approver</code>; other admins receive HTTP 403.
               </TextListItem>
             </TextList>
+          </TextContent>
+        </WizardStep>
 
-            <Text component={TextVariants.h2}>
+        {/* Step 5 — Scope mode */}
+        <WizardStep name="Scope mode" id="iga-help-scope-mode">
+          <TextContent>
+            <Text component={TextVariants.p}>
+              Scope mode is the realm attribute <code>iga.scopeMode</code>. It
+              decides, when more than one approver role is required, whether an
+              approver must hold any or all of them. It is realm-level only —
+              there is no per-entity scope mode.
+            </Text>
+            <TextList component={TextListVariants.ul}>
+              <TextListItem component={TextListItemVariants.li}>
+                <code>any</code> (default; any value other than <code>all</code>
+                , or unset): the approver needs at least one of the required
+                roles.
+              </TextListItem>
+              <TextListItem component={TextListItemVariants.li}>
+                <code>all</code> (case-insensitive): the approver must hold
+                every required role.
+              </TextListItem>
+            </TextList>
+            <Text component={TextVariants.p}>
+              Admin console: go to <strong>Realm settings → General</strong> and
+              in the{" "}
+              <strong>Identity Governance and Administration (IGA)</strong>{" "}
+              section set <strong>IGA scope mode</strong> to <code>all</code>{" "}
+              (or leave it at <code>any</code>), then Save. Admin REST: include{" "}
+              <code>&quot;iga.scopeMode&quot;: &quot;all&quot;</code> in the
+              realm representation <code>attributes</code> map via{" "}
+              <code>PUT /admin/realms/&#123;realm&#125;</code>.
+            </Text>
+            <Screenshot
+              src={realmIgaScopeModeImg}
+              caption="Screenshot: Realm settings → General → Identity Governance and Administration (IGA) section (set IGA scope mode = all)"
+            />
+          </TextContent>
+        </WizardStep>
+
+        {/* Step 6 — Recommended order & pitfalls */}
+        <WizardStep name="Recommended order & pitfalls" id="iga-help-order">
+          <TextContent>
+            <Text component={TextVariants.p}>
+              Exact admin console menu labels can differ slightly between
+              Keycloak releases and admin themes; where a label may differ in
+              your build, the path is described generically and the equivalent
+              Admin REST call is given alongside.
+            </Text>
+
+            <Text component={TextVariants.h3}>
+              Configure governance before enabling IGA
+            </Text>
+            <Text component={TextVariants.p}>
+              Set thresholds and approver roles <strong>before</strong> enabling
+              IGA. Once IGA is on, changing the realm <code>iga.threshold</code>{" "}
+              (or any realm attribute) is itself a governed{" "}
+              <code>SET_REALM_ATTRIBUTE</code> change request that must be
+              authorized and committed. If you tighten policy only after
+              enabling, those governance changes are blocked behind the
+              (possibly weak) policy in force at enable time. The{" "}
+              <code>master</code> realm is the escape hatch: IGA is never
+              enforced there, so a master realm admin can recover a self-locked
+              realm.
+            </Text>
+            <Text component={TextVariants.p}>Recommended order:</Text>
+            <TextList component={TextListVariants.ol}>
+              <TextListItem component={TextListItemVariants.li}>
+                Decide and set the realm-wide <code>iga.threshold</code>.
+              </TextListItem>
+              <TextListItem component={TextListItemVariants.li}>
+                Decide and set <code>iga.scopeMode</code>.
+              </TextListItem>
+              <TextListItem component={TextListItemVariants.li}>
+                Create approver roles and assign them.
+              </TextListItem>
+              <TextListItem component={TextListItemVariants.li}>
+                Set <code>iga.approverRole</code> / <code>iga.threshold</code>{" "}
+                on every sensitive group, role, client, or organization.
+              </TextListItem>
+              <TextListItem component={TextListItemVariants.li}>
+                Enable IGA last.
+              </TextListItem>
+            </TextList>
+
+            <Text component={TextVariants.h3}>
               Default behavior with nothing configured
             </Text>
             <Text component={TextVariants.p}>
@@ -417,8 +447,8 @@ export function ChangeRequestsHelpModal({
               relying on it, and do that hardening before enabling IGA.
             </Text>
           </TextContent>
-        </Tab>
-      </Tabs>
+        </WizardStep>
+      </Wizard>
     </Modal>
   );
 }
