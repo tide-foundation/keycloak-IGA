@@ -492,6 +492,23 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
                   </FormGroup>
 
                   <FormGroup
+                    label={t("Current VRK")}
+                    labelIcon={
+                      <HelpItem
+                        helpText={"The live active VRK currently in use by this license."}
+                        fieldLabelId={"LicenseCurrentVRK"}
+                      />
+                    }
+                    fieldId="license-current-vrk"
+                  >
+                    {hasValue(watchConfigGVRK) ? (
+                      <ClipboardCopy isCode isReadOnly>{watchConfigGVRK}</ClipboardCopy>
+                    ) : (
+                      <span style={{ opacity: 0.7 }}>—</span>
+                    )}
+                  </FormGroup>
+
+                  <FormGroup
                     label={t("Expiry Date")}
                     labelIcon={
                       <HelpItem
