@@ -296,12 +296,6 @@ export class TideProvider extends Resource<{ realm?: string }> {
         method: "POST",
         path: "/ragnarok/trigger-offboarding",
     });
-    /* # TIDECLOAK IMPLEMENTATION */
-    public licenseProvider = this.makeRequest<{ gvrk?: string }, string>({
-        method: "POST",
-        path: "/tideAdminResources/trigger-license-signing",
-        queryParamKeys: ["gvrk"],
-    });
 
     constructor(client: KeycloakAdminClient) {
         super(client, {
