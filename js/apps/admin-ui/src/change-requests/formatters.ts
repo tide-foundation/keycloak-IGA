@@ -278,8 +278,6 @@ export function humanReadableSummary(cr: IgaChangeRequest): string {
       return `Add ${groupLbl} as a default group`;
     case "REMOVE_REALM_DEFAULT_GROUP":
       return `Remove ${groupLbl} as a default group`;
-    case "BASELINE_APPROVAL":
-      return `Baseline approval for realm ${nameOrId(realmName, null)}`;
     case "REQUEST_SERVER_CERT":
       return `Request a server certificate`;
     case "INSTALL_LICENSE":
