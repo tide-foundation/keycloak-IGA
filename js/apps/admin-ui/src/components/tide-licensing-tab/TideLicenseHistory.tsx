@@ -18,7 +18,6 @@ import {
   EmptyStateHeader,
   EmptyStateBody,
   Button,
-  Spinner,
   AlertVariant,
 } from "@patternfly/react-core";
 import { InfoCircleIcon } from "@patternfly/react-icons";
@@ -134,7 +133,7 @@ function parseLicenseData(raw: any): null | { gVRK?: string; [k: string]: any } 
 }
 
 const isActionableStatus = (status: string) =>
-  /^(upcoming\s*renewal|active)$/i.test((status || "").trim());
+  /^active$/i.test((status || "").trim());
 
 export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
   licenseList,
@@ -172,31 +171,6 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
 
   const setRowLoading = (key: string, v: boolean) =>
     setLoading((prev) => ({ ...prev, [key]: v }));
-
-  // SIGN
-  const handleSign = async (row: (typeof rows)[number]) => {
-    try {
-      setRowLoading(row.key, true);
-      const parsed = parseLicenseData(row.original.licenseData);
-      const gvrk = parsed?.gVRK?.toString?.().trim();
-
-      const message: string | void = await adminClient.tideAdmin.licenseProvider({
-        gvrk, // optional, send if present
-      });
-
-      addAlert(
-        t(
-          "LicensingSigningReviewCreated",
-          message || "Request to sign new license created"
-        ),
-        AlertVariant.success
-      );
-    } catch (error: any) {
-      addError("signingNewLicenseError", error);
-    } finally {
-      setRowLoading(row.key, false);
-    }
-  };
 
   // SWITCH
   const handleSwitch = async (row: (typeof rows)[number]) => {
@@ -284,7 +258,7 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
             <Th width={40}>License</Th>
             <Th>Status</Th>
             <Th>
-              Date{" "}
+              Expires{" "}
               <Tooltip
                 content={
                   <>
@@ -345,7 +319,7 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
                   </Label>
                 </Td>
 
-                <Td dataLabel="Date">
+                <Td dataLabel="Expires">
                   {r.hasValidDate ? (
                     <Tooltip
                       content={
@@ -362,7 +336,7 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
                         </>
                       }
                     >
-                      <span aria-label={`Local date ${r.local}`}>
+                      <span aria-label={`Expires ${r.local}`}>
                         {r.local}{" "}
                         <span
                           style={{ opacity: 0.75, fontSize: "0.85em", marginLeft: 6 }}
@@ -382,20 +356,11 @@ export const TideLicenseHistory: React.FC<TideLicenseHistoryProps> = ({
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
+                        gridTemplateColumns: "1fr",
                         gap: 8,
-                        minWidth: 180,
+                        minWidth: 90,
                       }}
                     >
-                      <Button
-                        variant="primary"
-                        onClick={() => handleSign(r)}
-                        aria-label="Sign license"
-                        style={{ width: "100%" }}
-                        isDisabled={isBusy}
-                      >
-                        {isBusy ? <Spinner size="sm" /> : "Sign"}
-                      </Button>
                       <Button
                         variant="secondary"
                         onClick={() => handleSwitch(r)}
