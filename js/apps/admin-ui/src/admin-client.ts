@@ -3,8 +3,8 @@ import {
   createNamedContext,
   useRequiredContext,
 } from "@keycloak/keycloak-ui-shared";
-import type { TideCloak } from "@tidecloak/js"; // TIDECLOAK IMPLEMENTATION
-import type { Environment } from "./environment";
+import type Keycloak from "keycloak-js";
+import type { Environment } from "./environment-types";
 
 export type AdminClientProps = {
   keycloak: TideCloak; // TIDECLOAK IMPLEMENTATION
