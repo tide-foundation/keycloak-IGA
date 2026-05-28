@@ -89,6 +89,7 @@ import { JWTAuthorizationGrantAssertionSettings } from "./JWTAuthorizationGrantA
 import JWTAuthorizationGrantSettings from "./JWTAuthorizationGrantSettings";
 import { DefaultSwitchControl } from "../../components/SwitchControl";
 import { GroupResourceContext } from "../../context/group-resource/GroupResourceContext";
+import DefaultTrustSettings from "./DefaultTrustSettings";
 
 type HeaderProps = {
   onChange: (value: boolean) => void;
@@ -638,6 +639,7 @@ export default function DetailSettings() {
   const isJWTAuthorizationGrant = provider.providerId!.includes(
     "jwt-authorization-grant",
   );
+  const isDefaultTrust = provider.providerId === "default-trust";
   const isSocial = !isOIDC && !isSAML && !isOAuth2;
   const isJWTAuthorizationGrantSupported =
     (isOAuth2 || isOIDC) &&
@@ -698,7 +700,8 @@ export default function DetailSettings() {
   const sections = [
     {
       title: t("generalSettings"),
-      isHidden: isSPIFFE || isKubernetes || isJWTAuthorizationGrant,
+      isHidden:
+        isSPIFFE || isKubernetes || isJWTAuthorizationGrant || isDefaultTrust,
       panel: (
         <FormAccess
           role="manage-identity-providers"
@@ -918,6 +921,25 @@ export default function DetailSettings() {
       ),
     },
     {
+      title: t("generalSettings"),
+      isHidden: !isDefaultTrust,
+      panel: (
+        <Form
+          isHorizontal
+          className="pf-v5-u-py-lg"
+          onSubmit={handleSubmit(save)}
+        >
+          <DefaultTrustSettings />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
+        </Form>
+      ),
+    },
+    {
       title: t("samlSettings"),
       isHidden: !isSAML,
       panel: <DescriptorSettings readOnly={false} />,
@@ -937,7 +959,8 @@ export default function DetailSettings() {
     },
     {
       title: t("advancedSettings"),
-      isHidden: isSPIFFE || isKubernetes || isJWTAuthorizationGrant,
+      isHidden:
+        isSPIFFE || isKubernetes || isJWTAuthorizationGrant || isDefaultTrust,
       panel: (
         <FormAccess
           role="manage-identity-providers"
@@ -996,7 +1019,12 @@ export default function DetailSettings() {
           </Tab>
           <Tab
             id="mappers"
-            isHidden={isSPIFFE || isKubernetes || isJWTAuthorizationGrant}
+            isHidden={
+              isSPIFFE ||
+              isKubernetes ||
+              isJWTAuthorizationGrant ||
+              isDefaultTrust
+            }
             data-testid="mappers-tab"
             title={<TabTitleText>{t("mappers")}</TabTitleText>}
             {...mappersTab}
