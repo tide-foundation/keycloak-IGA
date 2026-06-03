@@ -30,7 +30,7 @@ import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaC
 import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 import type IgaComment from "@keycloak/keycloak-admin-client/lib/defs/igaCommentRepresentation";
 
-import { canApprove } from "./canApprove";
+import { canApprove, blockedReasonOf } from "./canApprove";
 import {
   actionTypeLabel,
   entityTypeLabel,
@@ -169,9 +169,7 @@ export function ChangeRequestsDetail({
       }`
     : "";
 
-  const blockedReason =
-    cr?.blockedReason ||
-    "Blocked: a prerequisite change request must be committed first";
+  const blockedReason = cr ? blockedReasonOf(cr) : "";
 
   // Pick the most useful primary CTA: Commit > Authorize. Never both.
   // A blocked CR can be neither authorized nor committed until its
