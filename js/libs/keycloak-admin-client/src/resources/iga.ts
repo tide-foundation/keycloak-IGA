@@ -2,7 +2,11 @@
 import type { KeycloakAdminClient } from "../client.js";
 import Resource from "./resource.js";
 import type IgaChangeRequest from "../defs/igaChangeRequestRepresentation.js";
-import type { IgaChangeRequestStatus } from "../defs/igaChangeRequestRepresentation.js";
+import type {
+  IgaChangeRequestStatus,
+  IgaApprovalModel,
+  IgaApprovalSubmitResult,
+} from "../defs/igaChangeRequestRepresentation.js";
 import type IgaComment from "../defs/igaCommentRepresentation.js";
 import type ClientRepresentation from "../defs/clientRepresentation.js";
 import type { PendingChangeRequest } from "../utils/pendingChangeRequest.js";
@@ -59,6 +63,41 @@ export class Iga extends Resource<{ realm?: string }> {
   public signPreview = this.makeRequest<{ id: string }, unknown>({
     method: "POST",
     path: "/iga/change-requests/{id}/first-admin-sign-preview",
+    urlParamKeys: ["id"],
+  });
+
+  /**
+   * Phase 1 of the multiAdmin two-phase approval round-trip.
+   *
+   * Fetches the `Policy:1` `ModelRequest` the approving admin must hand to the
+   * Heimdall enclave. `requestModel` is Base64; the UI decodes it to bytes,
+   * runs `approveTideRequests`, then submits the doken-embedded result back via
+   * {@link submitApprovalModel}. `requiresApprovalPopup` tells the UI whether
+   * this CR actually takes the two-phase path (multiAdmin) or the legacy
+   * single-phase `authorize` path (firstAdmin). `realm` is supplied as the base
+   * url param from `client.realmName`, so only `id` is templated here.
+   */
+  public getApprovalModel = this.makeRequest<{ id: string }, IgaApprovalModel>({
+    method: "GET",
+    path: "/iga/change-requests/{id}/approval-model",
+    urlParamKeys: ["id"],
+  });
+
+  /**
+   * Phase 2 of the multiAdmin two-phase approval round-trip.
+   *
+   * Submits the doken+approval-embedded model (Base64) the enclave produced
+   * from {@link getApprovalModel}'s `requestModel`. `id` is templated into the
+   * path; the remaining `{ requestModel }` becomes the JSON body. Returns the
+   * recorded authorization progress — when `readyForCommit` is `true` the
+   * existing commit flow can run.
+   */
+  public submitApprovalModel = this.makeRequest<
+    { id: string; requestModel: string },
+    IgaApprovalSubmitResult
+  >({
+    method: "POST",
+    path: "/iga/change-requests/{id}/approval-model",
     urlParamKeys: ["id"],
   });
 

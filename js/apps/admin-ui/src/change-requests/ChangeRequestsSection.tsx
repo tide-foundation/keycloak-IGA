@@ -20,6 +20,7 @@ import {
 import { QuestionCircleIcon } from "@patternfly/react-icons";
 import {
   useAlerts,
+  useEnvironment,
   KeycloakDataTable,
   ListEmptyState,
 } from "@keycloak/keycloak-ui-shared";
@@ -42,6 +43,7 @@ import {
   authorizeTip,
   commitTip,
 } from "./canApprove";
+import { runMultiAdminApproval } from "./approvalModel";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
 import { useCurrentUsername } from "./useCurrentUsername";
 import {
@@ -264,6 +266,7 @@ function ChangeRequestsToolbar({
 export default function ChangeRequestsSection() {
   const { adminClient } = useAdminClient();
   const { addAlert, addError } = useAlerts();
+  const { approveTideRequests } = useEnvironment();
   const userRoles = useCurrentUserRoles();
   const username = useCurrentUsername();
 
@@ -377,6 +380,39 @@ export default function ChangeRequestsSection() {
   const skippedFromAuthorize = selected.length - authorizableSelection.length;
   const skippedFromCommit = selected.length - committableSelection.length;
 
+  /* ---- authorize one CR (two-phase multiAdmin or single-phase) ----
+     multiAdmin CRs take the enclave round-trip via /approval-model;
+     firstAdmin / single-phase CRs report `singlePhase` and fall through to
+     the plain authorize call. Returns a user-facing success message, or
+     throws for transport/enclave errors and for an enclave denial (so bulk
+     records it as a failure). Shared by the row action and the bulk loop. */
+
+  const authorizeOne = useCallback(
+    async (cr: IgaChangeRequest): Promise<string> => {
+      const outcome = await runMultiAdminApproval(
+        adminClient,
+        approveTideRequests,
+        cr.id,
+      );
+      if (outcome.kind === "denied") {
+        throw new Error("Approval was denied in the enclave.");
+      }
+      if (outcome.kind === "pending") {
+        return "Approval pending — awaiting other operators.";
+      }
+      if (outcome.kind === "recorded") {
+        const { authCount, threshold, readyForCommit } = outcome.result;
+        return readyForCommit
+          ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
+          : `Approved — ${authCount} of ${threshold}.`;
+      }
+      // singlePhase: legacy one-call authorize.
+      await adminClient.iga.authorize({ id: cr.id });
+      return "Change request authorized.";
+    },
+    [adminClient, approveTideRequests],
+  );
+
   /* ---- bulk authorize ---- */
 
   const [toggleAuthorizeDialog, AuthorizeConfirm] = useConfirmDialog({
@@ -402,7 +438,9 @@ export default function ChangeRequestsSection() {
       const results: BulkResult[] = [];
       for (const cr of authorizableSelection) {
         try {
-          await adminClient.iga.authorize({ id: cr.id });
+          // Two-phase multiAdmin enclave round-trip when required, else the
+          // legacy single-phase authorize (see authorizeOne).
+          await authorizeOne(cr);
           results.push({ id: cr.id, ok: true });
         } catch (err) {
           results.push({ id: cr.id, ok: false, message: errorMessage(err) });
@@ -499,8 +537,8 @@ export default function ChangeRequestsSection() {
       if (!isAuthorizable(cr, userRoles, username)) return;
       setIsProcessing(true);
       try {
-        await adminClient.iga.authorize({ id: cr.id });
-        addAlert("Change request authorized.", AlertVariant.success);
+        const message = await authorizeOne(cr);
+        addAlert(message, AlertVariant.success);
         refresh();
       } catch (err) {
         addError(
@@ -511,7 +549,7 @@ export default function ChangeRequestsSection() {
         setIsProcessing(false);
       }
     },
-    [adminClient, userRoles, username, addAlert, addError, refresh],
+    [authorizeOne, userRoles, username, addAlert, addError, refresh],
   );
 
   const onCommitRow = useCallback(

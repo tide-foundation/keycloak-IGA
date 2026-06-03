@@ -22,7 +22,7 @@ import {
   TextContent,
   Tooltip,
 } from "@patternfly/react-core";
-import { useAlerts } from "@keycloak/keycloak-ui-shared";
+import { useAlerts, useEnvironment } from "@keycloak/keycloak-ui-shared";
 
 import { useAdminClient } from "../admin-client";
 
@@ -31,6 +31,7 @@ import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-cli
 import type IgaComment from "@keycloak/keycloak-admin-client/lib/defs/igaCommentRepresentation";
 
 import { canApprove, blockedReasonOf } from "./canApprove";
+import { runMultiAdminApproval } from "./approvalModel";
 import {
   actionTypeLabel,
   entityTypeLabel,
@@ -71,6 +72,7 @@ export function ChangeRequestsDetail({
 }: Props) {
   const { adminClient } = useAdminClient();
   const { addAlert, addError } = useAlerts();
+  const { approveTideRequests } = useEnvironment();
 
   const [cr, setCr] = useState<IgaChangeRequest | null>(null);
   const [comments, setComments] = useState<IgaComment[]>([]);
@@ -100,6 +102,38 @@ export function ChangeRequestsDetail({
     if (!cr) return;
     setIsWorking(true);
     try {
+      // multiAdmin CRs take a two-phase enclave round-trip via /approval-model;
+      // firstAdmin / single-phase CRs report `singlePhase` and fall through to
+      // the plain authorize call below.
+      const outcome = await runMultiAdminApproval(
+        adminClient,
+        approveTideRequests,
+        cr.id,
+      );
+      if (outcome.kind === "denied") {
+        addAlert("Approval was denied in the enclave.", AlertVariant.warning);
+        return;
+      }
+      if (outcome.kind === "pending") {
+        addAlert(
+          "Approval is pending — awaiting other operators.",
+          AlertVariant.info,
+        );
+        onChanged();
+        return;
+      }
+      if (outcome.kind === "recorded") {
+        const { authCount, threshold, readyForCommit } = outcome.result;
+        addAlert(
+          readyForCommit
+            ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
+            : `Approved — ${authCount} of ${threshold}.`,
+          AlertVariant.success,
+        );
+        onChanged();
+        return;
+      }
+      // singlePhase: legacy one-call authorize.
       await adminClient.iga.authorize({ id: cr.id });
       addAlert("Change request authorized.", AlertVariant.success);
       onChanged();
