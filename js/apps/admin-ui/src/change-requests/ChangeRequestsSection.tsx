@@ -35,7 +35,13 @@ import type {
   IgaCrAuthorizerRepresentation,
 } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
-import { canApprove } from "./canApprove";
+import {
+  canApprove,
+  isAuthorizable,
+  isCommittable,
+  authorizeTip,
+  commitTip,
+} from "./canApprove";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
 import { useCurrentUsername } from "./useCurrentUsername";
 import {
@@ -63,12 +69,6 @@ type BulkResult = {
   ok: boolean;
   message?: string;
 };
-
-function hasSigned(cr: IgaChangeRequest, username: string): boolean {
-  if (!username) return false;
-  const authorizers: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
-  return authorizers.some((a) => a.username === username);
-}
 
 function RequiredRolesCell({ cr }: { cr: IgaChangeRequest }) {
   const roles = cr.requiredApproverRoles ?? [];
@@ -367,25 +367,11 @@ export default function ChangeRequestsSection() {
   /* ---- selection-derived counts ---- */
 
   const authorizableSelection = useMemo(
-    () =>
-      selected.filter(
-        (cr) =>
-          cr.status === "PENDING" &&
-          !cr.blocked &&
-          canApprove(cr, userRoles) &&
-          !hasSigned(cr, username),
-      ),
+    () => selected.filter((cr) => isAuthorizable(cr, userRoles, username)),
     [selected, userRoles, username],
   );
   const committableSelection = useMemo(
-    () =>
-      selected.filter(
-        (cr) =>
-          cr.status === "PENDING" &&
-          !cr.blocked &&
-          canApprove(cr, userRoles) &&
-          cr.readyToCommit,
-      ),
+    () => selected.filter((cr) => isCommittable(cr, userRoles)),
     [selected, userRoles],
   );
   const skippedFromAuthorize = selected.length - authorizableSelection.length;
@@ -510,7 +496,7 @@ export default function ChangeRequestsSection() {
 
   const onAuthorizeRow = useCallback(
     async (cr: IgaChangeRequest) => {
-      if (!canApprove(cr, userRoles) || hasSigned(cr, username)) return;
+      if (!isAuthorizable(cr, userRoles, username)) return;
       setIsProcessing(true);
       try {
         await adminClient.iga.authorize({ id: cr.id });
@@ -530,7 +516,7 @@ export default function ChangeRequestsSection() {
 
   const onCommitRow = useCallback(
     async (cr: IgaChangeRequest) => {
-      if (!canApprove(cr, userRoles) || !cr.readyToCommit) return;
+      if (!isCommittable(cr, userRoles)) return;
       setIsProcessing(true);
       try {
         await adminClient.iga.commit({ id: cr.id });
@@ -616,21 +602,9 @@ export default function ChangeRequestsSection() {
       if (cr.status !== "PENDING") return actions;
 
       const isApprover = canApprove(cr, userRoles);
-      const alreadySigned = hasSigned(cr, username);
-
-      const blockedTip =
-        cr.blockedReason ||
-        "Blocked: a prerequisite change request must be committed first";
 
       // Authorize
-      let authTip: string | null = null;
-      if (cr.blocked) {
-        authTip = blockedTip;
-      } else if (!isApprover) {
-        authTip = "You are not in the required approver role(s)";
-      } else if (alreadySigned) {
-        authTip = "You have already signed this change request";
-      }
+      const authTip = authorizeTip(cr, userRoles, username);
       actions.push({
         title: "Authorize",
         isDisabled: !!authTip || isProcessing,
@@ -641,19 +615,12 @@ export default function ChangeRequestsSection() {
       });
 
       // Commit
-      let commitTip: string | null = null;
-      if (cr.blocked) {
-        commitTip = blockedTip;
-      } else if (!isApprover) {
-        commitTip = "You are not in the required approver role(s)";
-      } else if (!cr.readyToCommit) {
-        commitTip = `Threshold not met (${cr.authCount}/${cr.threshold})`;
-      }
+      const cTip = commitTip(cr, userRoles);
       actions.push({
         title: "Commit",
-        isDisabled: !!commitTip || isProcessing,
-        tooltipProps: commitTip
-          ? { content: commitTip }
+        isDisabled: !!cTip || isProcessing,
+        tooltipProps: cTip
+          ? { content: cTip }
           : { content: "Threshold met — apply this change now." },
         onClick: () => {
           void onCommitRow(cr);
