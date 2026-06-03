@@ -169,12 +169,23 @@ export function ChangeRequestsDetail({
       }`
     : "";
 
+  const blockedReason =
+    cr?.blockedReason ||
+    "Blocked: a prerequisite change request must be committed first";
+
   // Pick the most useful primary CTA: Commit > Authorize. Never both.
+  // A blocked CR can be neither authorized nor committed until its
+  // prerequisites are committed, so suppress both active CTAs.
   const showCommitCta =
-    !!cr && cr.status === "PENDING" && approvable && cr.readyToCommit;
+    !!cr &&
+    cr.status === "PENDING" &&
+    !cr.blocked &&
+    approvable &&
+    cr.readyToCommit;
   const showAuthorizeCta =
     !!cr &&
     cr.status === "PENDING" &&
+    !cr.blocked &&
     approvable &&
     !cr.readyToCommit &&
     !alreadySigned;
@@ -215,7 +226,9 @@ export function ChangeRequestsDetail({
     // Disabled placeholder with a tooltip explaining why.
     if (cr.status !== "PENDING") return null;
     let tip = requiredRolesText || "Cannot act on this change request";
-    if (approvable && alreadySigned && !cr.readyToCommit) {
+    if (cr.blocked) {
+      tip = blockedReason;
+    } else if (approvable && alreadySigned && !cr.readyToCommit) {
       tip = "You have already signed; awaiting other approvers.";
     } else if (approvable && !cr.readyToCommit) {
       tip = `Threshold not met (${cr.authCount}/${cr.threshold})`;

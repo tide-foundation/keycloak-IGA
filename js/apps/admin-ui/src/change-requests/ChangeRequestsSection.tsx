@@ -371,6 +371,7 @@ export default function ChangeRequestsSection() {
       selected.filter(
         (cr) =>
           cr.status === "PENDING" &&
+          !cr.blocked &&
           canApprove(cr, userRoles) &&
           !hasSigned(cr, username),
       ),
@@ -381,6 +382,7 @@ export default function ChangeRequestsSection() {
       selected.filter(
         (cr) =>
           cr.status === "PENDING" &&
+          !cr.blocked &&
           canApprove(cr, userRoles) &&
           cr.readyToCommit,
       ),
@@ -616,9 +618,15 @@ export default function ChangeRequestsSection() {
       const isApprover = canApprove(cr, userRoles);
       const alreadySigned = hasSigned(cr, username);
 
+      const blockedTip =
+        cr.blockedReason ||
+        "Blocked: a prerequisite change request must be committed first";
+
       // Authorize
       let authTip: string | null = null;
-      if (!isApprover) {
+      if (cr.blocked) {
+        authTip = blockedTip;
+      } else if (!isApprover) {
         authTip = "You are not in the required approver role(s)";
       } else if (alreadySigned) {
         authTip = "You have already signed this change request";
@@ -634,7 +642,9 @@ export default function ChangeRequestsSection() {
 
       // Commit
       let commitTip: string | null = null;
-      if (!isApprover) {
+      if (cr.blocked) {
+        commitTip = blockedTip;
+      } else if (!isApprover) {
         commitTip = "You are not in the required approver role(s)";
       } else if (!cr.readyToCommit) {
         commitTip = `Threshold not met (${cr.authCount}/${cr.threshold})`;

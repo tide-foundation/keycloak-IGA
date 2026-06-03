@@ -27,4 +27,7 @@ export default interface IgaChangeRequest {
   denyReason: string | null;
   authorizers: IgaCrAuthorizerRepresentation[];
   readyToCommit: boolean;
+  dependsOn?: string[];
+  blocked?: boolean;
+  blockedReason?: string;
 }
