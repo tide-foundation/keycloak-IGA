@@ -4,6 +4,8 @@ import Resource from "./resource.js";
 import type IgaChangeRequest from "../defs/igaChangeRequestRepresentation.js";
 import type { IgaChangeRequestStatus } from "../defs/igaChangeRequestRepresentation.js";
 import type IgaComment from "../defs/igaCommentRepresentation.js";
+import type ClientRepresentation from "../defs/clientRepresentation.js";
+import type { PendingChangeRequest } from "../utils/pendingChangeRequest.js";
 
 export class Iga extends Resource<{ realm?: string }> {
   public listChangeRequests = this.makeRequest<
@@ -58,6 +60,25 @@ export class Iga extends Resource<{ realm?: string }> {
     method: "POST",
     path: "/iga/change-requests/{id}/first-admin-sign-preview",
     urlParamKeys: ["id"],
+  });
+
+  /**
+   * Capture a client-create for IGA approval instead of creating it natively.
+   *
+   * Sends the full `ClientRepresentation` as the JSON body to the backend
+   * IGA capture endpoint. The backend responds with HTTP 202 and a
+   * `PendingChangeRequest` envelope, which the shared Agent request layer
+   * detects (status 202 + keys-based `pendingChangeRequestFromResponse`) and
+   * surfaces verbatim — identical to the existing F1 model-path behaviour.
+   * `realm` is a base url param (supplied from `client.realmName`) so it is
+   * stripped from the JSON body by the Agent and never pollutes the payload.
+   */
+  public captureCreateClient = this.makeRequest<
+    ClientRepresentation,
+    PendingChangeRequest
+  >({
+    method: "POST",
+    path: "/iga/capture/clients",
   });
 
   constructor(client: KeycloakAdminClient) {
