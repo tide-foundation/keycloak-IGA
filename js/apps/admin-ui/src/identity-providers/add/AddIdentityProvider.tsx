@@ -5,14 +5,14 @@ import {
   Button,
   PageSection,
   Grid,
-  GridItem
+  GridItem,
 } from "@patternfly/react-core";
-import { useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { useAdminClient } from "../../admin-client";
-import { useAlerts } from "@keycloak/keycloak-ui-shared";
+import { TextControl, useAlerts } from "@keycloak/keycloak-ui-shared";
 import { DynamicComponents } from "../../components/dynamic/DynamicComponents";
 import { FormAccess } from "../../components/form/FormAccess";
 import { ViewHeader } from "../../components/view-header/ViewHeader";
@@ -24,14 +24,19 @@ import { toIdentityProvider } from "../routes/IdentityProvider";
 import type { IdentityProviderCreateParams } from "../routes/IdentityProviderCreate";
 import { toIdentityProviders } from "../routes/IdentityProviders";
 import { GeneralSettings } from "./GeneralSettings";
-import { findTideComponent } from "../utils/SignSettingsUtil";
+
+/** TIDECLOAK IMPLEMENTATION: extra (non-IdP) form field carrying the licensing
+ * email that `setUpTideRealm` requires for the free-tier Stripe customer. */
+type AddIdentityProviderForm = IdentityProviderRepresentation & {
+  tideLicenseEmail?: string;
+};
 
 export default function AddIdentityProvider() {
   const { adminClient } = useAdminClient();
 
   const { t } = useTranslation();
   const { providerId } = useParams<IdentityProviderCreateParams>();
-  const form = useForm<IdentityProviderRepresentation>({ mode: "onChange" });
+  const form = useForm<AddIdentityProviderForm>({ mode: "onChange" });
   const serverInfo = useServerInfo();
 
   const providerInfo = useMemo(() => {
@@ -58,52 +63,44 @@ export default function AddIdentityProvider() {
 
   const { addAlert, addError } = useAlerts();
   const navigate = useNavigate();
-  const { realm, realmRepresentation } = useRealm();
+  const { realm } = useRealm();
 
   /** TIDECLOAK IMPLEMENTATION START */
-  const currentHost = window.location.origin;
-  const backgroundUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/BACKGROUND_IMAGE`;
-  const logoUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/LOGO`;
-
-  useEffect(() => {
-    const signSettings = async () => {
-      const tideComponent = await findTideComponent(adminClient, realm);
-
-      if (tideComponent) {
-        try {
-          await adminClient.tideAdmin.signIdpSettings();
-        } catch (error) {
-          addError("SignSettingsError", error);
-        }
-      }
-
-    }
-    const doStuff = async () => {
-      const changeSetEndpoint = `${window.location.origin}`
-
-      form.setValue("config.ImageURL", backgroundUrl);
-      form.setValue("config.LogoURL", logoUrl);
-      form.setValue("config.clientSecret", "null");
-      form.setValue("config.changeSetEndpoint", changeSetEndpoint);
+  // For the `tide` provider, do NOT create the IdP piecemeal (toggle-ragnarok +
+  // identityProviders.create + sign-idp-settings + paid Stripe checkout). Instead
+  // call the backend `setUpTideRealm` endpoint once: it creates the `tide` IdP,
+  // the tide-vendor-key component, acquires the free-tier license, and signs the
+  // IdP settings in a single shot. It needs a (licensing/Stripe-customer) email,
+  // which is collected via a required form field below.
+  const setUpTideRealm = async (provider: AddIdentityProviderForm) => {
+    try {
       const data = new FormData();
+      data.append("email", provider.tideLicenseEmail ?? "");
       data.append("isRagnarokEnabled", "true");
-      await adminClient.tideAdmin.toggleRagnarok(data)
-      form.setValue("config.backupOn", "true");
-    };
+      await adminClient.tideAdmin.setUpTideRealm(data);
 
-    const handleSubmit = async () => {
-      if (providerId === "tide") {
-        await doStuff();
-        onSubmit(form.getValues());
-        await signSettings();
-      }
-    };
-
-    handleSubmit();
-  }, [providerId]);
+      addAlert(t("createIdentityProviderSuccess"), AlertVariant.success);
+      navigate(
+        toIdentityProvider({
+          realm,
+          providerId,
+          alias: provider.alias!,
+          tab: "settings",
+        }),
+      );
+    } catch (error) {
+      addError("createError", error);
+    }
+  };
   /** TIDECLOAK IMPLEMENTATION END */
 
-  const onSubmit = async (provider: IdentityProviderRepresentation) => {
+  const onSubmit = async (provider: AddIdentityProviderForm) => {
+    /** TIDECLOAK IMPLEMENTATION START */
+    if (providerId === "tide") {
+      await setUpTideRealm(provider);
+      return;
+    }
+    /** TIDECLOAK IMPLEMENTATION END */
     try {
       await adminClient.identityProviders.create({
         ...provider,
@@ -113,8 +110,6 @@ export default function AddIdentityProvider() {
         providerId,
         alias: provider.alias!,
       });
-
-      /** TIDECLOAK IMPLEMENTATION END */
 
       addAlert(t("createIdentityProviderSuccess"), AlertVariant.success);
       navigate(
@@ -154,6 +149,17 @@ export default function AddIdentityProvider() {
             >
               <FormProvider {...form}>
                 <GeneralSettings id={providerId} />
+                {/* TIDECLOAK IMPLEMENTATION: licensing email for setUpTideRealm */}
+                {providerId === "tide" && (
+                  <TextControl
+                    name="tideLicenseEmail"
+                    label={t("email")}
+                    type="email"
+                    rules={{
+                      required: t("required"),
+                    }}
+                  />
+                )}
                 {providerInfo && (
                   <DynamicComponents
                     stringify
@@ -163,7 +169,7 @@ export default function AddIdentityProvider() {
                 )}
               </FormProvider>
               <ActionGroup>
-                {providerId !== "tide" && (<Button
+                <Button
                   isDisabled={!isValid}
                   variant="primary"
                   type="submit"
@@ -171,7 +177,6 @@ export default function AddIdentityProvider() {
                 >
                   {t("add")}
                 </Button>
-                )}
                 <Button
                   variant="link"
                   data-testid="cancel"
