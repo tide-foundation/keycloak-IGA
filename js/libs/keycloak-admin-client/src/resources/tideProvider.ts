@@ -59,9 +59,11 @@ export class TideProvider extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
-  // Provisions a Tide realm end-to-end: creates the `tide` IdP, the
-  // tide-vendor-key component, acquires the free-tier license, and signs the
-  // IdP settings. Backend reads @FormParam("email") + @FormParam("isRagnarokEnabled").
+  // Provisions a Tide realm: creates the `tide` IdP, the tide-vendor-key
+  // component, and signs the IdP settings. With `skipLicense=true` no license is
+  // acquired (licensing is a separate manual Stripe Checkout step). Backend reads
+  // @FormParam("skipLicense") + @FormParam("isRagnarokEnabled") (+ @FormParam("email")
+  // only when licensing is requested). Generic FormData passthrough — no fields hardcoded.
   public setUpTideRealm = this.makeRequest<FormData, Response>({
     method: "POST",
     path: "/vendorResources/setUpTideRealm",

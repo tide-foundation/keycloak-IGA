@@ -12,7 +12,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { useAdminClient } from "../../admin-client";
-import { TextControl, useAlerts } from "@keycloak/keycloak-ui-shared";
+import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { DynamicComponents } from "../../components/dynamic/DynamicComponents";
 import { FormAccess } from "../../components/form/FormAccess";
 import { ViewHeader } from "../../components/view-header/ViewHeader";
@@ -25,18 +25,12 @@ import type { IdentityProviderCreateParams } from "../routes/IdentityProviderCre
 import { toIdentityProviders } from "../routes/IdentityProviders";
 import { GeneralSettings } from "./GeneralSettings";
 
-/** TIDECLOAK IMPLEMENTATION: extra (non-IdP) form field carrying the licensing
- * email that `setUpTideRealm` requires for the free-tier Stripe customer. */
-type AddIdentityProviderForm = IdentityProviderRepresentation & {
-  tideLicenseEmail?: string;
-};
-
 export default function AddIdentityProvider() {
   const { adminClient } = useAdminClient();
 
   const { t } = useTranslation();
   const { providerId } = useParams<IdentityProviderCreateParams>();
-  const form = useForm<AddIdentityProviderForm>({ mode: "onChange" });
+  const form = useForm<IdentityProviderRepresentation>({ mode: "onChange" });
   const serverInfo = useServerInfo();
 
   const providerInfo = useMemo(() => {
@@ -67,15 +61,16 @@ export default function AddIdentityProvider() {
 
   /** TIDECLOAK IMPLEMENTATION START */
   // For the `tide` provider, do NOT create the IdP piecemeal (toggle-ragnarok +
-  // identityProviders.create + sign-idp-settings + paid Stripe checkout). Instead
-  // call the backend `setUpTideRealm` endpoint once: it creates the `tide` IdP,
-  // the tide-vendor-key component, acquires the free-tier license, and signs the
-  // IdP settings in a single shot. It needs a (licensing/Stripe-customer) email,
-  // which is collected via a required form field below.
-  const setUpTideRealm = async (provider: AddIdentityProviderForm) => {
+  // identityProviders.create + sign-idp-settings). Instead call the backend
+  // `setUpTideRealm` endpoint once with `skipLicense=true`: it creates the
+  // `tide` IdP, the tide-vendor-key component, and signs the IdP settings —
+  // WITHOUT acquiring a license. Licensing is a separate, manual Stripe Checkout
+  // step performed later from the licensing tab (where Stripe collects the email
+  // and T&Cs), so no email is collected here.
+  const setUpTideRealm = async (provider: IdentityProviderRepresentation) => {
     try {
       const data = new FormData();
-      data.append("email", provider.tideLicenseEmail ?? "");
+      data.append("skipLicense", "true");
       data.append("isRagnarokEnabled", "true");
       await adminClient.tideAdmin.setUpTideRealm(data);
 
@@ -94,7 +89,7 @@ export default function AddIdentityProvider() {
   };
   /** TIDECLOAK IMPLEMENTATION END */
 
-  const onSubmit = async (provider: AddIdentityProviderForm) => {
+  const onSubmit = async (provider: IdentityProviderRepresentation) => {
     /** TIDECLOAK IMPLEMENTATION START */
     if (providerId === "tide") {
       await setUpTideRealm(provider);
@@ -149,17 +144,6 @@ export default function AddIdentityProvider() {
             >
               <FormProvider {...form}>
                 <GeneralSettings id={providerId} />
-                {/* TIDECLOAK IMPLEMENTATION: licensing email for setUpTideRealm */}
-                {providerId === "tide" && (
-                  <TextControl
-                    name="tideLicenseEmail"
-                    label={t("email")}
-                    type="email"
-                    rules={{
-                      required: t("required"),
-                    }}
-                  />
-                )}
                 {providerInfo && (
                   <DynamicComponents
                     stringify
