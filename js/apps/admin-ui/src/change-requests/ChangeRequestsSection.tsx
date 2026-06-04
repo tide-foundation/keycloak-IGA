@@ -380,12 +380,15 @@ export default function ChangeRequestsSection() {
   const skippedFromAuthorize = selected.length - authorizableSelection.length;
   const skippedFromCommit = selected.length - committableSelection.length;
 
-  /* ---- authorize one CR (two-phase multiAdmin or single-phase) ----
-     multiAdmin CRs take the enclave round-trip via /approval-model;
-     firstAdmin / single-phase CRs report `singlePhase` and fall through to
-     the plain authorize call. Returns a user-facing success message, or
-     throws for transport/enclave errors and for an enclave denial (so bulk
-     records it as a failure). Shared by the row action and the bulk loop. */
+  /* ---- approve one CR (two-phase multiAdmin or single-phase firstAdmin) ----
+     multiAdmin CRs take the enclave round-trip via /approval-model and only
+     record an approval toward threshold (commit stays a separate step).
+     firstAdmin / Tideless realms refuse /approval-model with 409
+     NOT_MULTI_ADMIN; runMultiAdminApproval detects that and runs the
+     single-phase authorize+commit itself, returning `committed`. Returns a
+     user-facing success message, or throws for transport/enclave errors and
+     for an enclave denial (so bulk records it as a failure). Shared by the row
+     action and the bulk loop. */
 
   const authorizeOne = useCallback(
     async (cr: IgaChangeRequest): Promise<string> => {
@@ -400,15 +403,15 @@ export default function ChangeRequestsSection() {
       if (outcome.kind === "pending") {
         return "Approval pending — awaiting other operators.";
       }
-      if (outcome.kind === "recorded") {
-        const { authCount, threshold, readyForCommit } = outcome.result;
-        return readyForCommit
-          ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
-          : `Approved — ${authCount} of ${threshold}.`;
+      if (outcome.kind === "committed") {
+        // firstAdmin single-phase: authorize + commit already ran.
+        return "Change request approved and committed.";
       }
-      // singlePhase: legacy one-call authorize.
-      await adminClient.iga.authorize({ id: cr.id });
-      return "Change request authorized.";
+      // recorded: multiAdmin two-phase approval counted toward threshold.
+      const { authCount, threshold, readyForCommit } = outcome.result;
+      return readyForCommit
+        ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
+        : `Approved — ${authCount} of ${threshold}.`;
     },
     [adminClient, approveTideRequests],
   );
@@ -439,7 +442,7 @@ export default function ChangeRequestsSection() {
       for (const cr of authorizableSelection) {
         try {
           // Two-phase multiAdmin enclave round-trip when required, else the
-          // legacy single-phase authorize (see authorizeOne).
+          // firstAdmin single-phase authorize+commit (see authorizeOne).
           await authorizeOne(cr);
           results.push({ id: cr.id, ok: true });
         } catch (err) {

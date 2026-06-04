@@ -1,6 +1,6 @@
 /** TIDECLOAK IMPLEMENTATION */
 //
-// M1b — multiAdmin two-phase change-request approval.
+// M1b — multiAdmin two-phase change-request approval (+ firstAdmin single-phase).
 //
 // A multiAdmin CR approval is an enclave round-trip against the iga server's
 // `/approval-model` endpoints:
@@ -13,15 +13,38 @@
 //   3. Base64-encode those bytes; POST them back to /approval-model
 //        -> { recorded, authCount, threshold, readyForCommit }.
 //
-// firstAdmin / legacy single-phase CRs are signalled by the server returning
-// `requiresApprovalPopup === false`; those keep the existing one-call
-// `iga.authorize({ id })` path (this helper reports `singlePhase` so the caller
-// can fall through).
+// firstAdmin / Tideless realms are NOT multiAdmin: the backend's
+// `GET /approval-model` REFUSES with HTTP 409 + body `{ error: "NOT_MULTI_ADMIN" }`
+// (see IgaAdminResource.getApprovalModel — it never returns
+// `requiresApprovalPopup === false`). We detect that 409 here and run the
+// single-phase flow instead: `POST .../authorize` then `POST .../commit`
+// (firstAdmin authorize does NOT auto-commit — commit is an explicit step).
+// This keeps the dual-mode branch UI-only, with no backend change.
 
 import type KeycloakAdminClient from "@keycloak/keycloak-admin-client";
 import type { IgaApprovalSubmitResult } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
+import { NetworkError } from "@keycloak/keycloak-admin-client";
 
 import { base64ToBytes, bytesToBase64 } from "../utils/tideSerialization";
+
+/**
+ * True when `err` is the backend's "this realm is not multiAdmin" refusal from
+ * `GET /iga/change-requests/{id}/approval-model`: HTTP 409 CONFLICT carrying a
+ * JSON body `{ error: "NOT_MULTI_ADMIN", ... }`. Any other failure (other 409s,
+ * 403, 404, network) must NOT be treated as a single-phase signal — it has to
+ * surface to the operator.
+ */
+function isNotMultiAdmin(err: unknown): boolean {
+  if (!(err instanceof NetworkError) || err.response.status !== 409) {
+    return false;
+  }
+  const data = err.responseData;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as { error?: unknown }).error === "NOT_MULTI_ADMIN"
+  );
+}
 
 /** The enclave approve entry point as exposed by `useEnvironment()`. */
 export type ApproveTideRequests = (
@@ -36,8 +59,13 @@ export type ApproveTideRequests = (
 >;
 
 export type ApprovalModelOutcome =
-  /** Server says this CR does not use the popup — caller runs `authorize`. */
-  | { kind: "singlePhase" }
+  /**
+   * firstAdmin / Tideless realm (server answered the two-phase probe with
+   * 409 NOT_MULTI_ADMIN): the helper has already run the single-phase
+   * `authorize` then `commit` and the change has been applied. The caller just
+   * shows a success message and refreshes.
+   */
+  | { kind: "committed" }
   /** The two-phase round-trip completed and the server recorded the approval. */
   | { kind: "recorded"; result: IgaApprovalSubmitResult }
   /** The operator denied the request in the enclave popup. */
@@ -59,12 +87,32 @@ export async function runMultiAdminApproval(
   changeRequestId: string,
 ): Promise<ApprovalModelOutcome> {
   // ── Phase 1: fetch the model the admin must approve ───────────────────
-  const model = await adminClient.iga.getApprovalModel({ id: changeRequestId });
+  //
+  // Probe the two-phase endpoint. firstAdmin / Tideless realms refuse with
+  // 409 NOT_MULTI_ADMIN — in that case run the single-phase authorize+commit
+  // flow. Any OTHER error (other 409s, 403, 404, transport) must propagate so
+  // the operator sees the real failure (don't swallow genuine errors).
+  let model;
+  try {
+    model = await adminClient.iga.getApprovalModel({ id: changeRequestId });
+  } catch (err) {
+    if (isNotMultiAdmin(err)) {
+      // firstAdmin single-phase: authorize, then commit (authorize alone does
+      // not apply the change — commit is an explicit second step server-side).
+      await adminClient.iga.authorize({ id: changeRequestId });
+      await adminClient.iga.commit({ id: changeRequestId });
+      return { kind: "committed" };
+    }
+    throw err;
+  }
 
-  // Legacy single-phase CR (firstAdmin): no enclave popup — let the caller
-  // fall back to the plain authorize path.
+  // Defensive: if a backend ever DID answer the probe with
+  // `requiresApprovalPopup === false` instead of a 409, treat it the same as
+  // the single-phase realm (authorize + commit).
   if (!model.requiresApprovalPopup) {
-    return { kind: "singlePhase" };
+    await adminClient.iga.authorize({ id: changeRequestId });
+    await adminClient.iga.commit({ id: changeRequestId });
+    return { kind: "committed" };
   }
 
   // ── Phase 2a: enclave approve (decode -> approve -> read result) ──────

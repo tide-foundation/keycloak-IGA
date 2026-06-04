@@ -1,5 +1,6 @@
 /** TIDECLOAK IMPLEMENTATION */
 
+import { NetworkError } from "@keycloak/keycloak-admin-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { base64ToBytes, bytesToBase64 } from "../utils/tideSerialization";
@@ -9,6 +10,14 @@ import {
 } from "./approvalModel";
 
 const CR_ID = "cr-42";
+
+/** Build a NetworkError as the admin-client throws it on a non-OK response. */
+function networkError(status: number, responseData: unknown): NetworkError {
+  return new NetworkError("request failed", {
+    response: { status } as Response,
+    responseData,
+  });
+}
 
 /** Distinct request / doken byte blobs so we can assert the round-trip. */
 const REQUEST_BYTES = new Uint8Array([1, 2, 3, 4, 5]);
@@ -44,26 +53,85 @@ function makeAdminClient(opts: {
     },
   );
   const authorize = vi.fn().mockResolvedValue({});
+  const commit = vi.fn().mockResolvedValue({});
   return {
     client: {
-      iga: { getApprovalModel, submitApprovalModel, authorize },
+      iga: { getApprovalModel, submitApprovalModel, authorize, commit },
     } as any,
     getApprovalModel,
     submitApprovalModel,
     authorize,
+    commit,
   };
 }
 
 describe("runMultiAdminApproval", () => {
-  it("returns singlePhase and does NOT touch the enclave when popup not required", async () => {
-    const { client, submitApprovalModel } = makeAdminClient({
+  it("firstAdmin (409 NOT_MULTI_ADMIN): runs authorize+commit and returns committed", async () => {
+    const { client, getApprovalModel, authorize, commit, submitApprovalModel } =
+      makeAdminClient({ approvalModel: { requiresApprovalPopup: true } });
+    // firstAdmin / Tideless realm refuses the two-phase probe.
+    getApprovalModel.mockRejectedValueOnce(
+      networkError(409, {
+        error: "NOT_MULTI_ADMIN",
+        message: "use the single-phase authorize/commit flow",
+      }),
+    );
+    const approve = vi.fn() as unknown as ApproveTideRequests;
+
+    const outcome = await runMultiAdminApproval(client, approve, CR_ID);
+
+    expect(outcome).toEqual({ kind: "committed" });
+    // Single-phase: authorize then commit, never the enclave or phase-2 submit.
+    expect(authorize).toHaveBeenCalledWith({ id: CR_ID });
+    expect(commit).toHaveBeenCalledWith({ id: CR_ID });
+    expect(approve).not.toHaveBeenCalled();
+    expect(submitApprovalModel).not.toHaveBeenCalled();
+  });
+
+  it("propagates a non-NOT_MULTI_ADMIN error from the approval-model probe", async () => {
+    const { client, getApprovalModel, authorize, commit } = makeAdminClient({
+      approvalModel: { requiresApprovalPopup: true },
+    });
+    // A real failure (e.g. 403) must NOT be swallowed as single-phase.
+    getApprovalModel.mockRejectedValueOnce(
+      networkError(403, { error: "forbidden" }),
+    );
+    const approve = vi.fn() as unknown as ApproveTideRequests;
+
+    await expect(
+      runMultiAdminApproval(client, approve, CR_ID),
+    ).rejects.toBeInstanceOf(NetworkError);
+    expect(authorize).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("a non-NOT_MULTI_ADMIN 409 still propagates (not treated as single-phase)", async () => {
+    const { client, getApprovalModel, authorize, commit } = makeAdminClient({
+      approvalModel: { requiresApprovalPopup: true },
+    });
+    getApprovalModel.mockRejectedValueOnce(
+      networkError(409, { error: "Change request is not in PENDING state" }),
+    );
+    const approve = vi.fn() as unknown as ApproveTideRequests;
+
+    await expect(
+      runMultiAdminApproval(client, approve, CR_ID),
+    ).rejects.toBeInstanceOf(NetworkError);
+    expect(authorize).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("returns committed when the server answers the probe with requiresApprovalPopup=false", async () => {
+    const { client, authorize, commit, submitApprovalModel } = makeAdminClient({
       approvalModel: { requiresApprovalPopup: false },
     });
     const approve = vi.fn() as unknown as ApproveTideRequests;
 
     const outcome = await runMultiAdminApproval(client, approve, CR_ID);
 
-    expect(outcome).toEqual({ kind: "singlePhase" });
+    expect(outcome).toEqual({ kind: "committed" });
+    expect(authorize).toHaveBeenCalledWith({ id: CR_ID });
+    expect(commit).toHaveBeenCalledWith({ id: CR_ID });
     expect(approve).not.toHaveBeenCalled();
     expect(submitApprovalModel).not.toHaveBeenCalled();
   });

@@ -102,9 +102,11 @@ export function ChangeRequestsDetail({
     if (!cr) return;
     setIsWorking(true);
     try {
-      // multiAdmin CRs take a two-phase enclave round-trip via /approval-model;
-      // firstAdmin / single-phase CRs report `singlePhase` and fall through to
-      // the plain authorize call below.
+      // multiAdmin CRs take a two-phase enclave round-trip via /approval-model
+      // and only record an approval (commit is a separate step). firstAdmin /
+      // Tideless realms refuse /approval-model with 409 NOT_MULTI_ADMIN, and
+      // runMultiAdminApproval then runs the single-phase authorize+commit
+      // itself, reporting `committed`.
       const outcome = await runMultiAdminApproval(
         adminClient,
         approveTideRequests,
@@ -122,20 +124,23 @@ export function ChangeRequestsDetail({
         onChanged();
         return;
       }
-      if (outcome.kind === "recorded") {
-        const { authCount, threshold, readyForCommit } = outcome.result;
+      if (outcome.kind === "committed") {
+        // firstAdmin single-phase: authorize + commit already ran.
         addAlert(
-          readyForCommit
-            ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
-            : `Approved — ${authCount} of ${threshold}.`,
+          "Change request approved and committed.",
           AlertVariant.success,
         );
         onChanged();
         return;
       }
-      // singlePhase: legacy one-call authorize.
-      await adminClient.iga.authorize({ id: cr.id });
-      addAlert("Change request authorized.", AlertVariant.success);
+      // recorded: multiAdmin two-phase approval counted toward threshold.
+      const { authCount, threshold, readyForCommit } = outcome.result;
+      addAlert(
+        readyForCommit
+          ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
+          : `Approved — ${authCount} of ${threshold}.`,
+        AlertVariant.success,
+      );
       onChanged();
     } catch (err) {
       addError(`Failed to authorize change request: ${errorMessage(err)}`, err);
