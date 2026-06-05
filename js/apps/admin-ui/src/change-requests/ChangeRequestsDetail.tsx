@@ -34,11 +34,13 @@ import { canApprove, blockedReasonOf } from "./canApprove";
 import { runMultiAdminApproval } from "./approvalModel";
 import {
   actionTypeLabel,
+  authCountOf,
   entityTypeLabel,
   errorMessage,
   formatRelativeTime,
   formatTime,
   humanReadableSummary,
+  requestedByOf,
 } from "./formatters";
 
 type Props = {
@@ -49,11 +51,21 @@ type Props = {
   onChanged: () => void;
 };
 
-function pretty(json: string): string {
+/**
+ * Pretty-print the already-parsed change payload (`cr.rows`). The backend
+ * deserializes the payload server-side and emits it as `rows`
+ * (`List<Map<String,Object>>`), so we just re-stringify it with indentation —
+ * no `JSON.parse` of a (non-existent) `rowsJson` string, which is what left the
+ * panel empty before.
+ */
+function prettyRows(
+  rows: Record<string, unknown>[] | undefined | null,
+): string {
+  if (!rows || rows.length === 0) return "";
   try {
-    return JSON.stringify(JSON.parse(json), null, 2);
+    return JSON.stringify(rows, null, 2);
   } catch {
-    return json;
+    return "";
   }
 }
 
@@ -80,6 +92,8 @@ export function ChangeRequestsDetail({
   const [isWorking, setIsWorking] = useState(false);
   const [denyOpen, setDenyOpen] = useState(false);
   const [denyReason, setDenyReason] = useState("");
+  // Change payload starts expanded so the actual change is visible up front.
+  const [payloadOpen, setPayloadOpen] = useState(true);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -268,7 +282,7 @@ export function ChangeRequestsDetail({
     } else if (approvable && alreadySigned && !cr.readyToCommit) {
       tip = "You have already signed; awaiting other approvers.";
     } else if (approvable && !cr.readyToCommit) {
-      tip = `Threshold not met (${cr.authCount}/${cr.threshold})`;
+      tip = `Threshold not met (${authCountOf(cr)}/${cr.threshold})`;
     }
     const noop = () => {
       /* disabled placeholder */
@@ -357,7 +371,9 @@ export function ChangeRequestsDetail({
               <DescriptionListGroup>
                 <DescriptionListTerm>Action</DescriptionListTerm>
                 <DescriptionListDescription>
-                  {actionTypeLabel(cr.actionType)}
+                  <Label color="purple">
+                    {actionTypeLabel(cr.actionType) || "Unknown"}
+                  </Label>
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
@@ -368,9 +384,9 @@ export function ChangeRequestsDetail({
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Created By</DescriptionListTerm>
+                <DescriptionListTerm>Requested By</DescriptionListTerm>
                 <DescriptionListDescription>
-                  {cr.createdBy ?? "-"}
+                  {requestedByOf(cr) || "-"}
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
@@ -412,7 +428,7 @@ export function ChangeRequestsDetail({
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {cr.authCount} of {cr.threshold}
+                {authCountOf(cr)} of {cr.threshold}
               </Text>
             </TextContent>
             {signers.length === 0 ? (
@@ -440,11 +456,28 @@ export function ChangeRequestsDetail({
 
             <Divider style={{ margin: "1rem 0" }} />
 
-            {/* ---- Raw payload ---- */}
-            <ExpandableSection toggleText="Raw payload (rowsJson)" isIndented>
-              <CodeBlock>
-                <CodeBlockCode>{pretty(cr.rowsJson)}</CodeBlockCode>
-              </CodeBlock>
+            {/* ---- Change payload ----
+                Renders the server-parsed `rows` payload. Defaults to expanded
+                so the actual change is visible without an extra click; the
+                previous version read a non-existent `rowsJson` string and so
+                always rendered empty. */}
+            <ExpandableSection
+              toggleText="Change payload (rows)"
+              isIndented
+              isExpanded={payloadOpen}
+              onToggle={(_e, v) => setPayloadOpen(v)}
+            >
+              {cr.rows && cr.rows.length > 0 ? (
+                <CodeBlock>
+                  <CodeBlockCode>{prettyRows(cr.rows)}</CodeBlockCode>
+                </CodeBlock>
+              ) : (
+                <TextContent>
+                  <Text className="pf-v5-u-color-200">
+                    This change request carries no row data.
+                  </Text>
+                </TextContent>
+              )}
             </ExpandableSection>
 
             <Divider style={{ margin: "1rem 0" }} />

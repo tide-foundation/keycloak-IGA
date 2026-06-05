@@ -15,16 +15,34 @@ export default interface IgaChangeRequest {
   actionType: string;
   entityType: string;
   entityId: string | null;
-  rowsJson: string;
-  authCount: number;
-  authorizationCount?: number;
+  /**
+   * The change payload, already parsed by the backend into one row object per
+   * affected record. This is the authoritative field name the REST API emits
+   * (`IgaChangeRequestRepresentation.getRows()`); it replaces the old
+   * `rowsJson` string the UI used to (incorrectly) read, which the server never
+   * sends — hence the historically-empty payload panel.
+   */
+  rows: Record<string, unknown>[];
+  /**
+   * Number of recorded authorizations toward the threshold. The REST API field
+   * is `authorizationCount` (`getAuthorizationCount()`); `authCount` is kept as
+   * an optional legacy alias but is never populated by the server.
+   */
+  authorizationCount: number;
+  /** @deprecated server emits `authorizationCount`; kept for back-compat. */
+  authCount?: number;
   threshold: number;
   requiredApproverRoles: string[];
   scopeMode: IgaScopeMode;
-  createdBy: string | null;
+  /** Username of the admin who raised the change request. */
+  requestedBy: string | null;
+  /** @deprecated server emits `requestedBy`; kept for back-compat. */
+  createdBy?: string | null;
   createdAt: number;
-  finalSignature: string | null;
-  denyReason: string | null;
+  resolvedAt?: number | null;
+  resolvedBy?: string | null;
+  finalSignature?: string | null;
+  denyReason?: string | null;
   authorizers: IgaCrAuthorizerRepresentation[];
   readyToCommit: boolean;
   dependsOn?: string[];

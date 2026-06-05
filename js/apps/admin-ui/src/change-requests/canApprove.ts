@@ -2,6 +2,8 @@
 
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
+import { authCountOf } from "./formatters";
+
 export function canApprove(cr: IgaChangeRequest, userRoles: string[]): boolean {
   if (!cr.requiredApproverRoles?.length) return true;
   const set = new Set(userRoles);
@@ -94,6 +96,6 @@ export function commitTip(
   if (!canApprove(cr, userRoles))
     return "You are not in the required approver role(s)";
   if (!cr.readyToCommit)
-    return `Threshold not met (${cr.authCount}/${cr.threshold})`;
+    return `Threshold not met (${authCountOf(cr)}/${cr.threshold})`;
   return null;
 }

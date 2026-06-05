@@ -48,10 +48,12 @@ import { useCurrentUserRoles } from "./useCurrentUserRoles";
 import { useCurrentUsername } from "./useCurrentUsername";
 import {
   actionTypeLabel,
+  authCountOf,
   entityTypeLabel,
   errorMessage,
   formatRelativeTime,
   formatTime,
+  humanReadableSummary,
 } from "./formatters";
 import { ChangeRequestsDetail } from "./ChangeRequestsDetail";
 
@@ -94,7 +96,8 @@ function RequiredRolesCell({ cr }: { cr: IgaChangeRequest }) {
 
 function AuthorizationsCell({ cr }: { cr: IgaChangeRequest }) {
   const signers: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
-  const remaining = Math.max(cr.threshold - cr.authCount, 0);
+  const authCount = authCountOf(cr);
+  const remaining = Math.max(cr.threshold - authCount, 0);
 
   const tip = (
     <div style={{ maxWidth: 280 }}>
@@ -119,7 +122,7 @@ function AuthorizationsCell({ cr }: { cr: IgaChangeRequest }) {
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       <Tooltip content={tip}>
         <span style={{ fontVariantNumeric: "tabular-nums" }}>
-          {cr.authCount} / {cr.threshold}
+          {authCount} / {cr.threshold}
         </span>
       </Tooltip>
       {cr.readyToCommit && (
@@ -590,7 +593,8 @@ export default function ChangeRequestsSection() {
   );
 
   /* ---- columns ----
-     Order: Status, Action, Entity, Authorizations, Required roles, Created. */
+     Order: Status, Action, What changed, Entity, Authorizations,
+     Required roles, Created. */
 
   const columns = useMemo(
     () => [
@@ -602,7 +606,20 @@ export default function ChangeRequestsSection() {
       {
         name: "actionType",
         displayKey: "Action",
-        cellRenderer: (cr: IgaChangeRequest) => actionTypeLabel(cr.actionType),
+        cellRenderer: (cr: IgaChangeRequest) => (
+          <Label isCompact color="purple">
+            {actionTypeLabel(cr.actionType) || "Unknown"}
+          </Label>
+        ),
+      },
+      {
+        name: "summary",
+        displayKey: "What changed",
+        cellRenderer: (cr: IgaChangeRequest) => (
+          <span className="pf-v5-u-font-size-sm">
+            {humanReadableSummary(cr)}
+          </span>
+        ),
       },
       {
         name: "entityType",

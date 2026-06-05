@@ -3,6 +3,32 @@
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
 /**
+ * Number of recorded authorizations toward the threshold. The REST API field
+ * is `authorizationCount`; `authCount` is only a legacy alias the server never
+ * populates. Centralising the read here means every call site (table, detail,
+ * tooltips) reports the same number the commit gate enforces.
+ */
+export function authCountOf(cr: IgaChangeRequest): number {
+  if (typeof cr.authorizationCount === "number") return cr.authorizationCount;
+  // Legacy alias the server never actually emits; read defensively without
+  // tripping the deprecation lint on the field reference itself.
+  const legacy = (cr as { authCount?: number }).authCount;
+  return typeof legacy === "number" ? legacy : 0;
+}
+
+/**
+ * Username of the admin who raised the change request. The REST API field is
+ * `requestedBy`; `createdBy` is a legacy alias the server never populates.
+ */
+export function requestedByOf(cr: IgaChangeRequest): string {
+  if (cr.requestedBy) return cr.requestedBy;
+  // Legacy alias the server never actually emits; read defensively without
+  // tripping the deprecation lint on the field reference itself.
+  const legacy = (cr as { createdBy?: string | null }).createdBy;
+  return legacy ?? "";
+}
+
+/**
  * Turn a raw enum-ish action type (e.g. "GRANT_ROLES") into a human label
  * ("Grant Roles"). Falls back to the raw string if it's unexpectedly empty.
  */
@@ -101,21 +127,14 @@ export function formatRelativeTime(
 
 /* ---------- humanReadableSummary helpers ---------- */
 
-function safeParse(json: string): Record<string, unknown> | unknown[] | null {
-  if (!json) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Pull the "first record" out of rowsJson. The backend serializes a
- * single-row change as either an array with one element or a bare object,
- * so accept both.
+ * Pull the "first record" out of the change payload. The backend already
+ * deserializes the payload into `rows` (a `List<Map<String,Object>>`), so the
+ * common case is an array of row objects. We still defensively accept a bare
+ * object (or a single-element array) so a malformed/legacy shape can't break
+ * the summary line.
  */
-function firstRow(parsed: unknown): Record<string, unknown> | null {
+export function firstRow(parsed: unknown): Record<string, unknown> | null {
   if (Array.isArray(parsed)) {
     return parsed.length > 0 &&
       typeof parsed[0] === "object" &&
@@ -166,15 +185,16 @@ function nameOrId(
 
 /**
  * Convert a CR into a single-line human-readable description of what the change
- * will do once committed. This is a best-effort first cut: it parses rowsJson
- * defensively but does NOT issue extra round-trips to resolve ids to display
- * names. If only an id is present we render it inline.
+ * will do once committed. This is a best-effort first cut: it reads the
+ * already-parsed `rows` payload defensively but does NOT issue extra
+ * round-trips to resolve ids to display names. If only an id is present we
+ * render it inline.
  *
  * Returns a Markdown-ish string with backticks around values; callers are
  * expected to render it as plain text or to apply minimal formatting.
  */
 export function humanReadableSummary(cr: IgaChangeRequest): string {
-  const row = firstRow(safeParse(cr.rowsJson));
+  const row = firstRow(cr.rows);
   const action = (cr.actionType || "").toUpperCase();
 
   const username = pick(row, "username", "USERNAME", "user_name", "userName");
