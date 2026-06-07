@@ -92,11 +92,26 @@ export async function runMultiAdminApproval(
   // 409 NOT_MULTI_ADMIN — in that case run the single-phase authorize+commit
   // flow. Any OTHER error (other 409s, 403, 404, transport) must propagate so
   // the operator sees the real failure (don't swallow genuine errors).
+  console.log("[TIDE-APPROVAL] runMultiAdminApproval: start", {
+    changeRequestId,
+  });
   let model;
   try {
     model = await adminClient.iga.getApprovalModel({ id: changeRequestId });
+    console.log("[TIDE-APPROVAL] GET /approval-model result", {
+      changeRequestId,
+      requiresApprovalPopup: model.requiresApprovalPopup,
+      requestModelLength:
+        typeof model.requestModel === "string"
+          ? model.requestModel.length
+          : null,
+    });
   } catch (err) {
     if (isNotMultiAdmin(err)) {
+      console.log(
+        "[TIDE-APPROVAL] GET /approval-model -> 409 NOT_MULTI_ADMIN; running single-phase firstAdmin authorize+commit",
+        { changeRequestId },
+      );
       // firstAdmin single-phase: authorize, then commit (authorize alone does
       // not apply the change — commit is an explicit second step server-side).
       await adminClient.iga.authorize({ id: changeRequestId });
@@ -117,9 +132,19 @@ export async function runMultiAdminApproval(
 
   // ── Phase 2a: enclave approve (decode -> approve -> read result) ──────
   const requestBytes = base64ToBytes(model.requestModel);
+  console.log(
+    "[TIDE-APPROVAL] Phase 2a: handing request to enclave via approveTideRequests (opens Heimdall approval popup)",
+    { changeRequestId, requestBytesLength: requestBytes.length },
+  );
   const [approval] = await approveTideRequests([
     { id: changeRequestId, request: requestBytes },
   ]);
+  console.log("[TIDE-APPROVAL] Phase 2a: enclave approve returned", {
+    changeRequestId,
+    approved: !!approval?.approved,
+    denied: !!approval?.denied,
+    pending: !!approval?.pending,
+  });
 
   if (!approval) {
     throw new Error("Enclave returned no approval result for the request.");
