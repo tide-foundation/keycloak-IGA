@@ -28,7 +28,11 @@ type IgaToggleProgressModalProps = {
   isOpen: boolean;
   /** Called once the run reaches a terminal `completed` state. */
   onComplete: () => void;
-  /** Called when the user dismisses the modal (only available once terminal). */
+  /**
+   * Called when the user dismisses the modal. Available at any time, including
+   * mid-run ("Run in background") — dismissing only stops the status poll; the
+   * in-flight toggle POST continues and still fires its success/error toast.
+   */
   onClose: () => void;
 };
 
@@ -122,24 +126,23 @@ export const IgaToggleProgressModal = ({
       variant={ModalVariant.medium}
       title={t("igaToggleProgressTitle")}
       isOpen={isOpen}
-      showClose={isTerminal}
-      onClose={isTerminal ? onClose : undefined}
-      // Only offer a Close button once the run is terminal so a user can
-      // dismiss a failed (or completed) run; in-flight the modal is modal.
-      actions={
-        isTerminal
-          ? [
-              <Button
-                key="close"
-                variant="primary"
-                onClick={onClose}
-                data-testid="iga-progress-close"
-              >
-                {t("close")}
-              </Button>,
-            ]
-          : []
-      }
+      showClose
+      onClose={onClose}
+      // Always render an enabled, tabbable Close button (PatternFly's FocusTrap
+      // requires at least one focusable node while the modal is open, and the
+      // body is non-interactive). Dismissing mid-run only stops the status poll
+      // and closes the modal; the toggle POST is already in flight / committed
+      // server-side and its success/error toast still fires when it resolves.
+      actions={[
+        <Button
+          key="close"
+          variant="primary"
+          onClick={onClose}
+          data-testid="iga-progress-close"
+        >
+          {isTerminal ? t("close") : t("runInBackground")}
+        </Button>,
+      ]}
     >
       <Stack hasGutter>
         {totalCount > 0 && (
