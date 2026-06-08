@@ -43,7 +43,11 @@ import {
   authorizeTip,
   commitTip,
 } from "./canApprove";
-import { runMultiAdminApproval } from "./approvalModel";
+import {
+  runMultiAdminApproval,
+  runMultiAdminApprovalBatch,
+} from "./approvalModel";
+import type { BatchApprovalOutcome } from "./approvalModel";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
 import { useCurrentUsername } from "./useCurrentUsername";
 import {
@@ -419,6 +423,34 @@ export default function ChangeRequestsSection() {
     [adminClient, approveTideRequests],
   );
 
+  /* ---- map a batch outcome to a user-facing success message ----
+     Mirrors authorizeOne's outcome handling. Throws for denied/error so the
+     bulk loop records them as failures; returns a message otherwise. */
+
+  const messageForOutcome = useCallback(
+    (outcome: BatchApprovalOutcome): string => {
+      if (outcome.kind === "error") {
+        throw outcome.error instanceof Error
+          ? outcome.error
+          : new Error(errorMessage(outcome.error));
+      }
+      if (outcome.kind === "denied") {
+        throw new Error("Approval was denied in the enclave.");
+      }
+      if (outcome.kind === "pending") {
+        return "Approval pending — awaiting other operators.";
+      }
+      if (outcome.kind === "committed") {
+        return "Change request approved and committed.";
+      }
+      const { authCount, threshold, readyForCommit } = outcome.result;
+      return readyForCommit
+        ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
+        : `Approved — ${authCount} of ${threshold}.`;
+    },
+    [],
+  );
+
   /* ---- bulk authorize ---- */
 
   const [toggleAuthorizeDialog, AuthorizeConfirm] = useConfirmDialog({
@@ -442,13 +474,34 @@ export default function ChangeRequestsSection() {
     onConfirm: async () => {
       setIsProcessing(true);
       const results: BulkResult[] = [];
-      for (const cr of authorizableSelection) {
-        try {
-          // Two-phase multiAdmin enclave round-trip when required, else the
-          // firstAdmin single-phase authorize+commit (see authorizeOne).
-          await authorizeOne(cr);
-          results.push({ id: cr.id, ok: true });
-        } catch (err) {
+      try {
+        // Open the Heimdall enclave ONCE for the whole batch: collect every
+        // selected CR's phase-1 carrier and sign them all in a single popup
+        // (one doken, one round-trip), then commit each (see
+        // runMultiAdminApprovalBatch). firstAdmin/Tideless CRs take the
+        // single-phase authorize+commit path inside the batch (no enclave).
+        const ids = authorizableSelection.map((cr) => cr.id);
+        const outcomes = await runMultiAdminApprovalBatch(
+          adminClient,
+          approveTideRequests,
+          ids,
+        );
+        for (const outcome of outcomes) {
+          try {
+            messageForOutcome(outcome);
+            results.push({ id: outcome.changeRequestId, ok: true });
+          } catch (err) {
+            results.push({
+              id: outcome.changeRequestId,
+              ok: false,
+              message: errorMessage(err),
+            });
+          }
+        }
+      } catch (err) {
+        // A batch-wide failure (e.g. the single enclave call rejected): mark
+        // every selected CR as failed so the operator sees the real error.
+        for (const cr of authorizableSelection) {
           results.push({ id: cr.id, ok: false, message: errorMessage(err) });
         }
       }
