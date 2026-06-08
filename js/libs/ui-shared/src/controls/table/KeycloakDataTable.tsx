@@ -24,9 +24,11 @@ import { cloneDeep, get, intersectionBy } from "lodash-es";
 import {
   ComponentClass,
   ReactNode,
+  forwardRef,
   isValidElement,
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -133,7 +135,7 @@ function DataTable<T>({
       intersectionBy(
         selectedRows,
         rows.map((row) => row.data),
-        (item) => get(item, "id") ?? get(item, "draftRecordId") // # TIDE IMPLEMENTATION #
+        (item) => get(item, "id") ?? get(item, "draftRecordId"), // # TIDE IMPLEMENTATION #
       ),
     [selectedRows, rows],
   );
@@ -161,19 +163,19 @@ function DataTable<T>({
       updateSelectedRows(selectedRow);
     } else {
       if (rowIndex === -1) {
-        const rowsSelectedOnPageIds = rowsSelectedOnPage.map((v) =>
-          get(v, "id") ?? get(v, "draftRecordId") // # TIDE IMPLEMENTATION #
+        const rowsSelectedOnPageIds = rowsSelectedOnPage.map(
+          (v) => get(v, "id") ?? get(v, "draftRecordId"), // # TIDE IMPLEMENTATION #
         );
         // TIDE IMPLEMENTATION STOP
         updateSelectedRows(
           isSelected
             ? [...selectedRows, ...rows.map((row) => row.data)]
             : selectedRows.filter(
-              (v) =>
-                !rowsSelectedOnPageIds.includes(
-                  get(v, "id") ?? get(v, "draftRecordId") // # TIDE IMPLEMENTATION #
-                ),
-            ),
+                (v) =>
+                  !rowsSelectedOnPageIds.includes(
+                    get(v, "id") ?? get(v, "draftRecordId"), // # TIDE IMPLEMENTATION #
+                  ),
+              ),
         );
       } else {
         if (isSelected) {
@@ -184,7 +186,7 @@ function DataTable<T>({
               (v) =>
                 (get(v, "id") ?? get(v, "draftRecordId")) !==
                 ((rows[rowIndex] as IRow).data.id ??
-                  (rows[rowIndex] as IRow).data.draftRecordId) // # TIDE IMPLEMENTATION #
+                  (rows[rowIndex] as IRow).data.draftRecordId), // # TIDE IMPLEMENTATION #
             ),
           );
         }
@@ -209,11 +211,11 @@ function DataTable<T>({
               select={
                 !isRadio
                   ? {
-                    onSelect: (_, isSelected) => {
-                      updateState(-1, isSelected);
-                    },
-                    isSelected: rowsSelectedOnPage.length === rows.length,
-                  }
+                      onSelect: (_, isSelected) => {
+                        updateState(-1, isSelected);
+                      },
+                      isSelected: rowsSelectedOnPage.length === rows.length,
+                    }
                   : undefined
               }
             />
@@ -235,8 +237,7 @@ function DataTable<T>({
             const recordId =
               get(row.data, "id") ?? get(row.data, "draftRecordId");
             const rowSelected = selectedRows.some(
-              v =>
-                (get(v, "id") ?? get(v, "draftRecordId")) === recordId
+              (v) => (get(v, "id") ?? get(v, "draftRecordId")) === recordId,
             );
 
             return (
@@ -247,7 +248,7 @@ function DataTable<T>({
                 onClick={() => updateState(index, !rowSelected)}
                 style={{ cursor: "pointer" }}
                 tabIndex={0}
-                onKeyDown={e => {
+                onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     updateState(index, !rowSelected);
@@ -259,14 +260,14 @@ function DataTable<T>({
                     // bump the whole cell up to at least 32×32px
                     select={{
                       rowIndex: index,
-                    onSelect: (_, isSelected) =>
-                      updateState(index, isSelected),
-                    isSelected: !!selectedRows.find(
-                      (v) =>
-                        (get(v, "id") ?? get(v, "draftRecordId")) ===
-                        (get(row.data, "id") ??
-                          get(row.data, "draftRecordId"))
-                    ),
+                      onSelect: (_, isSelected) =>
+                        updateState(index, isSelected),
+                      isSelected: !!selectedRows.find(
+                        (v) =>
+                          (get(v, "id") ?? get(v, "draftRecordId")) ===
+                          (get(row.data, "id") ??
+                            get(row.data, "draftRecordId")),
+                      ),
                       variant: isRadio ? "radio" : "checkbox",
                     }}
                   />
@@ -286,17 +287,31 @@ function DataTable<T>({
           <Tbody key={index}>
             {index % 2 === 0 ? (
               <Tr
-                onClick={() => updateState(index, !selectedRows.some(
-                  v => (get(v, "id") ?? get(v, "draftRecordId")) === ((rows as IRow[])[index].data.id ?? (rows as IRow[])[index].data.draftRecordId)
-                ))}
+                onClick={() =>
+                  updateState(
+                    index,
+                    !selectedRows.some(
+                      (v) =>
+                        (get(v, "id") ?? get(v, "draftRecordId")) ===
+                        ((rows as IRow[])[index].data.id ??
+                          (rows as IRow[])[index].data.draftRecordId),
+                    ),
+                  )
+                }
                 style={{ cursor: "pointer" }}
                 tabIndex={0}
-                onKeyDown={e => {
+                onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    updateState(index, !selectedRows.some(
-                      v => (get(v, "id") ?? get(v, "draftRecordId")) === ((rows as IRow[])[index].data.id ?? (rows as IRow[])[index].data.draftRecordId)
-                    ));
+                    updateState(
+                      index,
+                      !selectedRows.some(
+                        (v) =>
+                          (get(v, "id") ?? get(v, "draftRecordId")) ===
+                          ((rows as IRow[])[index].data.id ??
+                            (rows as IRow[])[index].data.draftRecordId),
+                      ),
+                    );
                   }
                 }}
               >
@@ -311,7 +326,7 @@ function DataTable<T>({
                         (v) =>
                           (get(v, "id") ?? get(v, "draftRecordId")) ===
                           (get(row.data, "id") ??
-                            get(row.data, "draftRecordId"))
+                            get(row.data, "draftRecordId")),
                       ),
                       variant: isRadio ? "radio" : "checkbox",
                     }}
@@ -324,16 +339,16 @@ function DataTable<T>({
                     rows[index + 1].cells.length === 0
                       ? undefined
                       : {
-                        isExpanded: !!expandedRows[index],
-                        rowIndex: index,
-                        expandId: "expandable-row-",
-                        onToggle: (_, rowIndex, isOpen) => {
-                          onCollapse(isOpen, rowIndex);
-                          const expand = [...expandedRows];
-                          expand[index] = isOpen;
-                          setExpandedRows(expand);
-                        },
-                      }
+                          isExpanded: expandedRows[index],
+                          rowIndex: index,
+                          expandId: "expandable-row-",
+                          onToggle: (_, rowIndex, isOpen) => {
+                            onCollapse(isOpen, rowIndex);
+                            const expand = [...expandedRows];
+                            expand[index] = isOpen;
+                            setExpandedRows(expand);
+                          },
+                        }
                   }
                 />
                 <CellRenderer
@@ -344,7 +359,7 @@ function DataTable<T>({
                 />
               </Tr>
             ) : (
-              <Tr isExpanded={!!expandedRows[index - 1]}>
+              <Tr isExpanded={expandedRows[index - 1]}>
                 {/* two blanks: one for the selector column, one for the expand toggle */}
                 {canSelect && <Td />}
                 <Td />
@@ -385,6 +400,16 @@ export type LoaderFunction<T> = (
   max?: number,
   search?: string,
 ) => Promise<T[]>;
+
+// # TIDE IMPLEMENTATION #
+// Imperative handle so a parent can trigger an in-place data re-fetch
+// WITHOUT remounting the table (a remount resets the internal selection
+// state). Used by screens that poll for fresh data while preserving the
+// user's current row selection.
+export type KeycloakDataTableHandle = {
+  refresh: () => void;
+};
+// # TIDE IMPLEMENTATION STOP #
 
 export type DataListProps<T> = Omit<
   TableProps,
@@ -434,28 +459,31 @@ export type DataListProps<T> = Omit<
  * @param {ReactNode} props.toolbarItem - Toolbar items that appear on the top of the table {@link toolbarItem}
  * @param {ReactNode} props.emptyState - ReactNode show when the list is empty could be any component but best to use {@link ListEmptyState}
  */
-export function KeycloakDataTable<T>({
-  ariaLabelKey,
-  searchPlaceholderKey,
-  isPaginated = false,
-  onSelect,
-  canSelectAll = false,
-  isNotCompact,
-  isRadio,
-  detailColumns,
-  isRowDisabled,
-  loader,
-  columns,
-  actions,
-  actionResolver,
-  searchTypeComponent,
-  toolbarItem,
-  subToolbar,
-  emptyState,
-  icon,
-  isSearching = false,
-  ...props
-}: DataListProps<T>) {
+function KeycloakDataTableInner<T>(
+  {
+    ariaLabelKey,
+    searchPlaceholderKey,
+    isPaginated = false,
+    onSelect,
+    canSelectAll = false,
+    isNotCompact,
+    isRadio,
+    detailColumns,
+    isRowDisabled,
+    loader,
+    columns,
+    actions,
+    actionResolver,
+    searchTypeComponent,
+    toolbarItem,
+    subToolbar,
+    emptyState,
+    icon,
+    isSearching = false,
+    ...props
+  }: DataListProps<T>,
+  ref: React.ForwardedRef<KeycloakDataTableHandle>,
+) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<T[]>([]);
   const [rows, setRows] = useState<(Row<T> | SubRow<T>)[]>();
@@ -475,8 +503,16 @@ export function KeycloakDataTable<T>({
 
   const [key, setKey] = useState(0);
   const prevKey = useRef<number>();
-  const refresh = () => setKey(key + 1);
+  const refresh = () => setKey((k) => k + 1);
   const id = useId();
+
+  // # TIDE IMPLEMENTATION #
+  // Expose an in-place refresh to parents via ref. This re-runs the loader
+  // (bumps the internal fetch key) but does NOT remount the component, so the
+  // internal `selected` state is preserved. convertToColumns re-derives each
+  // row's selected flag by id, so the user's selection survives the refetch.
+  useImperativeHandle(ref, () => ({ refresh }), []);
+  // # TIDE IMPLEMENTATION STOP #
 
   const renderCell = (columns: (Field<T> | DetailField<T>)[], value: T) => {
     return columns.map((col) => {
@@ -548,16 +584,16 @@ export function KeycloakDataTable<T>({
       search === "" || isPaginated
         ? undefined
         : convertToColumns(unPaginatedData || [])
-          .filter((row) =>
-            row.cells.some(
-              (cell) =>
-                cell &&
-                getNodeText(cell)
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-            ),
-          )
-          .slice(first, first + max + 1),
+            .filter((row) =>
+              row.cells.some(
+                (cell) =>
+                  cell &&
+                  getNodeText(cell)
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
+              ),
+            )
+            .slice(first, first + max + 1),
     [search, first, max],
   );
 
@@ -693,12 +729,12 @@ export function KeycloakDataTable<T>({
               secondaryActions={
                 !isSearching
                   ? [
-                    {
-                      text: t("clearAllFilters"),
-                      onClick: () => setSearch(""),
-                      type: ButtonVariant.link,
-                    },
-                  ]
+                      {
+                        text: t("clearAllFilters"),
+                        onClick: () => setSearch(""),
+                        type: ButtonVariant.link,
+                      },
+                    ]
                   : []
               }
             />
@@ -710,3 +746,13 @@ export function KeycloakDataTable<T>({
     </>
   );
 }
+
+// # TIDE IMPLEMENTATION #
+// forwardRef wrapper that preserves the generic <T> signature. The cast keeps
+// callers that don't pass a ref fully back-compatible (ref is optional).
+export const KeycloakDataTable = forwardRef(KeycloakDataTableInner) as <T>(
+  props: Omit<DataListProps<T>, "ref"> & {
+    ref?: React.ForwardedRef<KeycloakDataTableHandle>;
+  },
+) => ReturnType<typeof KeycloakDataTableInner>;
+// # TIDE IMPLEMENTATION STOP #

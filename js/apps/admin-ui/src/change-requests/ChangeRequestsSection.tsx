@@ -24,6 +24,7 @@ import {
   KeycloakDataTable,
   ListEmptyState,
 } from "@keycloak/keycloak-ui-shared";
+import type { KeycloakDataTableHandle } from "@keycloak/keycloak-ui-shared";
 
 import { useAdminClient } from "../admin-client";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
@@ -279,7 +280,6 @@ export default function ChangeRequestsSection() {
 
   const [chipFilter, setChipFilter] = useState<ChipFilter>("PENDING");
   const [selected, setSelected] = useState<IgaChangeRequest[]>([]);
-  const [tableKey, setTableKey] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -288,18 +288,32 @@ export default function ChangeRequestsSection() {
     results: BulkResult[];
   } | null>(null);
 
+  // Imperative handle to the data table: lets us trigger an in-place data
+  // re-fetch (background poll / post-action refresh) WITHOUT remounting the
+  // table. A remount used to reset the table's internal selection state, which
+  // yanked the user's checkbox selection out from under them on every poll tick.
+  const tableRef = useRef<KeycloakDataTableHandle>(null);
+
+  // Post-action refresh: intentionally clears the selection (the selected CRs
+  // were just acted on) and re-fetches in place — no remount.
   const refresh = useCallback(() => {
     setSelected([]);
-    setTableKey((k) => k + 1);
+    tableRef.current?.refresh();
   }, []);
 
-  // Light polling refresh while viewing the table.
+  // Light background polling so new CRs appear without a manual refresh.
+  // We pause the poll while the user has an active selection or an action is in
+  // flight, so a background refetch never disrupts a bulk-approve in progress.
+  // The poll resumes (and a fresh fetch runs) once the selection is cleared.
+  const hasSelection = selected.length > 0;
+  const pausePolling = hasSelection || isProcessing || detailId !== null;
   useEffect(() => {
+    if (pausePolling) return;
     const interval = setInterval(() => {
-      setTableKey((k) => k + 1);
+      tableRef.current?.refresh();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [chipFilter]);
+  }, [pausePolling]);
 
   /* ---- deep-link: ?cr=<id> opens the existing detail modal directly ----
      Triggered by the "View change request" link on the 202 create toast.
@@ -775,7 +789,8 @@ export default function ChangeRequestsSection() {
       <PageSection variant="light" className="pf-v5-u-p-0">
         <div className="keycloak__events_table">
           <KeycloakDataTable
-            key={`${chipFilter}-${tableKey}`}
+            key={chipFilter}
+            ref={tableRef}
             loader={tableLoader}
             ariaLabelKey="Change Requests"
             toolbarItem={
