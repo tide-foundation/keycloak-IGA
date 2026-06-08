@@ -30,6 +30,24 @@ interface scheduledTaskInfo {
 }
 
 /* TIDECLOAK IMPLEMENTATION */
+export interface ToggleIGAStage {
+  id: string;
+  label: string;
+  status: "pending" | "running" | "done" | "failed";
+  current?: number;
+  total?: number;
+}
+
+/* TIDECLOAK IMPLEMENTATION */
+export interface ToggleIGAStatus {
+  jobId: string;
+  state: "running" | "completed" | "failed";
+  currentStageId?: string | null;
+  stages: ToggleIGAStage[];
+  error?: { stageId?: string; message?: string } | null;
+}
+
+/* TIDECLOAK IMPLEMENTATION */
 export class TideProvider extends Resource<{ realm?: string }> {
   /* # TIDECLOAK IMPLEMENTATION */
   public getRequiredActionLink = this.makeRequest<
@@ -278,11 +296,25 @@ export class TideProvider extends Resource<{ realm?: string }> {
     path: "/vendorResources/get-tide-jwk",
   });
 
-  /* # TIDECLOAK IMPLEMENTATION */
+  /* # TIDECLOAK IMPLEMENTATION
+   * Body (FormData): isIGAEnabled=true|false. On the ON-toggle the caller also
+   * appends jobId=<uuid v4> so the run can be tracked via toggleIGAStatus below.
+   * The OFF-toggle stays synchronous and omits jobId. */
   public toggleIGA = this.makeRequest<FormData, Response>({
     method: "POST",
     path: "/tide-admin/toggle-iga",
   });
+
+  /* # TIDECLOAK IMPLEMENTATION
+   * Polls the progress of an in-flight ON-toggle keyed by the jobId the
+   * admin-ui generated for the matching toggleIGA POST. */
+  public toggleIGAStatus = this.makeRequest<{ jobId: string }, ToggleIGAStatus>(
+    {
+      method: "GET",
+      urlParamKeys: ["jobId"],
+      path: "/tide-admin/toggle-iga/status/{jobId}",
+    },
+  );
 
   /* # TIDECLOAK IMPLEMENTATION */
   public triggerLicenseRenewedEvent = this.makeRequest<

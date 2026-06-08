@@ -40,6 +40,7 @@ import {
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import { UIRealmRepresentation } from "./RealmSettingsTabs";
 import { SIGNATURE_ALGORITHMS } from "../clients/add/SamlSignature";
+import { IgaToggleProgressModal } from "./IgaToggleProgressModal"; // TIDECLOAK IMPLEMENTATION
 
 type RealmSettingsGeneralTabProps = {
   realm: UIRealmRepresentation;
@@ -127,17 +128,50 @@ function RealmSettingsGeneralTabForm({
 
   const { addAlert, addError } = useAlerts();
 
+  // TIDECLOAK IMPLEMENTATION - IGA toggle progress state
+  // While a toggle is in flight the switch is disabled. The ON-toggle opens a
+  // ProgressStepper modal driven by polling toggle-iga/status/{jobId}; the
+  // OFF-toggle stays on the synchronous path it has always used.
+  const [igaToggleInFlight, setIgaToggleInFlight] = useState(false);
+  const [igaProgressJobId, setIgaProgressJobId] = useState<string | null>(null);
+
   // TIDECLOAK IMPLEMENTATION
   const updateSwitchValue = async (value: boolean) => {
+    // OFF-toggle: unchanged synchronous behaviour, no jobId, no modal.
+    if (!value) {
+      try {
+        const data = new FormData();
+        data.append("isIGAEnabled", "false");
+        await adminClient.tideAdmin.toggleIGA(data);
+        addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
+        refresh();
+      } catch (error) {
+        addError(t("enableSwitchError"), error);
+      }
+      return;
+    }
+
+    // ON-toggle: generate a jobId, open the progress modal, fire the POST and
+    // let the modal poll the status endpoint until it resolves.
+    const jobId = crypto.randomUUID();
+    setIgaProgressJobId(jobId);
+    setIgaToggleInFlight(true);
     try {
       const data = new FormData();
-      data.append("isIGAEnabled", value.toString());
-
+      data.append("isIGAEnabled", "true");
+      data.append("jobId", jobId);
       await adminClient.tideAdmin.toggleIGA(data);
+      // POST resolved successfully: success toast + refresh. The modal will
+      // also observe state=completed via polling and mark all stages done.
       addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
+      setIgaToggleInFlight(false);
+      setIgaProgressJobId(null);
       refresh();
     } catch (error) {
+      // POST failed: surface the error toast and leave the modal open so it
+      // can render the failed stage (it stays mounted while jobId is set).
       addError(t("enableSwitchError"), error);
+      setIgaToggleInFlight(false);
     }
   };
 
@@ -247,12 +281,32 @@ function RealmSettingsGeneralTabForm({
                   ? true
                   : false
               }
+              isDisabled={igaToggleInFlight}
               onChange={(_event, value) => {
                 void updateSwitchValue(value);
               }}
               aria-label={t("igaEnabled")}
             />
           </FormGroup>
+          {/* TIDECLOAK IMPLEMENTATION - IGA toggle-on progress modal */}
+          {igaProgressJobId && (
+            <IgaToggleProgressModal
+              jobId={igaProgressJobId}
+              realm={realmName}
+              isOpen={!!igaProgressJobId}
+              onComplete={() => {
+                // Terminal success observed by the poll; the awaited POST also
+                // handles the toast/refresh. Close once complete.
+                setIgaToggleInFlight(false);
+                setIgaProgressJobId(null);
+                refresh();
+              }}
+              onClose={() => {
+                setIgaProgressJobId(null);
+                setIgaToggleInFlight(false);
+              }}
+            />
+          )}
           <TextControl
             name={convertAttributeNameToForm<FormFields>(
               "attributes.iga.threshold",
