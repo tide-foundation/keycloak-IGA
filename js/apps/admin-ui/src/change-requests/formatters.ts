@@ -29,11 +29,25 @@ export function requestedByOf(cr: IgaChangeRequest): string {
 }
 
 /**
+ * Explicit human labels for action types whose auto-title-cased form would be
+ * misleading or unclear. Anything not listed here falls through to the generic
+ * title-casing below.
+ */
+const ACTION_TYPE_LABELS: Record<string, string> = {
+  // multiAdmin admin-threshold policy update (entityType ADMIN_POLICY). The raw
+  // token "REGEN_ADMIN_POLICY" would title-case to the opaque "Regen Admin
+  // Policy"; surface a label that reads in plain English.
+  REGEN_ADMIN_POLICY: "Admin approval threshold update",
+};
+
+/**
  * Turn a raw enum-ish action type (e.g. "GRANT_ROLES") into a human label
  * ("Grant Roles"). Falls back to the raw string if it's unexpectedly empty.
  */
 export function actionTypeLabel(t: string | undefined | null): string {
   if (!t) return "";
+  const override = ACTION_TYPE_LABELS[t.toUpperCase()];
+  if (override) return override;
   return t
     .split(/[_\-\s]+/)
     .filter(Boolean)
@@ -298,6 +312,20 @@ export function humanReadableSummary(cr: IgaChangeRequest): string {
       return `Add ${groupLbl} as a default group`;
     case "REMOVE_REALM_DEFAULT_GROUP":
       return `Remove ${groupLbl} as a default group`;
+    case "REGEN_ADMIN_POLICY": {
+      // multiAdmin admin-approval-threshold policy update. ROWS_JSON carries
+      // { OLD_THRESHOLD, NEW_THRESHOLD, ROLE_ID, VVK_ID } (pick() is
+      // case-insensitive, so lower/upper variants both resolve).
+      const oldT = pick(row, "old_threshold", "OLD_THRESHOLD", "oldThreshold");
+      const newT = pick(row, "new_threshold", "NEW_THRESHOLD", "newThreshold");
+      if (oldT !== null && newT !== null) {
+        return `Update admin approval threshold ${oldT} → ${newT}`;
+      }
+      if (newT !== null) {
+        return `Update admin approval threshold to ${newT}`;
+      }
+      return `Update admin approval threshold`;
+    }
     case "REQUEST_SERVER_CERT":
       return `Request a server certificate`;
     case "INSTALL_LICENSE":
