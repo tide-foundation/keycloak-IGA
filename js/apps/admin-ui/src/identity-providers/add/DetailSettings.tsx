@@ -71,6 +71,7 @@ import {
   toIdentityProvider,
 } from "../routes/IdentityProvider";
 import { toIdentityProviders } from "../routes/IdentityProviders";
+import { toRealmSettings } from "../../realm-settings/routes/RealmSettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { DescriptorSettings } from "./DescriptorSettings";
 import { DiscoverySettings } from "./DiscoverySettings";
@@ -606,10 +607,20 @@ export default function DetailSettings() {
     },
   });
 
+  // TIDECLOAK IMPLEMENTATION — pre-flight offboarding checklist.
+  // SMTP is considered configured only when smtpServer exists and has keys.
+  // This drives WARN (missing) vs INFO (configured) guidance on the offboard
+  // dialog; it is advisory only and never blocks offboarding.
+  const smtpConfigured =
+    !!realmRepresentation?.smtpServer &&
+    Object.keys(realmRepresentation.smtpServer).length > 0;
+
   const [toggleOffboardingDialog, OffboardingConfirm] = useOffboardingDialog({
     titleKey: "offboardProvider",
     messageKey: "offboardProviderConfirmation",
     confirmationText: "CONFIRM OFFBOARDING",
+    smtpConfigured,
+    onConfigureEmail: () => navigate(toRealmSettings({ realm, tab: "email" })),
     onConfirm: async () => {
       try {
         // TIDECLOAK IMPLEMENTATION
