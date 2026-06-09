@@ -14,6 +14,7 @@ import {
   useAlerts,
 } from "@keycloak/keycloak-ui-shared";
 import {
+  AlertVariant,
   ClipboardCopy,
   FormGroup,
   PageSection,
@@ -92,6 +93,59 @@ type FormFields = Omit<RealmRepresentation, "groups"> & {
 
 const REQUIRE_SSL_TYPES = ["all", "external", "none"];
 
+// TIDECLOAK IMPLEMENTATION
+// Shape of the pending-approval payload iga-core returns (HTTP 202) when an
+// admin tries to disable IGA: the disable is captured into a governed
+// DISABLE_IGA change request that must be approved before IGA actually goes
+// off.
+type DisableIgaPending = {
+  changeRequestId?: string;
+  message?: string;
+};
+
+// TIDECLOAK IMPLEMENTATION
+// `toggleIGA` is typed to return `Response`, but the admin-client agent has a
+// generic 202 interceptor that may already have parsed/unwrapped the body
+// before it reaches us. This normalises both cases and decides whether the
+// disable was accepted as a pending change request:
+//   - raw `Response`: pending iff status === 202; read the JSON body for
+//     { changeRequestId, message } (tolerating a non-JSON body).
+//   - already-parsed object: pending iff it carries a changeRequestId (the
+//     PendingChangeRequest shape uses status === "PENDING" + changeRequestId).
+// Returns the pending payload, or `null` when this was not a 202/pending
+// response (i.e. a legacy synchronous disable).
+async function readDisableIgaPending(
+  result: unknown,
+): Promise<DisableIgaPending | null> {
+  if (result instanceof Response) {
+    if (result.status !== 202) {
+      return null;
+    }
+    try {
+      const body = (await result.json()) as DisableIgaPending | null;
+      return body ?? {};
+    } catch {
+      // 202 with an empty/non-JSON body still means "pending approval".
+      return {};
+    }
+  }
+
+  if (result && typeof result === "object") {
+    const body = result as Record<string, unknown>;
+    if (typeof body.changeRequestId === "string" || body.status === "PENDING") {
+      return {
+        changeRequestId:
+          typeof body.changeRequestId === "string"
+            ? body.changeRequestId
+            : undefined,
+        message: typeof body.message === "string" ? body.message : undefined,
+      };
+    }
+  }
+
+  return null;
+}
+
 const UNMANAGED_ATTRIBUTE_POLICIES = [
   UnmanagedAttributePolicy.Disabled,
   UnmanagedAttributePolicy.Enabled,
@@ -137,12 +191,37 @@ function RealmSettingsGeneralTabForm({
 
   // TIDECLOAK IMPLEMENTATION
   const updateSwitchValue = async (value: boolean) => {
-    // OFF-toggle: unchanged synchronous behaviour, no jobId, no modal.
+    // OFF-toggle: disabling IGA is now governed. iga-core no longer disables
+    // immediately — it creates a DISABLE_IGA change request and answers the
+    // toggle POST with HTTP 202 + { changeRequestId, message } (pending
+    // approval) in both firstAdmin and multiAdmin. So we must NOT flip the
+    // switch optimistically or claim success: IGA is still ON until the CR is
+    // committed. We surface an info alert and refresh() — which re-reads
+    // realm state (isIGAEnabled still "true"), keeping the switch ON.
     if (!value) {
       try {
         const data = new FormData();
         data.append("isIGAEnabled", "false");
-        await adminClient.tideAdmin.toggleIGA(data);
+        const result = await adminClient.tideAdmin.toggleIGA(data);
+
+        // `toggleIGA` is typed `Response`, but the admin-client agent may have
+        // already intercepted a 202 and unwrapped the body (e.g. into a
+        // PendingChangeRequest). Handle both: a raw Response (read .status /
+        // .json()) and an already-parsed pending body.
+        const pending = await readDisableIgaPending(result);
+        if (pending) {
+          addAlert(
+            t("igaDisablePendingApprovalTitle"),
+            AlertVariant.info,
+            pending.message || t("igaDisablePendingApprovalMessage"),
+          );
+          // Do NOT flip optimistically. Realm state still reads
+          // isIGAEnabled=true, so the switch stays ON after refresh.
+          refresh();
+          return;
+        }
+
+        // Non-202 (e.g. a legacy synchronous disable): IGA actually went off.
         addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
         refresh();
       } catch (error) {
