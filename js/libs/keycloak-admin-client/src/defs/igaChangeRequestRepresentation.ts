@@ -45,6 +45,18 @@ export default interface IgaChangeRequest {
   denyReason?: string | null;
   authorizers: IgaCrAuthorizerRepresentation[];
   readyToCommit: boolean;
+  /**
+   * For a pending `tide-realm-admin` `GRANT_ROLES`/`REVOKE_ROLES` change
+   * request, the id of the pending `REGEN_ADMIN_POLICY` change request that was
+   * auto-created alongside it (the admin-threshold-policy regeneration). The
+   * UI uses this to auto-include the linked policy CR in the same one-open
+   * approval ceremony when its grant CRs are bulk-authorized.
+   *
+   * This is purely informational — the policy CR carries NO blocking
+   * `dependsOn` relationship to the grant CR; both are independent CRs the
+   * operator signs together. `null` when there is no linked policy CR.
+   */
+  relatedPolicyCrId?: string | null;
   dependsOn?: string[];
   blocked?: boolean;
   blockedReason?: string;

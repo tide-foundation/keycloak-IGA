@@ -280,6 +280,11 @@ export default function ChangeRequestsSection() {
 
   const [chipFilter, setChipFilter] = useState<ChipFilter>("PENDING");
   const [selected, setSelected] = useState<IgaChangeRequest[]>([]);
+  // The full list most recently loaded into the table. Kept so the bulk
+  // Authorize flow can look up a selected grant CR's linked REGEN_ADMIN_POLICY
+  // CR (`relatedPolicyCrId`) even when the operator did not tick the policy CR
+  // itself, and auto-include it in the same one-open approval ceremony.
+  const [loadedCrs, setLoadedCrs] = useState<IgaChangeRequest[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -371,10 +376,13 @@ export default function ChangeRequestsSection() {
   const loader = useCallback(
     async (status?: IgaChangeRequestStatus): Promise<IgaChangeRequest[]> => {
       try {
-        if (status) {
-          return await adminClient.iga.listChangeRequests({ status });
-        }
-        return await adminClient.iga.listChangeRequests();
+        const list = status
+          ? await adminClient.iga.listChangeRequests({ status })
+          : await adminClient.iga.listChangeRequests();
+        // Stash the loaded list so the bulk-authorize flow can resolve linked
+        // REGEN_ADMIN_POLICY CRs by id (see `expandedAuthorizableSelection`).
+        setLoadedCrs(list);
+        return list;
       } catch (err) {
         addError(`Failed to load change requests: ${errorMessage(err)}`, err);
         return [];
@@ -400,6 +408,37 @@ export default function ChangeRequestsSection() {
   );
   const skippedFromAuthorize = selected.length - authorizableSelection.length;
   const skippedFromCommit = selected.length - committableSelection.length;
+
+  /* ---- auto-include linked admin-threshold-policy CRs ----
+     When the operator selects the `tide-realm-admin` grant CRs, the
+     auto-created REGEN_ADMIN_POLICY CR (referenced by `relatedPolicyCrId`)
+     should ride along in the SAME one-open enclave ceremony instead of forcing
+     the operator to tick it separately. For every authorizable selected CR
+     that carries a non-null `relatedPolicyCrId`, look the policy CR up in the
+     currently-loaded list and add it to the batch — but only if it is itself
+     authorizable (pending, right role, not already signed by this admin) and
+     not already in the selection. Dedup by id. If the policy CR can't be found
+     or isn't authorizable (e.g. this admin already signed it), it is simply
+     left out — no error, no blocking. */
+  const expandedAuthorizableSelection = useMemo(() => {
+    const byId = new Map(loadedCrs.map((cr) => [cr.id, cr]));
+    const result = [...authorizableSelection];
+    const seen = new Set(result.map((cr) => cr.id));
+    for (const cr of authorizableSelection) {
+      const policyId = cr.relatedPolicyCrId;
+      if (!policyId || seen.has(policyId)) continue;
+      const policyCr = byId.get(policyId);
+      if (!policyCr) continue;
+      if (!isAuthorizable(policyCr, userRoles, username)) continue;
+      result.push(policyCr);
+      seen.add(policyId);
+    }
+    return result;
+  }, [authorizableSelection, loadedCrs, userRoles, username]);
+
+  // How many CRs were pulled in automatically beyond what the operator ticked.
+  const autoIncludedPolicyCount =
+    expandedAuthorizableSelection.length - authorizableSelection.length;
 
   /* ---- approve one CR (two-phase multiAdmin or single-phase firstAdmin) ----
      multiAdmin CRs take the enclave round-trip via /approval-model and only
@@ -474,9 +513,19 @@ export default function ChangeRequestsSection() {
     cancelButtonLabel: "Cancel",
     children: (
       <>
-        {`Authorize ${authorizableSelection.length} change request${
-          authorizableSelection.length === 1 ? "" : "s"
+        {`Authorize ${expandedAuthorizableSelection.length} change request${
+          expandedAuthorizableSelection.length === 1 ? "" : "s"
         }?`}
+        {autoIncludedPolicyCount > 0 && (
+          <>
+            {" "}
+            {`(Includes ${autoIncludedPolicyCount} linked admin-threshold-policy change${
+              autoIncludedPolicyCount === 1 ? "" : "s"
+            }, bundled automatically with the selected grant${
+              authorizableSelection.length === 1 ? "" : "s"
+            }.)`}
+          </>
+        )}
         {skippedFromAuthorize > 0 && (
           <>
             {" "}
@@ -494,7 +543,7 @@ export default function ChangeRequestsSection() {
         // (one doken, one round-trip), then commit each (see
         // runMultiAdminApprovalBatch). firstAdmin/Tideless CRs take the
         // single-phase authorize+commit path inside the batch (no enclave).
-        const ids = authorizableSelection.map((cr) => cr.id);
+        const ids = expandedAuthorizableSelection.map((cr) => cr.id);
         const outcomes = await runMultiAdminApprovalBatch(
           adminClient,
           approveTideRequests,
@@ -514,8 +563,9 @@ export default function ChangeRequestsSection() {
         }
       } catch (err) {
         // A batch-wide failure (e.g. the single enclave call rejected): mark
-        // every selected CR as failed so the operator sees the real error.
-        for (const cr of authorizableSelection) {
+        // every CR in the batch (including auto-included policy CRs) as failed
+        // so the operator sees the real error.
+        for (const cr of expandedAuthorizableSelection) {
           results.push({ id: cr.id, ok: false, message: errorMessage(err) });
         }
       }
