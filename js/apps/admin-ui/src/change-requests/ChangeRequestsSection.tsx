@@ -549,11 +549,13 @@ export default function ChangeRequestsSection() {
         // (one doken, one round-trip), then commit each (see
         // runMultiAdminApprovalBatch). firstAdmin/Tideless CRs take the
         // single-phase authorize+commit path inside the batch (no enclave).
-        const ids = expandedAuthorizableSelection.map((cr) => cr.id);
+        // Pass the full CR objects (not just ids): the batch helper builds a
+        // best-effort id->name map from each CR's rows so the enclave sign card
+        // shows role/user names instead of UUIDs (display-only, never signed).
         const outcomes = await runMultiAdminApprovalBatch(
           adminClient,
           approveTideRequests,
-          ids,
+          expandedAuthorizableSelection,
         );
         for (const outcome of outcomes) {
           try {

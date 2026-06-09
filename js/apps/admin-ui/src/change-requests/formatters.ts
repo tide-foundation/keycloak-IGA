@@ -198,6 +198,58 @@ function nameOrId(
 }
 
 /**
+ * Shape of the optional names map handed to the approval enclave alongside each
+ * change-request carrier. It lets the enclave's sign card render role/user
+ * NAMES instead of raw UUIDs. It is a DISPLAY aid only: it is never signed and
+ * never affects the request bytes. Mirrors the enclave's `HumanReadableContext`.
+ */
+export interface CrNamesMap {
+  roles: Record<string, string>;
+  users: Record<string, string>;
+}
+
+/**
+ * Best-effort id->name resolution for the roles and users referenced by a CR's
+ * rows, sourced the SAME way {@link humanReadableSummary} resolves its labels
+ * (the `*_id` / name columns the backend already deserializes into `cr.rows`).
+ *
+ * Unlike the summary (which only reads the first row), this walks EVERY row so a
+ * multi-row CR (e.g. a batch grant) contributes all of its ids. A row that only
+ * carries an id and no name is simply omitted — the enclave falls back to the
+ * UUID for that entry, never a blank.
+ *
+ * Never throws: a malformed payload yields an empty-but-valid map.
+ */
+export function crNamesMap(cr: IgaChangeRequest): CrNamesMap {
+  const roles: Record<string, string> = {};
+  const users: Record<string, string> = {};
+  try {
+    const rows = Array.isArray(cr.rows) ? cr.rows : [];
+    for (const raw of rows) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as Record<string, unknown>;
+
+      const roleId = pick(row, "role_id", "ROLE_ID", "roleId");
+      const roleName = pick(row, "role_name", "ROLE_NAME", "roleName", "name");
+      if (roleId && roleName) roles[roleId] = roleName;
+
+      const userId = pick(row, "user_id", "USER_ID", "userId");
+      const username = pick(
+        row,
+        "username",
+        "USERNAME",
+        "user_name",
+        "userName",
+      );
+      if (userId && username) users[userId] = username;
+    }
+  } catch {
+    // Display-only aid: a resolution failure must never break the caller.
+  }
+  return { roles, users };
+}
+
+/**
  * Convert a CR into a single-line human-readable description of what the change
  * will do once committed. This is a best-effort first cut: it reads the
  * already-parsed `rows` payload defensively but does NOT issue extra

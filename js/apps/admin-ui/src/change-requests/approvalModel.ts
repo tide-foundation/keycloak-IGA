@@ -22,10 +22,12 @@
 // This keeps the dual-mode branch UI-only, with no backend change.
 
 import type KeycloakAdminClient from "@keycloak/keycloak-admin-client";
+import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 import type { IgaApprovalSubmitResult } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 import { NetworkError } from "@keycloak/keycloak-admin-client";
 
 import { base64ToBytes, bytesToBase64 } from "../utils/tideSerialization";
+import { crNamesMap, type CrNamesMap } from "./formatters";
 
 /**
  * True when `err` is the backend's "this realm is not multiAdmin" refusal from
@@ -46,9 +48,14 @@ function isNotMultiAdmin(err: unknown): boolean {
   );
 }
 
-/** The enclave approve entry point as exposed by `useEnvironment()`. */
+/** The enclave approve entry point as exposed by `useEnvironment()`.
+ *
+ * `names` is an OPTIONAL display-only id->name map (see {@link CrNamesMap}) the
+ * enclave's sign card uses to render role/user names instead of UUIDs. It is
+ * never signed and never affects the request bytes; extra carrier fields pass
+ * through structured-clone/postMessage untouched. */
 export type ApproveTideRequests = (
-  requests: { id: string; request: Uint8Array }[],
+  requests: { id: string; request: Uint8Array; names?: CrNamesMap }[],
 ) => Promise<
   {
     id: string;
@@ -214,8 +221,11 @@ export type BatchApprovalOutcome = { changeRequestId: string } & (
 export async function runMultiAdminApprovalBatch(
   adminClient: KeycloakAdminClient,
   approveTideRequests: ApproveTideRequests,
-  changeRequestIds: string[],
+  changeRequests: IgaChangeRequest[],
 ): Promise<BatchApprovalOutcome[]> {
+  const changeRequestIds = changeRequests.map((cr) => cr.id);
+  // id -> CR, so each enclave carrier can be tagged with its display names map.
+  const crById = new Map(changeRequests.map((cr) => [cr.id, cr]));
   console.log("[TIDE-APPROVAL] runMultiAdminApprovalBatch: start", {
     batchSize: changeRequestIds.length,
     changeRequestIds,
@@ -223,7 +233,9 @@ export async function runMultiAdminApprovalBatch(
 
   const outcomes = new Map<string, BatchApprovalOutcome>();
   // Carriers that need the enclave, collected for ONE approveTideRequests call.
-  const carriers: { id: string; request: Uint8Array }[] = [];
+  // `names` is a best-effort display-only id->name map (never signed).
+  const carriers: { id: string; request: Uint8Array; names?: CrNamesMap }[] =
+    [];
 
   // ── Phase 1: fetch every carrier; run single-phase CRs immediately ────
   for (const changeRequestId of changeRequestIds) {
@@ -274,9 +286,20 @@ export async function runMultiAdminApprovalBatch(
       continue;
     }
 
+    // Best-effort id->name map so the enclave sign card shows names not UUIDs.
+    // Display-only: a resolution failure must never break the signing batch.
+    let names: CrNamesMap | undefined;
+    try {
+      const cr = crById.get(changeRequestId);
+      names = cr ? crNamesMap(cr) : undefined;
+    } catch {
+      names = undefined;
+    }
+
     carriers.push({
       id: changeRequestId,
       request: base64ToBytes(model.requestModel),
+      ...(names ? { names } : {}),
     });
   }
 
