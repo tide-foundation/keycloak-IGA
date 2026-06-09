@@ -614,7 +614,20 @@ export default function ChangeRequestsSection() {
     onConfirm: async () => {
       setIsProcessing(true);
       const results: BulkResult[] = [];
-      for (const cr of committableSelection) {
+      // REGEN_ADMIN_POLICY CRs bump the realm admin-approval threshold, so they
+      // MUST commit LAST: committing the policy first raises the threshold and
+      // strands the still-pending grant CRs (e.g. at 1/2). Stable-sort the
+      // committable list pushing every REGEN_ADMIN_POLICY CR to the end while
+      // preserving the relative order of all other CRs. Per-CR commit failures
+      // are caught individually (the server also enforces this with a 412
+      // guard); we track succeeded/failed and continue the loop so a policy's
+      // 412 is surfaced clearly instead of breaking the batch.
+      const ordered = [...committableSelection].sort(
+        (a, b) =>
+          (a.actionType === "REGEN_ADMIN_POLICY" ? 1 : 0) -
+          (b.actionType === "REGEN_ADMIN_POLICY" ? 1 : 0),
+      );
+      for (const cr of ordered) {
         try {
           await adminClient.iga.commit({ id: cr.id });
           results.push({ id: cr.id, ok: true });
