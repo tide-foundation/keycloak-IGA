@@ -27,6 +27,7 @@ import {
 import type { KeycloakDataTableHandle } from "@keycloak/keycloak-ui-shared";
 
 import { useAdminClient } from "../admin-client";
+import { useRealm } from "../context/realm-context/RealmContext";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { ChangeRequestsHelpModal } from "./ChangeRequestsHelpModal";
@@ -275,6 +276,11 @@ export default function ChangeRequestsSection() {
   const { adminClient } = useAdminClient();
   const { addAlert, addError } = useAlerts();
   const { approveTideRequests } = useEnvironment();
+  // Realm-context refresh: bumping its `key` re-fetches the realm rep so the
+  // realm-settings toggles (IGA, user-registration) reflect a just-committed
+  // CR without a hard refresh. Renamed to avoid colliding with the local
+  // CR-table `refresh` below.
+  const { refresh: refreshRealm } = useRealm();
   const userRoles = useCurrentUserRoles();
   const username = useCurrentUsername();
 
@@ -587,6 +593,12 @@ export default function ChangeRequestsSection() {
       } else {
         addAlert("No change requests were authorized.", AlertVariant.danger);
       }
+      // firstAdmin / Tideless CRs take the single-phase authorize+commit path
+      // inside the batch, so an authorized CR here may have committed and
+      // flipped realm-level settings. Bump the realm context once so
+      // realm-settings toggles refresh without a hard reload. Cheap and
+      // idempotent; harmless for multiAdmin (approval-only) outcomes.
+      if (okCount > 0) refreshRealm();
       refresh();
     },
   });
@@ -653,6 +665,11 @@ export default function ChangeRequestsSection() {
       } else {
         addAlert("No change requests were committed.", AlertVariant.danger);
       }
+      // A committed CR may flip realm-level settings (DISABLE_IGA,
+      // user-registration). Bump the realm context so realm-settings toggles
+      // refresh without a hard reload. Fire once after the commit loop; cheap
+      // and idempotent. Don't drop the CR-table refresh below.
+      if (okCount > 0) refreshRealm();
       refresh();
     },
   });
@@ -675,6 +692,10 @@ export default function ChangeRequestsSection() {
       try {
         const message = await authorizeOne(cr);
         addAlert(message, AlertVariant.success);
+        // firstAdmin single-phase authorize+commit may have flipped realm-level
+        // settings; refresh realm context so realm-settings toggles update
+        // without a hard reload. Idempotent for multiAdmin (approval-only).
+        refreshRealm();
         refresh();
       } catch (err) {
         addError(
@@ -685,7 +706,15 @@ export default function ChangeRequestsSection() {
         setIsProcessing(false);
       }
     },
-    [authorizeOne, userRoles, username, addAlert, addError, refresh],
+    [
+      authorizeOne,
+      userRoles,
+      username,
+      addAlert,
+      addError,
+      refresh,
+      refreshRealm,
+    ],
   );
 
   const onCommitRow = useCallback(
@@ -695,6 +724,9 @@ export default function ChangeRequestsSection() {
       try {
         await adminClient.iga.commit({ id: cr.id });
         addAlert("Change request committed.", AlertVariant.success);
+        // A committed CR may flip realm-level settings — refresh realm context
+        // so realm-settings toggles update without a hard reload.
+        refreshRealm();
         refresh();
       } catch (err) {
         addError(`Cannot commit yet: ${errorMessage(err)}`, err);
@@ -702,7 +734,7 @@ export default function ChangeRequestsSection() {
         setIsProcessing(false);
       }
     },
-    [adminClient, userRoles, addAlert, addError, refresh],
+    [adminClient, userRoles, addAlert, addError, refresh, refreshRealm],
   );
 
   const onDenyRow = useCallback(
