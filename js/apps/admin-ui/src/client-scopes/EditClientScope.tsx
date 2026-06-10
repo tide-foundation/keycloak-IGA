@@ -38,6 +38,7 @@ import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { convertFormValuesToObject } from "../util";
 import { useParams } from "../utils/useParams";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { MapperList } from "./details/MapperList";
 import { ScopeForm } from "./details/ScopeForm";
 import { ClientScopeParams, toClientScope } from "./routes/ClientScope";
@@ -135,7 +136,26 @@ export default function EditClientScope() {
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.clientScopes.del({ id });
+        // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+        // change-request envelope (the agent unwraps it; `del` is typed void
+        // but resolves with the parsed body). Detect it with the established
+        // helper and do NOT navigate away as if deleted — refresh in place.
+        const result = await adminClient.clientScopes.del({ id });
+        if (
+          notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          )
+        ) {
+          refresh();
+          return;
+        }
         addAlert(t("deletedSuccessClientScope"), AlertVariant.success);
         navigate(toClientScopes({ realm }));
       } catch (error) {

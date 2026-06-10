@@ -34,6 +34,7 @@ import helpUrls from "../help-urls";
 import { emptyFormatter, exportClient } from "../util";
 import { convertClientToUrl } from "../utils/client-url";
 import { translationFormatter } from "../utils/translationFormatter";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { InitialAccessTokenList } from "./initial-access/InitialAccessTokenList";
 import { ClientRegistration } from "./registration/ClientRegistration";
 import { toAddClient } from "./routes/AddClient";
@@ -174,10 +175,26 @@ export default function ClientsSection() {
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.clients.del({
+        // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+        // change-request envelope (the agent unwraps it; `del` is typed void
+        // but resolves with the parsed body). Detect it with the established
+        // helper and do NOT report a deletion — refresh shows it still present.
+        const result = await adminClient.clients.del({
           id: selectedClient!.id!,
         });
-        addAlert(t("clientDeletedSuccess"), AlertVariant.success);
+        const pending = notifyIfPendingChangeRequest(
+          result,
+          t,
+          addAlert,
+          undefined,
+          {
+            titleKey: "deletePendingChangeRequestCreated",
+            useEnvelopeMessage: true,
+          },
+        );
+        if (!pending) {
+          addAlert(t("clientDeletedSuccess"), AlertVariant.success);
+        }
         refresh();
       } catch (error) {
         addError("clientDeleteError", error);

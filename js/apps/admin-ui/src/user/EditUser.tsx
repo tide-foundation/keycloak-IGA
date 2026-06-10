@@ -61,6 +61,7 @@ import {
 import { UserParams, UserTab, toUser } from "./routes/User";
 import { toUsers } from "./routes/Users";
 import { isLightweightUser } from "./utils";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 
 import "./user-section.css";
 import { AdminEvents } from "../events/AdminEvents";
@@ -251,7 +252,28 @@ export default function EditUser() {
         if (lightweightUser) {
           await adminClient.users.logout({ id: user!.id! });
         } else {
-          await adminClient.users.del({ id: user!.id! });
+          // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+          // change-request envelope (the agent unwraps it; `del` is typed void
+          // but resolves with the parsed body). Detect it with the established
+          // `notifyIfPendingChangeRequest` helper and do NOT report a deletion.
+          const result = await adminClient.users.del({ id: user!.id! });
+          if (
+            notifyIfPendingChangeRequest(
+              result,
+              t,
+              addAlert,
+              { realm: realmName, navigate },
+              {
+                titleKey: "deletePendingChangeRequestCreated",
+                useEnvelopeMessage: true,
+              },
+            )
+          ) {
+            // Entity still exists pending approval — stay on this page and
+            // refresh from server rather than navigating away as if deleted.
+            refresh();
+            return;
+          }
         }
         addAlert(t("userDeletedSuccess"), AlertVariant.success);
         navigate(toUsers({ realm: realmName }));

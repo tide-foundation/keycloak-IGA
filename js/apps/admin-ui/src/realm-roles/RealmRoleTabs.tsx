@@ -53,6 +53,7 @@ import { useRealm } from "../context/realm-context/RealmContext";
 import { AdminEvents } from "../events/AdminEvents";
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import { useParams } from "../utils/useParams";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { UsersInRoleTab } from "./UsersInRoleTab";
 import { RealmRoleRoute, RealmRoleTab, toRealmRole } from "./routes/RealmRole";
 import { toRealmRoles } from "./routes/RealmRoles";
@@ -208,13 +209,31 @@ export default function RealmRoleTabs() {
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        if (!clientId) {
-          await adminClient.roles.delById({ id });
-        } else {
-          await adminClient.clients.delRole({
-            id: clientId,
-            roleName: roleName!,
-          });
+        // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+        // change-request envelope (the agent unwraps it; the `del`/`delRole`
+        // calls are typed void but resolve with the parsed body). Detect it
+        // with the established helper and do NOT report a deletion.
+        const result = !clientId
+          ? await adminClient.roles.delById({ id })
+          : await adminClient.clients.delRole({
+              id: clientId,
+              roleName: roleName!,
+            });
+        if (
+          notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm: realmName, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          )
+        ) {
+          // Role still exists pending approval — refresh, don't navigate away.
+          refresh();
+          return;
         }
         addAlert(t("roleDeletedSuccess"), AlertVariant.success);
         navigate(toOverview());

@@ -38,6 +38,22 @@ type NotifyNav = {
 };
 
 /**
+ * Optional overrides for the info toast. Lets a caller (e.g. a DELETE flow)
+ * surface action-specific wording while keeping the SAME 202/pending
+ * detection (`isPendingChangeRequest`). When omitted, the standard
+ * "change request created" title is used.
+ */
+type NotifyOptions = {
+  /** i18n key for the toast title. Defaults to `pendingChangeRequestCreated`. */
+  titleKey?: string;
+  /**
+   * Whether to surface the pending envelope's `message` (if present) as the
+   * toast description. Defaults to `false`.
+   */
+  useEnvelopeMessage?: boolean;
+};
+
+/**
  * If `result` is a pending change-request envelope, show the standard toast
  * and return the parsed envelope. Otherwise return `undefined` so the caller
  * proceeds with its normal success path.
@@ -47,6 +63,7 @@ export function notifyIfPendingChangeRequest(
   t: TFunction,
   addAlert: AddAlert,
   nav?: NotifyNav,
+  options?: NotifyOptions,
 ): PendingChangeRequest | undefined {
   if (!isPendingChangeRequest(result)) {
     return undefined;
@@ -69,11 +86,12 @@ export function notifyIfPendingChangeRequest(
     );
   }
 
-  addAlert(
-    t("pendingChangeRequestCreated", { id: result.changeRequestId }),
-    AlertVariant.info,
-    undefined,
-    actionLinks,
-  );
+  const title = options?.titleKey
+    ? t(options.titleKey, { id: result.changeRequestId })
+    : t("pendingChangeRequestCreated", { id: result.changeRequestId });
+  const description =
+    options?.useEnvelopeMessage && result.message ? result.message : undefined;
+
+  addAlert(title, AlertVariant.info, description, actionLinks);
   return result;
 }
