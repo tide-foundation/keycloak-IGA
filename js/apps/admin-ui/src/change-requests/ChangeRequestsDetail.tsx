@@ -22,9 +22,14 @@ import {
   TextContent,
   Tooltip,
 } from "@patternfly/react-core";
+import { fetchWithError } from "@keycloak/keycloak-admin-client";
 import { useAlerts, useEnvironment } from "@keycloak/keycloak-ui-shared";
+import { saveAs } from "file-saver";
+import { useTranslation } from "react-i18next";
 
 import { useAdminClient } from "../admin-client";
+import { getAuthorizationHeaders } from "../utils/getAuthorizationHeaders";
+import { joinPath } from "../utils/joinPath";
 
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
@@ -85,6 +90,7 @@ export function ChangeRequestsDetail({
   const { adminClient } = useAdminClient();
   const { addAlert, addError } = useAlerts();
   const { approveTideRequests } = useEnvironment();
+  const { t } = useTranslation();
 
   const [cr, setCr] = useState<IgaChangeRequest | null>(null);
   const [comments, setComments] = useState<IgaComment[]>([]);
@@ -172,6 +178,43 @@ export function ChangeRequestsDetail({
       onChanged();
     } catch (err) {
       addError(`Cannot commit yet: ${errorMessage(err)}`, err);
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const onDownloadDiagnosticBundle = async () => {
+    if (!cr) return;
+    setIsWorking(true);
+    try {
+      // Mirror the admin-ui raw-fetch convention (admin-ui-endpoint.ts): admin
+      // base URL + bearer token. The endpoint returns JSON; we download it as a
+      // blob the user can hand to a developer.
+      const accessToken = await adminClient.getAccessToken();
+      const response = await fetchWithError(
+        joinPath(
+          adminClient.baseUrl,
+          "admin/realms",
+          encodeURIComponent(adminClient.realmName),
+          "iga/change-requests",
+          encodeURIComponent(cr.id),
+          "diagnostic-bundle",
+        ),
+        {
+          method: "GET",
+          headers: {
+            ...getAuthorizationHeaders(accessToken),
+            Accept: "application/json",
+          },
+        },
+      );
+      const blob = await response.blob();
+      saveAs(blob, `cr-${cr.id}-diagnostic.json`);
+    } catch (err) {
+      addError(
+        `${t("downloadDiagnosticBundleError")}: ${errorMessage(err)}`,
+        err,
+      );
     } finally {
       setIsWorking(false);
     }
@@ -311,6 +354,15 @@ export function ChangeRequestsDetail({
           cr
             ? ([
                 primaryCta,
+                <Button
+                  key="download-diagnostic-bundle"
+                  variant="secondary"
+                  isDisabled={isWorking}
+                  isLoading={isWorking}
+                  onClick={onDownloadDiagnosticBundle}
+                >
+                  {t("downloadDiagnosticBundle")}
+                </Button>,
                 <Button
                   key="deny"
                   variant={ButtonVariant.danger}

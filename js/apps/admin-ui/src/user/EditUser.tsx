@@ -45,6 +45,7 @@ import { UserAttributes } from "./UserAttributes";
 import { UserConsents } from "./UserConsents";
 import { UserCredentials } from "./UserCredentials";
 import { BruteForced, UserForm } from "./UserForm";
+import { ExportLoginDiagnosticsModal } from "./ExportLoginDiagnosticsModal";
 import { UserGroups } from "./UserGroups";
 import { UserIdentityProviderLinks } from "./UserIdentityProviderLinks";
 import { UserRoleMapping } from "./UserRoleMapping";
@@ -90,6 +91,7 @@ export default function EditUser() {
     useState<UserProfileMetadata>();
   const [refreshCount, setRefreshCount] = useState(0);
   const refresh = () => setRefreshCount((count) => count + 1);
+  const [exportDiagnosticsOpen, setExportDiagnosticsOpen] = useState(false);
   const lightweightUser = isLightweightUser(user?.id);
   const [upConfig, setUpConfig] = useState<UserProfileConfig>();
 
@@ -289,6 +291,13 @@ export default function EditUser() {
       <ImpersonateConfirm />
       <DeleteConfirm />
       <DisableConfirm />
+      {exportDiagnosticsOpen && (
+        <ExportLoginDiagnosticsModal
+          userId={user.id!}
+          username={user.username!}
+          onClose={() => setExportDiagnosticsOpen(false)}
+        />
+      )}
       <ViewHeader
         titleKey={user.username!}
         className="kc-username-view-header"
@@ -318,6 +327,12 @@ export default function EditUser() {
             onClick={() => toggleImpersonateDialog()}
           >
             {t("impersonate")}
+          </DropdownItem>,
+          <DropdownItem
+            key="export-login-diagnostics"
+            onClick={() => setExportDiagnosticsOpen(true)}
+          >
+            {t("exportLoginDiagnostics")}
           </DropdownItem>,
           <DropdownItem
             key="delete"
