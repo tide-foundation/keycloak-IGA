@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useAdminClient } from "../../admin-client";
-import { useAlerts } from "@keycloak/keycloak-ui-shared";
+import { getErrorMessage, useAlerts } from "@keycloak/keycloak-ui-shared";
 import { ConfirmDialogModal } from "../../components/confirm-dialog/ConfirmDialog";
 import { LifespanField } from "./LifespanField";
 import { RequiredActionMultiSelect } from "./RequiredActionMultiSelect";
@@ -73,15 +73,11 @@ export const ResetCredentialDialog = ({
     };
   }, [adminClient, igaEnabled, userId]);
 
-  // TRI-STATE fail-open: only flag the block on a confirmed false. The button
-  // stays PRESSABLE so the press-guard can surface the info notice; this flag
-  // now only drives the explanatory tooltip for affordance.
-  const inviteBlocked = igaEnabled && committed === false;
-
-  // Synchronous press-guard shared by BOTH the Copy Link and Send Email
-  // handlers. Returns true if the Tide invite action is allowed to proceed;
-  // otherwise surfaces an error and returns false so the caller bails BEFORE
-  // any side effect (link generation, clipboard write, email send).
+  // Press-guard for the Send Email handler. (Copy Link no longer uses this:
+  // the backend getRequiredActionLink endpoint owns its own eligibility check
+  // and returns a reason message.) Returns true if the Tide invite action is
+  // allowed to proceed; otherwise surfaces an info notice and returns false so
+  // the caller bails BEFORE any side effect (email send).
   const ensureTideInviteAllowed = async (
     actions: RequiredActionAlias[],
   ): Promise<boolean> => {
@@ -144,10 +140,10 @@ export const ResetCredentialDialog = ({
       return;
     }
 
-    if (!(await ensureTideInviteAllowed(actions))) {
-      return;
-    }
-
+    // The backend getRequiredActionLink endpoint now owns ALL eligibility
+    // logic (committed + tideInvitable). We no longer pre-check here; we just
+    // call it and, on a 400, surface the backend's specific reason message as
+    // an info notice without copying anything.
     try {
       const response = await adminClient.tideAdmin.getRequiredActionLink({
         userId,
@@ -159,7 +155,13 @@ export const ResetCredentialDialog = ({
       addAlert(t("Link copied to clipboard"), AlertVariant.success);
       onClose();
     } catch (error) {
-      addError(error);
+      // Extract the backend's RFC-9457 reason (problem.detail) via the shared
+      // getErrorMessage helper; fall back to a generic key if none is present.
+      const reason = getErrorMessage(error);
+      addAlert(
+        reason || t("tideInviteBlockedUncommittedUser"),
+        AlertVariant.info,
+      );
     }
   };
 
@@ -197,9 +199,6 @@ export const ResetCredentialDialog = ({
         onClick={async () => {
           await getLinkTideAccountBtn();
         }}
-        title={
-          inviteBlocked ? t("tideInviteBlockedUncommittedUser") : undefined
-        }
         style={{ marginTop: "1rem" }}
       >
         Copy Link
