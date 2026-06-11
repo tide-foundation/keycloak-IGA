@@ -76,11 +76,48 @@ export const ResetCredentialDialog = ({
   // TRI-STATE fail-open: only disable on a confirmed false.
   const copyLinkDisabled = igaEnabled && committed === false;
 
+  // Synchronous press-guard shared by BOTH the Copy Link and Send Email
+  // handlers. Returns true if the Tide invite action is allowed to proceed;
+  // otherwise surfaces an error and returns false so the caller bails BEFORE
+  // any side effect (link generation, clipboard write, email send).
+  const ensureTideInviteAllowed = async (
+    actions: RequiredActionAlias[],
+  ): Promise<boolean> => {
+    if (!igaEnabled) return true;
+    // Only gate the Tide link action; other reset actions flow normally.
+    if (!actions.includes("link-tide-account-action" as RequiredActionAlias)) {
+      return true;
+    }
+    // Resolve committed reliably AT PRESS TIME; don't trust a possibly
+    // unresolved proactive fetch.
+    let c = committed;
+    if (c === undefined) {
+      try {
+        c = (await adminClient.tideAdmin.getUserCommitted({ id: userId }))
+          .committed;
+        setCommitted(c);
+      } catch {
+        // Fetch failed -> fall through; the backend RFC-9457 block on the
+        // Copy Link / email path is the backstop.
+        c = undefined;
+      }
+    }
+    if (c === false) {
+      addError(new Error(t("tideInviteBlockedUncommittedUser")));
+      return false;
+    }
+    return true;
+  };
+
   const sendCredentialsResetEmail = async ({
     actions,
     lifespan,
   }: CredentialResetForm) => {
     if (isEmpty(actions)) {
+      return;
+    }
+
+    if (!(await ensureTideInviteAllowed(actions))) {
       return;
     }
 
@@ -102,6 +139,10 @@ export const ResetCredentialDialog = ({
     const actions = form.getValues("actions");
     const lifespan = form.getValues("lifespan");
     if (isEmpty(actions)) {
+      return;
+    }
+
+    if (!(await ensureTideInviteAllowed(actions))) {
       return;
     }
 
@@ -156,7 +197,7 @@ export const ResetCredentialDialog = ({
         }}
         disabled={copyLinkDisabled}
         title={
-          copyLinkDisabled ? t("copyLinkBlockedUncommittedUser") : undefined
+          copyLinkDisabled ? t("tideInviteBlockedUncommittedUser") : undefined
         }
         style={{ marginTop: "1rem" }}
       >
