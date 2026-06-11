@@ -70,6 +70,19 @@ export class TideProvider extends Resource<{ realm?: string }> {
     },
   });
 
+  /* # TIDECLOAK IMPLEMENTATION
+   * Reads whether a user is "committed" (returns true when IGA is off). Used by
+   * the admin-ui to proactively disable invite-link generation for uncommitted
+   * users while IGA is on. */
+  public getUserCommitted = this.makeRequest<
+    { id: string },
+    { committed: boolean }
+  >({
+    method: "GET",
+    path: "/tideAdminResources/users/{id}/committed",
+    urlParamKeys: ["id"],
+  });
+
   /* # TIDECLOAK IMPLEMENTATION */
   public toggleRagnarok = this.makeRequest<FormData, Response>({
     method: "POST",

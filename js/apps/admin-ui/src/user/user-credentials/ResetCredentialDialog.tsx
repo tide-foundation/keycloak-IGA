@@ -1,6 +1,7 @@
 import type { RequiredActionAlias } from "@keycloak/keycloak-admin-client/lib/defs/requiredActionProviderRepresentation";
 import { AlertVariant, Form, ModalVariant } from "@patternfly/react-core";
 import { isEmpty } from "lodash-es";
+import { useEffect, useState } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useAdminClient } from "../../admin-client";
@@ -9,6 +10,7 @@ import { ConfirmDialogModal } from "../../components/confirm-dialog/ConfirmDialo
 import { LifespanField } from "./LifespanField";
 import { RequiredActionMultiSelect } from "./RequiredActionMultiSelect";
 import { useRealm } from "../../context/realm-context/RealmContext";
+import { useIsIgaEnabled } from "../../utils/useIsIgaEnabled";
 
 type ResetCredentialDialogProps = {
   userId: string;
@@ -43,6 +45,37 @@ export const ResetCredentialDialog = ({
 
   const { addAlert, addError } = useAlerts();
 
+  /* TIDECLOAK IMPLEMENTATION */
+  const igaEnabled = useIsIgaEnabled();
+  const [committed, setCommitted] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!igaEnabled) {
+      setCommitted(undefined);
+      return;
+    }
+    const loadCommitted = async () => {
+      try {
+        const result = await adminClient.tideAdmin.getUserCommitted({
+          id: userId,
+        });
+        if (!cancelled) setCommitted(result.committed);
+      } catch {
+        // fail-open: leave committed unknown so the link stays enabled and the
+        // backend RFC-9457 block is the hard gate.
+        if (!cancelled) setCommitted(undefined);
+      }
+    };
+    void loadCommitted();
+    return () => {
+      cancelled = true;
+    };
+  }, [adminClient, igaEnabled, userId]);
+
+  // TRI-STATE fail-open: only disable on a confirmed false.
+  const copyLinkDisabled = igaEnabled && committed === false;
+
   const sendCredentialsResetEmail = async ({
     actions,
     lifespan,
@@ -67,25 +100,23 @@ export const ResetCredentialDialog = ({
   /* TIDECLOAK IMPLEMENTATION */
   const getLinkTideAccountBtn = async () => {
     const actions = form.getValues("actions");
-    const lifespan = form.getValues("lifespan")
+    const lifespan = form.getValues("lifespan");
     if (isEmpty(actions)) {
       return;
     }
 
     try {
-
       const response = await adminClient.tideAdmin.getRequiredActionLink({
         userId,
         actions,
         lifespan,
       });
 
-
-      navigator.clipboard.writeText(response);
+      await navigator.clipboard.writeText(response);
       addAlert(t("Link copied to clipboard"), AlertVariant.success);
       onClose();
     } catch (error) {
-      addError("Could not get required action link", error);
+      addError(error);
     }
   };
 
@@ -123,6 +154,10 @@ export const ResetCredentialDialog = ({
         onClick={async () => {
           await getLinkTideAccountBtn();
         }}
+        disabled={copyLinkDisabled}
+        title={
+          copyLinkDisabled ? t("copyLinkBlockedUncommittedUser") : undefined
+        }
         style={{ marginTop: "1rem" }}
       >
         Copy Link
