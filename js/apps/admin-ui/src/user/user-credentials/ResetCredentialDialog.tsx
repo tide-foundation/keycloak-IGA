@@ -73,8 +73,10 @@ export const ResetCredentialDialog = ({
     };
   }, [adminClient, igaEnabled, userId]);
 
-  // TRI-STATE fail-open: only disable on a confirmed false.
-  const copyLinkDisabled = igaEnabled && committed === false;
+  // TRI-STATE fail-open: only flag the block on a confirmed false. The button
+  // stays PRESSABLE so the press-guard can surface the info notice; this flag
+  // now only drives the explanatory tooltip for affordance.
+  const inviteBlocked = igaEnabled && committed === false;
 
   // Synchronous press-guard shared by BOTH the Copy Link and Send Email
   // handlers. Returns true if the Tide invite action is allowed to proceed;
@@ -103,7 +105,7 @@ export const ResetCredentialDialog = ({
       }
     }
     if (c === false) {
-      addError(new Error(t("tideInviteBlockedUncommittedUser")));
+      addAlert(t("tideInviteBlockedUncommittedUser"), AlertVariant.info);
       return false;
     }
     return true;
@@ -195,9 +197,8 @@ export const ResetCredentialDialog = ({
         onClick={async () => {
           await getLinkTideAccountBtn();
         }}
-        disabled={copyLinkDisabled}
         title={
-          copyLinkDisabled ? t("tideInviteBlockedUncommittedUser") : undefined
+          inviteBlocked ? t("tideInviteBlockedUncommittedUser") : undefined
         }
         style={{ marginTop: "1rem" }}
       >
