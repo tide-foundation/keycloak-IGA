@@ -225,7 +225,7 @@ function ChangeRequestsToolbar({
                   /* disabled */
                 }}
               >
-                {`Bulk Approve${
+                {`Bulk Authorize${
                   authorizableCount > 0 ? ` (${authorizableCount})` : ""
                 }`}
               </Button>
@@ -237,7 +237,7 @@ function ChangeRequestsToolbar({
             isLoading={isProcessing}
             onClick={onAuthorizeBulk}
           >
-            {`Bulk Approve (${authorizableCount})`}
+            {`Bulk Authorize (${authorizableCount})`}
           </Button>
         )}
       </ToolbarItem>
@@ -447,13 +447,13 @@ export default function ChangeRequestsSection() {
   const autoIncludedPolicyCount =
     expandedAuthorizableSelection.length - authorizableSelection.length;
 
-  /* ---- approve (SIGN-only) one CR ----
+  /* ---- authorize (APPROVE + COMMIT) one CR ----
      Drives /approve, which records this admin's authorization toward the
-     threshold and does NOT apply the change (Commit is a separate action).
-     multiAdmin CRs take the enclave round-trip; firstAdmin/Tideless are
-     recorded inline. Returns a user-facing success message, or throws for
-     transport/enclave errors and for an enclave denial (so bulk records it as
-     a failure). Shared by the row action and the bulk loop. */
+     threshold and AUTO-COMMITS the change server-side at quorum. multiAdmin CRs
+     take the enclave round-trip; firstAdmin/Tideless are recorded inline.
+     Returns a user-facing success message (committed vs recorded), or throws
+     for transport/enclave errors and for an enclave denial (so bulk records it
+     as a failure). Shared by the row action and the bulk loop. */
 
   const authorizeOne = useCallback(
     async (cr: IgaChangeRequest): Promise<string> => {
@@ -468,12 +468,14 @@ export default function ChangeRequestsSection() {
       if (outcome.kind === "pending") {
         return "Approval pending, awaiting other operators.";
       }
-      // recorded: /approve recorded the approval; it did NOT apply the change.
-      const { authCount, threshold, readyToCommit } = outcome.result;
-      const atQuorum = readyToCommit ?? authCount >= threshold;
-      return atQuorum
-        ? `Approved, ${authCount} of ${threshold}. Ready to commit.`
-        : `Approved, ${authCount} of ${threshold}.`;
+      // recorded: /approve recorded the approval and auto-committed at quorum.
+      const { authCount, threshold, readyToCommit, committed } = outcome.result;
+      const atQuorum = committed ?? readyToCommit ?? authCount >= threshold;
+      return committed
+        ? `Authorized and committed (${authCount} of ${threshold}).`
+        : atQuorum
+          ? `Authorized, ${authCount} of ${threshold}. Ready to commit.`
+          : `Approval recorded, ${authCount} of ${threshold}.`;
     },
     [adminClient, approveTideRequests],
   );
@@ -495,12 +497,14 @@ export default function ChangeRequestsSection() {
       if (outcome.kind === "pending") {
         return "Approval pending, awaiting other operators.";
       }
-      // recorded: /approve recorded the approval; it did NOT apply the change.
-      const { authCount, threshold, readyToCommit } = outcome.result;
-      const atQuorum = readyToCommit ?? authCount >= threshold;
-      return atQuorum
-        ? `Approved, ${authCount} of ${threshold}. Ready to commit.`
-        : `Approved, ${authCount} of ${threshold}.`;
+      // recorded: /approve recorded the approval and auto-committed at quorum.
+      const { authCount, threshold, readyToCommit, committed } = outcome.result;
+      const atQuorum = committed ?? readyToCommit ?? authCount >= threshold;
+      return committed
+        ? `Authorized and committed (${authCount} of ${threshold}).`
+        : atQuorum
+          ? `Authorized, ${authCount} of ${threshold}. Ready to commit.`
+          : `Approval recorded, ${authCount} of ${threshold}.`;
     },
     [],
   );
@@ -842,10 +846,11 @@ export default function ChangeRequestsSection() {
 
       const isApprover = canApprove(cr, userRoles);
 
-      // Approve (SIGN only)
+      // Authorize (APPROVE + COMMIT: records toward quorum, auto-commits at
+      // quorum server-side)
       const authTip = authorizeTip(cr, userRoles, username);
       actions.push({
-        title: "Approve",
+        title: "Authorize",
         isDisabled: !!authTip || isProcessing,
         tooltipProps: authTip ? { content: authTip } : undefined,
         onClick: () => {

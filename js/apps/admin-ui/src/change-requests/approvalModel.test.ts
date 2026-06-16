@@ -36,10 +36,11 @@ function makeAdminClient(opts: {
       opts.phase2 ?? {
         mode: "recorded",
         changeRequestId: CR_ID,
+        committed: true,
         authCount: 2,
         threshold: 2,
         readyToCommit: true,
-        status: "PENDING",
+        status: "APPROVED",
       },
     );
   return {
@@ -49,15 +50,16 @@ function makeAdminClient(opts: {
 }
 
 describe("runMultiAdminApproval", () => {
-  it("firstAdmin/Tideless (mode recorded, single round-trip): SIGN only, records without applying", async () => {
+  it("firstAdmin/Tideless (mode recorded, single round-trip): APPROVES and auto-commits at quorum, surfacing committed", async () => {
     const { client, approve } = makeAdminClient({
       phase1: {
         mode: "recorded",
         changeRequestId: CR_ID,
+        committed: true,
         authCount: 1,
         threshold: 1,
         readyToCommit: true,
-        status: "PENDING",
+        status: "APPROVED",
       },
     });
     const enclave = vi.fn() as unknown as ApproveTideRequests;
@@ -66,9 +68,9 @@ describe("runMultiAdminApproval", () => {
 
     expect(outcome.kind).toBe("recorded");
     if (outcome.kind === "recorded") {
-      // /approve SIGNS only — it does not apply; readyToCommit signals quorum.
+      // /approve approves AND commits — committed reports it was applied.
       expect(outcome.result.readyToCommit).toBe(true);
-      expect(outcome.result.committed).toBeUndefined();
+      expect(outcome.result.committed).toBe(true);
     }
     // Single round-trip: only one /approve call, no enclave.
     expect(approve).toHaveBeenCalledTimes(1);
@@ -100,10 +102,11 @@ describe("runMultiAdminApproval", () => {
       phase2: {
         mode: "recorded",
         changeRequestId: CR_ID,
+        committed: true,
         authCount: 2,
         threshold: 2,
         readyToCommit: true,
-        status: "PENDING",
+        status: "APPROVED",
       },
     });
 
@@ -139,8 +142,9 @@ describe("runMultiAdminApproval", () => {
 
     expect(outcome.kind).toBe("recorded");
     if (outcome.kind === "recorded") {
-      // SIGN only: no commit happens here; readyToCommit reports quorum reached.
+      // APPROVE+COMMIT: at quorum the server auto-commits; committed reports it.
       expect(outcome.result.readyToCommit).toBe(true);
+      expect(outcome.result.committed).toBe(true);
       expect(outcome.result.authCount).toBe(2);
       expect(outcome.result.threshold).toBe(2);
     }
@@ -158,6 +162,7 @@ describe("runMultiAdminApproval", () => {
       phase2: {
         mode: "recorded",
         changeRequestId: CR_ID,
+        committed: false,
         authCount: 1,
         threshold: 2,
         readyToCommit: false,
@@ -174,7 +179,9 @@ describe("runMultiAdminApproval", () => {
 
     expect(outcome.kind).toBe("recorded");
     if (outcome.kind === "recorded") {
+      // Below threshold: recorded but NOT committed (more approvers needed).
       expect(outcome.result.readyToCommit).toBe(false);
+      expect(outcome.result.committed).toBe(false);
       expect(outcome.result.authCount).toBe(1);
     }
   });

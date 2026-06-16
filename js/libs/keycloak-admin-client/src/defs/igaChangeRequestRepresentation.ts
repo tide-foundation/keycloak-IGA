@@ -82,8 +82,9 @@ export default interface IgaChangeRequest {
  *    2 with the signed doken): the caller's authorization was recorded and, if
  *    the threshold was met, the server ran the FULL commit pipeline inline.
  *    `committed` is authoritative: `true` means the change has already been
- *    applied (the unified endpoint auto-commits at quorum, so there is no
- *    separate legacy `/commit` step for these CRs).
+ *    applied (the `/approve` endpoint auto-commits at quorum). The apply-only
+ *    {@link IgaCommitResult} `/commit` step remains available for a CR already
+ *    at quorum that has not yet been applied.
  */
 export interface IgaApproveResult {
   mode: "needs-approval" | "recorded";
@@ -93,9 +94,11 @@ export interface IgaApproveResult {
   /** multiAdmin phase 1 only: Base64 `Policy:1` carrier for the enclave. */
   requestModel?: string;
   /**
-   * `mode === "recorded"` only. With the decoupled two-step flow the SIGN-only
-   * `/approve` endpoint no longer applies the change, so this is normally
-   * absent; `readyToCommit` is the signal that Commit may now be run.
+   * `mode === "recorded"` only. The `/approve` endpoint approves AND commits:
+   * `committed === true` means this approval reached quorum and the server
+   * applied the change inline. When the threshold is not yet met `committed` is
+   * falsy and `readyToCommit` is false (more approvers still needed). The
+   * apply-only {@link commit} step remains available for a CR already at quorum.
    */
   committed?: boolean;
   authCount: number;

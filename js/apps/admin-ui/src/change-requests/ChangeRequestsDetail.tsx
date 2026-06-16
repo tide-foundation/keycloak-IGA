@@ -74,16 +74,9 @@ function prettyRows(
   }
 }
 
-function hasSigned(cr: IgaChangeRequest | null, username: string): boolean {
-  if (!cr || !username) return false;
-  const a: IgaCrAuthorizerRepresentation[] = cr.authorizers ?? [];
-  return a.some((x) => x.username === username);
-}
-
 export function ChangeRequestsDetail({
   id,
   userRoles,
-  username,
   onClose,
   onChanged,
 }: Props) {
@@ -118,11 +111,13 @@ export function ChangeRequestsDetail({
     void fetchAll();
   }, [fetchAll]);
 
-  // Approve SIGNS ONLY: it records this admin's authorization toward the
-  // threshold via /approve and never applies the change. Applying is the
-  // separate Commit action below. Approve stays available while PENDING so
-  // admins can sign toward quorum (already-signed = idempotent no-op).
-  const onApprove = async () => {
+  // Authorize APPROVES AND COMMITS: it records this admin's authorization
+  // toward the threshold via /approve, and the server AUTO-COMMITS at quorum.
+  // `committed` on the result says whether the change was applied (quorum
+  // reached) or merely recorded (more approvers still needed). Authorize stays
+  // available while PENDING so admins can sign toward quorum (already-signed =
+  // idempotent no-op).
+  const onAuthorize = async () => {
     if (!cr) return;
     setIsWorking(true);
     try {
@@ -143,20 +138,21 @@ export function ChangeRequestsDetail({
         onChanged();
         return;
       }
-      // recorded: the SIGN-only /approve endpoint recorded this approval. It did
-      // NOT apply the change — Commit is the separate step. `readyToCommit`
-      // says whether the threshold is now met.
-      const { authCount, threshold, readyToCommit } = outcome.result;
-      const atQuorum = readyToCommit ?? authCount >= threshold;
+      // recorded: /approve recorded this approval and auto-committed at quorum.
+      // `committed` reports whether the change was applied this round.
+      const { authCount, threshold, readyToCommit, committed } = outcome.result;
+      const atQuorum = committed ?? readyToCommit ?? authCount >= threshold;
       addAlert(
-        atQuorum
-          ? `Approved, ${authCount} of ${threshold}. Ready to commit.`
-          : `Approved, ${authCount} of ${threshold}.`,
+        committed
+          ? `Authorized and committed (${authCount} of ${threshold}).`
+          : atQuorum
+            ? `Authorized, ${authCount} of ${threshold}. Ready to commit.`
+            : `Approval recorded, ${authCount} of ${threshold}.`,
         AlertVariant.success,
       );
       onChanged();
     } catch (err) {
-      addError(`Failed to approve change request: ${errorMessage(err)}`, err);
+      addError(`Failed to authorize change request: ${errorMessage(err)}`, err);
     } finally {
       setIsWorking(false);
     }
@@ -258,7 +254,6 @@ export function ChangeRequestsDetail({
   };
 
   const approvable = cr ? canApprove(cr, userRoles) : false;
-  const alreadySigned = hasSigned(cr, username);
   const requiredRolesText = cr?.requiredApproverRoles?.length
     ? `Requires role${
         cr.requiredApproverRoles.length > 1 ? "s" : ""
@@ -269,25 +264,24 @@ export function ChangeRequestsDetail({
 
   const blockedReason = cr ? blockedReasonOf(cr) : "";
 
-  // Approve and Commit are now TWO SEPARATE actions, rendered side by side
-  // whenever the CR is PENDING:
-  //   • Approve SIGNS (records an authorization toward quorum). Available while
-  //     PENDING and the admin is an approver who has not already signed; a
-  //     blocked CR cannot be signed. Already-signed disables it (no-op).
-  //   • Commit APPLIES. Enabled only once the threshold is met (readyToCommit)
-  //     and the admin can approve and the CR is not blocked; otherwise it is
-  //     disabled with a tooltip explaining why.
+  // Authorize and Commit are TWO actions, rendered side by side whenever the CR
+  // is PENDING — BOTH visible:
+  //   • Authorize APPROVES AND COMMITS (records an authorization toward quorum;
+  //     the server auto-commits at quorum). Always available to an approver on a
+  //     non-blocked CR — even one this admin already signed, since re-authorizing
+  //     is an idempotent no-op and a second approver reaching quorum applies the
+  //     change. Disabled only when blocked or the admin is not an approver.
+  //   • Commit APPLIES ONLY. Enabled once the threshold is met (readyToCommit)
+  //     and the admin can approve and the CR is not blocked; otherwise disabled
+  //     with a tooltip explaining why (approve to quorum first).
   const isPending = !!cr && cr.status === "PENDING";
 
-  const canApproveNow =
-    isPending && !cr!.blocked && approvable && !alreadySigned;
-  const approveTip = (() => {
+  const canAuthorizeNow = isPending && !cr!.blocked && approvable;
+  const authorizeTipText = (() => {
     if (!cr) return "";
     if (cr.blocked) return blockedReason;
     if (!approvable)
       return requiredRolesText || "Cannot act on this change request";
-    if (alreadySigned)
-      return "You have already signed; awaiting other approvers.";
     return "";
   })();
 
@@ -307,21 +301,29 @@ export function ChangeRequestsDetail({
     /* disabled placeholder */
   };
 
-  const approveButton = !isPending ? null : canApproveNow ? (
+  const authorizeButton = !isPending ? null : canAuthorizeNow ? (
     <Button
-      key="approve"
+      key="authorize"
       variant="secondary"
       isLoading={isWorking}
       isDisabled={isWorking}
-      onClick={onApprove}
+      onClick={onAuthorize}
     >
-      Approve
+      Authorize
     </Button>
   ) : (
-    <Tooltip key="approve-tip" content={approveTip || "Cannot approve"}>
+    <Tooltip
+      key="authorize-tip"
+      content={authorizeTipText || "Cannot authorize"}
+    >
       <span>
-        <Button key="approve" variant="secondary" isAriaDisabled onClick={noop}>
-          Approve
+        <Button
+          key="authorize"
+          variant="secondary"
+          isAriaDisabled
+          onClick={noop}
+        >
+          Authorize
         </Button>
       </span>
     </Tooltip>
@@ -362,7 +364,7 @@ export function ChangeRequestsDetail({
           cr
             ? ([
                 commitButton,
-                approveButton,
+                authorizeButton,
                 <Button
                   key="download-diagnostic-bundle"
                   variant="secondary"

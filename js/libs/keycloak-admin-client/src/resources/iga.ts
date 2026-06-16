@@ -28,26 +28,32 @@ export class Iga extends Resource<{ realm?: string }> {
   });
 
   /**
-   * SIGN-ONLY approval endpoint. Records the caller's authorization toward the
-   * CR's threshold; it does NOT apply the change. Applying is the separate
-   * {@link commit} step (`POST .../commit`), enabled once the threshold is met.
+   * APPROVE-AND-COMMIT endpoint. Records the caller's authorization toward the
+   * CR's threshold and AUTO-COMMITS the change server-side once that records the
+   * final approval needed (quorum). `committed` on the result reports whether
+   * the change was applied (quorum reached) or merely recorded (more approvers
+   * still needed). The explicit {@link commit} step (`POST .../commit`) is an
+   * apply-only alternative for a CR already at quorum.
    *
    * The SERVER decides which ceremony applies:
    *
    *  - firstAdmin / Tideless / simple-attestor, or an already-signed CR: call
    *    with an empty body. The caller's authorization is recorded (idempotent
-   *    no-op if already signed — NOT a 409). Result is
-   *    `{ mode: "recorded", authCount, threshold, readyToCommit, status }`.
+   *    no-op if already signed — NOT a 409) and auto-committed at quorum. Result
+   *    is `{ mode: "recorded", committed, authCount, threshold, readyToCommit,
+   *    status }`.
    *  - multiAdmin: inherently two-phase over this SAME endpoint.
    *      • Phase 1 (empty body) → `{ mode: "needs-approval", requestModel }`:
    *        the Base64 `Policy:1` carrier to hand to the Heimdall enclave.
    *      • Phase 2 (body `{ requestModel: <signed doken Base64> }`) → records
-   *        the doken toward the threshold. Result is
-   *        `{ mode: "recorded", authCount, threshold, readyToCommit, status }`.
+   *        the doken toward the threshold and auto-commits at quorum. Result is
+   *        `{ mode: "recorded", committed, authCount, threshold, readyToCommit,
+   *        status }`.
    *
    * `id` is templated into the path; the optional `{ requestModel }` becomes
-   * the JSON body. `readyToCommit` (`authCount >= threshold`) is the signal the
-   * UI uses to enable the separate {@link commit} action.
+   * the JSON body. `committed` reports whether the change was applied;
+   * `readyToCommit` (`authCount >= threshold`) reports whether the threshold is
+   * met (the UI also uses it to enable the apply-only {@link commit} action).
    */
   public approve = this.makeRequest<
     { id: string; requestModel?: string },
