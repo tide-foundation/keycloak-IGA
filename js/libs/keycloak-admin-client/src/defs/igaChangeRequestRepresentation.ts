@@ -63,40 +63,6 @@ export default interface IgaChangeRequest {
 }
 
 /**
- * Phase 1 of the multiAdmin two-phase approval round-trip.
- *
- * Returned by `GET /iga/change-requests/{id}/approval-model`. `requestModel`
- * is the Base64-encoded serialized `Policy:1` `ModelRequest` the approving
- * admin must hand to the Heimdall enclave (`approveTideRequests`).
- *
- * `requiresApprovalPopup` is the discriminator the UI branches on: when
- * `true` the CR is a multiAdmin request that must take the enclave round-trip;
- * when `false` the legacy single-phase authorize path applies and the
- * `requestModel` can be ignored.
- */
-export interface IgaApprovalModel {
-  changeRequestId: string;
-  actionType: string;
-  requiresApprovalPopup: boolean;
-  requestModel: string;
-}
-
-/**
- * Phase 2 result of the multiAdmin two-phase approval round-trip.
- *
- * Returned by `POST /iga/change-requests/{id}/approval-model` after the
- * doken+approval-embedded model is submitted back. `readyForCommit` is `true`
- * once the recorded authorizations meet the threshold, at which point the
- * existing commit flow can run.
- */
-export interface IgaApprovalSubmitResult {
-  recorded: boolean;
-  authCount: number;
-  threshold: number;
-  readyForCommit: boolean;
-}
-
-/**
  * Result of the unified `POST /iga/change-requests/{id}/approve` endpoint.
  *
  * This is the single endpoint the Approvals inbox calls; the server decides
