@@ -48,6 +48,7 @@ import {
 import {
   runMultiAdminApproval,
   runMultiAdminApprovalBatch,
+  commitChangeRequest,
 } from "./approvalModel";
 import type { BatchApprovalOutcome } from "./approvalModel";
 import { useCurrentUserRoles } from "./useCurrentUserRoles";
@@ -224,7 +225,7 @@ function ChangeRequestsToolbar({
                   /* disabled */
                 }}
               >
-                {`Bulk Authorize${
+                {`Bulk Approve${
                   authorizableCount > 0 ? ` (${authorizableCount})` : ""
                 }`}
               </Button>
@@ -236,7 +237,7 @@ function ChangeRequestsToolbar({
             isLoading={isProcessing}
             onClick={onAuthorizeBulk}
           >
-            {`Bulk Authorize (${authorizableCount})`}
+            {`Bulk Approve (${authorizableCount})`}
           </Button>
         )}
       </ToolbarItem>
@@ -446,15 +447,13 @@ export default function ChangeRequestsSection() {
   const autoIncludedPolicyCount =
     expandedAuthorizableSelection.length - authorizableSelection.length;
 
-  /* ---- approve one CR (two-phase multiAdmin or single-phase firstAdmin) ----
-     multiAdmin CRs take the enclave round-trip via /approval-model and only
-     record an approval toward threshold (commit stays a separate step).
-     firstAdmin / Tideless realms refuse /approval-model with 409
-     NOT_MULTI_ADMIN; runMultiAdminApproval detects that and runs the
-     single-phase authorize+commit itself, returning `committed`. Returns a
-     user-facing success message, or throws for transport/enclave errors and
-     for an enclave denial (so bulk records it as a failure). Shared by the row
-     action and the bulk loop. */
+  /* ---- approve (SIGN-only) one CR ----
+     Drives /approve, which records this admin's authorization toward the
+     threshold and does NOT apply the change (Commit is a separate action).
+     multiAdmin CRs take the enclave round-trip; firstAdmin/Tideless are
+     recorded inline. Returns a user-facing success message, or throws for
+     transport/enclave errors and for an enclave denial (so bulk records it as
+     a failure). Shared by the row action and the bulk loop. */
 
   const authorizeOne = useCallback(
     async (cr: IgaChangeRequest): Promise<string> => {
@@ -469,13 +468,12 @@ export default function ChangeRequestsSection() {
       if (outcome.kind === "pending") {
         return "Approval pending, awaiting other operators.";
       }
-      // recorded: the unified /approve endpoint recorded the approval and, when
-      // the threshold was met, auto-committed inline (committed === true).
-      const { committed, authCount, threshold } = outcome.result;
-      if (committed) {
-        return "Change request approved and committed.";
-      }
-      return `Approved, ${authCount} of ${threshold}.`;
+      // recorded: /approve recorded the approval; it did NOT apply the change.
+      const { authCount, threshold, readyToCommit } = outcome.result;
+      const atQuorum = readyToCommit ?? authCount >= threshold;
+      return atQuorum
+        ? `Approved, ${authCount} of ${threshold}. Ready to commit.`
+        : `Approved, ${authCount} of ${threshold}.`;
     },
     [adminClient, approveTideRequests],
   );
@@ -497,13 +495,12 @@ export default function ChangeRequestsSection() {
       if (outcome.kind === "pending") {
         return "Approval pending, awaiting other operators.";
       }
-      // recorded: /approve recorded the approval; committed === true means the
-      // threshold was met and the server auto-committed inline.
-      const { committed, authCount, threshold } = outcome.result;
-      if (committed) {
-        return "Change request approved and committed.";
-      }
-      return `Approved, ${authCount} of ${threshold}.`;
+      // recorded: /approve recorded the approval; it did NOT apply the change.
+      const { authCount, threshold, readyToCommit } = outcome.result;
+      const atQuorum = readyToCommit ?? authCount >= threshold;
+      return atQuorum
+        ? `Approved, ${authCount} of ${threshold}. Ready to commit.`
+        : `Approved, ${authCount} of ${threshold}.`;
     },
     [],
   );
@@ -639,52 +636,25 @@ export default function ChangeRequestsSection() {
           (a.actionType === "REGEN_ADMIN_POLICY" ? 1 : 0) -
           (b.actionType === "REGEN_ADMIN_POLICY" ? 1 : 0),
       );
-      // Commit through the unified /approve flow, NOT the legacy /commit (which
-      // iga-core refuses for multiAdmin CRs). The batch helper opens the Heimdall
-      // enclave ONCE for every multiAdmin carrier and auto-commits each at quorum;
-      // firstAdmin/Tideless CRs are recorded + committed inline with no enclave.
-      // The list is passed in REGEN-last order (preserved by the batch helper) so
-      // the per-CR /approve phase-2 commits run in the right sequence.
-      try {
-        const outcomes = await runMultiAdminApprovalBatch(
-          adminClient,
-          approveTideRequests,
-          ordered,
-        );
-        for (const outcome of outcomes) {
-          if (outcome.kind === "error") {
+      // Bulk Commit APPLIES the quorum-met CRs via the APPLY-only /commit
+      // endpoint, one at a time in REGEN-last order. No signing, no enclave —
+      // these CRs are already at threshold (committableSelection = readyToCommit).
+      // Each commit is independent: a 412 QUORUM_NOT_MET (e.g. a REGEN raised
+      // the threshold mid-batch) or any other per-CR error is captured so one
+      // failure doesn't sink the rest.
+      for (const cr of ordered) {
+        try {
+          const outcome = await commitChangeRequest(adminClient, cr.id);
+          if (outcome.kind === "quorum-not-met") {
             results.push({
-              id: outcome.changeRequestId,
+              id: cr.id,
               ok: false,
-              message: errorMessage(outcome.error),
-            });
-          } else if (outcome.kind === "denied") {
-            results.push({
-              id: outcome.changeRequestId,
-              ok: false,
-              message: "Approval was denied in the enclave.",
-            });
-          } else if (outcome.kind === "pending") {
-            results.push({
-              id: outcome.changeRequestId,
-              ok: false,
-              message: "Approval pending, awaiting other operators.",
+              message: outcome.message,
             });
           } else {
-            // recorded: ok when the threshold was met and the change committed.
-            results.push({
-              id: outcome.changeRequestId,
-              ok: Boolean(outcome.result.committed),
-              message: outcome.result.committed
-                ? undefined
-                : "Approval recorded, awaiting other operators.",
-            });
+            results.push({ id: cr.id, ok: true });
           }
-        }
-      } catch (err) {
-        // A batch-wide failure (e.g. the single enclave call rejected): mark
-        // every CR in the batch as failed so the operator sees the real error.
-        for (const cr of ordered) {
+        } catch (err) {
           results.push({ id: cr.id, ok: false, message: errorMessage(err) });
         }
       }
@@ -763,51 +733,27 @@ export default function ChangeRequestsSection() {
       if (!isCommittable(cr, userRoles)) return;
       setIsProcessing(true);
       try {
-        // Route the row-level Commit through the SAME unified /approve flow as
-        // Authorize, never the legacy /commit (which iga-core REFUSES for
-        // multiAdmin CRs). /approve collects the doken in the enclave and
-        // auto-commits at quorum (multiAdmin), or records + commits inline
-        // (firstAdmin/Tideless).
-        const outcome = await runMultiAdminApproval(
-          adminClient,
-          approveTideRequests,
-          cr.id,
-        );
-        if (outcome.kind === "denied") {
-          throw new Error("Approval was denied in the enclave.");
-        }
-        if (outcome.kind === "pending") {
-          addAlert(
-            "Approval pending, awaiting other operators.",
-            AlertVariant.info,
-          );
+        // Row-level Commit APPLIES ONLY: it calls the quorum-gated /commit
+        // endpoint to apply a CR already signed to its threshold. No signing,
+        // no enclave. A 412 QUORUM_NOT_MET surfaces as a soft "approve to
+        // quorum first" message; other errors go through addError.
+        const outcome = await commitChangeRequest(adminClient, cr.id);
+        if (outcome.kind === "quorum-not-met") {
+          addAlert(outcome.message, AlertVariant.warning);
         } else {
-          addAlert(
-            outcome.result.committed
-              ? "Change request committed."
-              : "Approval recorded, awaiting other operators.",
-            AlertVariant.success,
-          );
+          addAlert("Change request committed.", AlertVariant.success);
         }
         // A committed CR may flip realm-level settings — refresh realm context
         // so realm-settings toggles update without a hard reload.
         refreshRealm();
         refresh();
       } catch (err) {
-        addError(`Cannot commit yet: ${errorMessage(err)}`, err);
+        addError(`Failed to commit change request: ${errorMessage(err)}`, err);
       } finally {
         setIsProcessing(false);
       }
     },
-    [
-      adminClient,
-      approveTideRequests,
-      userRoles,
-      addAlert,
-      addError,
-      refresh,
-      refreshRealm,
-    ],
+    [adminClient, userRoles, addAlert, addError, refresh, refreshRealm],
   );
 
   const onDenyRow = useCallback(
@@ -896,10 +842,10 @@ export default function ChangeRequestsSection() {
 
       const isApprover = canApprove(cr, userRoles);
 
-      // Authorize
+      // Approve (SIGN only)
       const authTip = authorizeTip(cr, userRoles, username);
       actions.push({
-        title: "Authorize",
+        title: "Approve",
         isDisabled: !!authTip || isProcessing,
         tooltipProps: authTip ? { content: authTip } : undefined,
         onClick: () => {

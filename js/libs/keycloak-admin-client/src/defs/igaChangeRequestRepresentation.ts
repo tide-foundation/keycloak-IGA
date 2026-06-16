@@ -93,12 +93,41 @@ export interface IgaApproveResult {
   /** multiAdmin phase 1 only: Base64 `Policy:1` carrier for the enclave. */
   requestModel?: string;
   /**
-   * `mode === "recorded"` only. `true` once the threshold was met and the
-   * server auto-committed the change inline. Authoritative.
+   * `mode === "recorded"` only. With the decoupled two-step flow the SIGN-only
+   * `/approve` endpoint no longer applies the change, so this is normally
+   * absent; `readyToCommit` is the signal that Commit may now be run.
    */
   committed?: boolean;
   authCount: number;
   threshold: number;
-  /** `mode === "recorded"` only: the CR status after the commit attempt. */
+  /**
+   * `mode === "recorded"` only: `true` once the recorded authorizations meet
+   * the threshold, i.e. `/commit` may now be called. Equivalent to
+   * `authCount >= threshold`.
+   */
+  readyToCommit?: boolean;
+  /** `mode === "recorded"` only: the CR status after the approve. */
+  status?: string;
+  /** @deprecated server emits `status`; kept for back-compat. */
   crStatus?: string;
+}
+
+/**
+ * Result of the APPLY-ONLY `POST /iga/change-requests/{id}/commit` endpoint.
+ *
+ * This is the second of the two decoupled steps: `/approve` SIGNS (records an
+ * authorization toward the threshold), `/commit` APPLIES the change once the
+ * threshold has been met. It is NOT the old refused legacy `/commit` lane; it
+ * is the new quorum-gated apply step.
+ *
+ * On success the change has been applied and the CR is `APPROVED`. A 412
+ * `QUORUM_NOT_MET` is returned when commit is attempted before the threshold
+ * is met (sign more approvals first); other 412 codes
+ * (`DEPENDENCY_NOT_MET`, `PENDING_ADMIN_GRANTS`) signal blocking prerequisites.
+ */
+export interface IgaCommitResult {
+  committed: boolean;
+  changeRequestId: string;
+  status: IgaChangeRequestStatus;
+  changeRequest: IgaChangeRequest;
 }

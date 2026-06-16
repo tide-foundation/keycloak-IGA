@@ -2,9 +2,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { NetworkError } from "@keycloak/keycloak-admin-client";
+
 import { base64ToBytes, bytesToBase64 } from "../utils/tideSerialization";
 import {
   runMultiAdminApproval,
+  commitChangeRequest,
   type ApproveTideRequests,
 } from "./approvalModel";
 
@@ -33,10 +36,10 @@ function makeAdminClient(opts: {
       opts.phase2 ?? {
         mode: "recorded",
         changeRequestId: CR_ID,
-        committed: true,
         authCount: 2,
         threshold: 2,
-        crStatus: "APPROVED",
+        readyToCommit: true,
+        status: "PENDING",
       },
     );
   return {
@@ -46,15 +49,15 @@ function makeAdminClient(opts: {
 }
 
 describe("runMultiAdminApproval", () => {
-  it("firstAdmin/Tideless (mode recorded, single round-trip): returns recorded with committed", async () => {
+  it("firstAdmin/Tideless (mode recorded, single round-trip): SIGN only, records without applying", async () => {
     const { client, approve } = makeAdminClient({
       phase1: {
         mode: "recorded",
         changeRequestId: CR_ID,
-        committed: true,
         authCount: 1,
         threshold: 1,
-        crStatus: "APPROVED",
+        readyToCommit: true,
+        status: "PENDING",
       },
     });
     const enclave = vi.fn() as unknown as ApproveTideRequests;
@@ -63,7 +66,9 @@ describe("runMultiAdminApproval", () => {
 
     expect(outcome.kind).toBe("recorded");
     if (outcome.kind === "recorded") {
-      expect(outcome.result.committed).toBe(true);
+      // /approve SIGNS only — it does not apply; readyToCommit signals quorum.
+      expect(outcome.result.readyToCommit).toBe(true);
+      expect(outcome.result.committed).toBeUndefined();
     }
     // Single round-trip: only one /approve call, no enclave.
     expect(approve).toHaveBeenCalledTimes(1);
@@ -95,10 +100,10 @@ describe("runMultiAdminApproval", () => {
       phase2: {
         mode: "recorded",
         changeRequestId: CR_ID,
-        committed: true,
         authCount: 2,
         threshold: 2,
-        crStatus: "APPROVED",
+        readyToCommit: true,
+        status: "PENDING",
       },
     });
 
@@ -134,13 +139,14 @@ describe("runMultiAdminApproval", () => {
 
     expect(outcome.kind).toBe("recorded");
     if (outcome.kind === "recorded") {
-      expect(outcome.result.committed).toBe(true);
+      // SIGN only: no commit happens here; readyToCommit reports quorum reached.
+      expect(outcome.result.readyToCommit).toBe(true);
       expect(outcome.result.authCount).toBe(2);
       expect(outcome.result.threshold).toBe(2);
     }
   });
 
-  it("multiAdmin not-yet-at-threshold: recorded with committed=false (no commit)", async () => {
+  it("multiAdmin not-yet-at-threshold: recorded with readyToCommit=false (no commit)", async () => {
     const { client } = makeAdminClient({
       phase1: {
         mode: "needs-approval",
@@ -152,10 +158,10 @@ describe("runMultiAdminApproval", () => {
       phase2: {
         mode: "recorded",
         changeRequestId: CR_ID,
-        committed: false,
         authCount: 1,
         threshold: 2,
-        crStatus: "PENDING",
+        readyToCommit: false,
+        status: "PENDING",
       },
     });
     const enclave = vi
@@ -168,7 +174,7 @@ describe("runMultiAdminApproval", () => {
 
     expect(outcome.kind).toBe("recorded");
     if (outcome.kind === "recorded") {
-      expect(outcome.result.committed).toBe(false);
+      expect(outcome.result.readyToCommit).toBe(false);
       expect(outcome.result.authCount).toBe(1);
     }
   });
@@ -252,5 +258,73 @@ describe("runMultiAdminApproval", () => {
     await expect(runMultiAdminApproval(client, enclave, CR_ID)).rejects.toThrow(
       /no approval result/i,
     );
+  });
+});
+
+/** Build a NetworkError carrying an RFC 7807 problem body with `code`/`status`,
+ *  matching what fetchWithError throws for a failed /commit. */
+function makeProblemError(code: string, status: number, detail: string) {
+  return new NetworkError(detail, {
+    response: { status } as unknown as Response,
+    responseData: { code, status, detail },
+    problem: { code, status, detail },
+  });
+}
+
+describe("commitChangeRequest", () => {
+  it("APPLIES via /commit and returns committed on success", async () => {
+    const commit = vi.fn().mockResolvedValue({
+      committed: true,
+      changeRequestId: CR_ID,
+      status: "APPROVED",
+      changeRequest: { id: CR_ID, status: "APPROVED" },
+    });
+    const client = { iga: { commit } } as any;
+
+    const outcome = await commitChangeRequest(client, CR_ID);
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith({ id: CR_ID });
+    expect(outcome.kind).toBe("committed");
+    if (outcome.kind === "committed") {
+      expect(outcome.result.committed).toBe(true);
+      expect(outcome.result.status).toBe("APPROVED");
+    }
+  });
+
+  it("maps a 412 QUORUM_NOT_MET to a soft quorum-not-met outcome (does not throw)", async () => {
+    const commit = vi
+      .fn()
+      .mockRejectedValue(
+        makeProblemError("QUORUM_NOT_MET", 412, "Quorum not met"),
+      );
+    const client = { iga: { commit } } as any;
+
+    const outcome = await commitChangeRequest(client, CR_ID);
+
+    expect(outcome.kind).toBe("quorum-not-met");
+    if (outcome.kind === "quorum-not-met") {
+      expect(outcome.message).toMatch(/approve to quorum/i);
+    }
+  });
+
+  it("re-throws other 412 codes (e.g. DEPENDENCY_NOT_MET)", async () => {
+    const commit = vi
+      .fn()
+      .mockRejectedValue(
+        makeProblemError("DEPENDENCY_NOT_MET", 412, "Prerequisite missing"),
+      );
+    const client = { iga: { commit } } as any;
+
+    await expect(commitChangeRequest(client, CR_ID)).rejects.toThrow(
+      /prerequisite missing/i,
+    );
+  });
+
+  it("re-throws non-quorum transport errors", async () => {
+    const commit = vi.fn().mockRejectedValue(new Error("boom"));
+    const client = { iga: { commit } } as any;
+
+    await expect(commitChangeRequest(client, CR_ID)).rejects.toThrow(/boom/);
   });
 });

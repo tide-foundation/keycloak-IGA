@@ -1,37 +1,46 @@
 /** TIDECLOAK IMPLEMENTATION */
 //
-// multiAdmin / firstAdmin change-request approval over the UNIFIED `/approve`
-// endpoint.
+// Two decoupled change-request steps: SIGN (`/approve`) and APPLY (`/commit`).
 //
-// The Approvals inbox calls ONE endpoint — `POST /iga/change-requests/{id}/approve`
-// — and the SERVER decides which ceremony applies (it knows the attestor and
-// the firstAdmin/multiAdmin mode). The client no longer probes
-// `/approval-model` then 409-falls-back to the legacy `authorize`+`commit`
-// lane. Crucially, the legacy `POST .../commit` is REFUSED for multiAdmin CRs
-// (iga-core: MULTIADMIN_REQUIRES_APPROVAL_ENCLAVE) — `/approve` collects the
-// doken and AUTO-COMMITS at quorum, so there is no separate commit step.
+// Approve and Commit are now two SEPARATE explicit actions:
+//   - `runMultiAdminApproval` drives `POST /iga/change-requests/{id}/approve`,
+//     which SIGNS ONLY — it records the caller's authorization toward the
+//     threshold and NEVER applies the change. The SERVER decides which ceremony
+//     applies (it knows the attestor and the firstAdmin/multiAdmin mode).
+//   - `commitChangeRequest` drives `POST .../commit`, which APPLIES ONLY — it
+//     commits a CR that has already been signed to its threshold. This is the
+//     new quorum-gated apply step, NOT the old refused legacy `/commit` lane.
 //
-//   firstAdmin / Tideless / simple attestor (single round-trip):
+//   firstAdmin / Tideless / simple attestor (single round-trip SIGN):
 //     POST /approve  (empty body)
-//        -> { mode: "recorded", committed, authCount, threshold, crStatus }
-//     The server records the authorization inline and, if the threshold is met,
-//     runs the full commit pipeline. `committed` is authoritative.
+//        -> { mode: "recorded", authCount, threshold, readyToCommit, status }
+//     Records the authorization inline. `readyToCommit` says whether Commit may
+//     now run. Already-signed = idempotent no-op (NOT 409).
 //
-//   multiAdmin (two-phase, SAME endpoint):
+//   multiAdmin (two-phase SIGN, SAME /approve endpoint):
 //     1. POST /approve  (empty body)
 //          -> { mode: "needs-approval", requestModel }   (requestModel = Base64)
 //     2. Base64-decode requestModel -> bytes; hand to the Heimdall enclave via
 //        approveTideRequests([{ id, request: bytes }]); the enclave returns the
 //        doken+approval-embedded request bytes.
 //     3. POST /approve  (body { requestModel: <Base64 doken> })
-//          -> { mode: "recorded", committed, authCount, threshold, crStatus }.
-//        At quorum the server auto-commits; `committed` reflects that.
+//          -> { mode: "recorded", authCount, threshold, readyToCommit, status }.
+//        Records the doken toward the threshold; does NOT apply.
 //
-// This keeps the dual-mode branch UI-only, routed entirely through `/approve`.
+//   APPLY (both modes):
+//     POST /commit -> { committed: true, status: "APPROVED", changeRequest }.
+//     412 QUORUM_NOT_MET if attempted below threshold (sign more first).
+//
+// This keeps the dual-mode branch UI-only, routed entirely through `/approve`
+// for SIGN and `/commit` for APPLY.
 
 import type KeycloakAdminClient from "@keycloak/keycloak-admin-client";
+import { NetworkError } from "@keycloak/keycloak-admin-client";
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
-import type { IgaApproveResult } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
+import type {
+  IgaApproveResult,
+  IgaCommitResult,
+} from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
 import { base64ToBytes, bytesToBase64 } from "../utils/tideSerialization";
 import { crNamesMap, type CrNamesMap } from "./formatters";
@@ -55,13 +64,12 @@ export type ApproveTideRequests = (
 
 export type ApprovalModelOutcome =
   /**
-   * The authorization was recorded by the unified `/approve` endpoint. For a
+   * The authorization was recorded by the SIGN-only `/approve` endpoint. For a
    * firstAdmin/Tideless/simple CR this is a single round-trip; for a multiAdmin
-   * CR this is phase 2 (after the enclave sign). `committed` is the server's
-   * authoritative flag: `true` means the threshold was met and the change was
-   * auto-committed inline — there is NO separate legacy `/commit` step. When
-   * `false` the approval counted toward the threshold but more approvers are
-   * still required.
+   * CR this is phase 2 (after the enclave sign). The change is NOT applied here
+   * — applying is the separate {@link commitChangeRequest} step. `readyToCommit`
+   * (`authCount >= threshold`) on the result says whether Commit may now run;
+   * below threshold the signature counted but more approvers are still needed.
    */
   | { kind: "recorded"; result: IgaApproveResult }
   /** The operator denied the request in the enclave popup. */
@@ -70,13 +78,15 @@ export type ApprovalModelOutcome =
   | { kind: "pending" };
 
 /**
- * Run the unified `/approve` flow for a single CR.
+ * Run the SIGN-only `/approve` flow for a single CR. This records the caller's
+ * authorization toward the threshold; it does NOT apply the change. Applying is
+ * the separate {@link commitChangeRequest} step.
  *
  * One endpoint, server-decided ceremony: firstAdmin/Tideless realms get a
- * single inline record+commit round-trip; multiAdmin realms get the two-phase
- * enclave ceremony (phase 1 returns the carrier, phase 2 submits the signed
- * doken and auto-commits at quorum). The legacy `authorize`/`commit`/
- * `approval-model` endpoints are NOT used here.
+ * single inline record round-trip; multiAdmin realms get the two-phase enclave
+ * ceremony (phase 1 returns the carrier, phase 2 submits the signed doken). The
+ * legacy `authorize`/`approval-model` endpoints are NOT used here, and this no
+ * longer commits.
  *
  * Returns a discriminated outcome rather than throwing for the denied/pending
  * cases, so the UI can surface an appropriate message. Genuine transport/
@@ -87,11 +97,11 @@ export async function runMultiAdminApproval(
   approveTideRequests: ApproveTideRequests,
   changeRequestId: string,
 ): Promise<ApprovalModelOutcome> {
-  // ── Phase 1: POST /approve with no body. ──────────────────────────────
+  // ── Phase 1: POST /approve with no body (SIGN only). ──────────────────
   //
   // The server returns mode "recorded" for firstAdmin/Tideless/simple CRs
-  // (it recorded + auto-committed inline), or mode "needs-approval" carrying
-  // the Policy:1 enclave carrier for multiAdmin CRs.
+  // (the authorization was recorded inline; the change is NOT applied), or mode
+  // "needs-approval" carrying the Policy:1 enclave carrier for multiAdmin CRs.
   console.log("[TIDE-APPROVAL] runMultiAdminApproval: start", {
     changeRequestId,
   });
@@ -99,7 +109,7 @@ export async function runMultiAdminApproval(
   console.log("[TIDE-APPROVAL] POST /approve (phase 1) result", {
     changeRequestId,
     mode: phase1.mode,
-    committed: phase1.committed,
+    readyToCommit: phase1.readyToCommit,
     requestModelLength:
       typeof phase1.requestModel === "string"
         ? phase1.requestModel.length
@@ -107,8 +117,8 @@ export async function runMultiAdminApproval(
   });
 
   // firstAdmin / Tideless / simple, OR a multiAdmin CR the server resolved
-  // without an enclave round-trip: the unified endpoint already recorded (and,
-  // when committed===true, auto-committed) the change.
+  // without an enclave round-trip: the endpoint recorded the authorization.
+  // It did NOT apply the change — Commit is a separate step.
   if (phase1.mode !== "needs-approval") {
     return { kind: "recorded", result: phase1 };
   }
@@ -146,7 +156,7 @@ export async function runMultiAdminApproval(
     return { kind: "pending" };
   }
 
-  // ── Phase 2b: POST /approve with the signed doken; server auto-commits ─
+  // ── Phase 2b: POST /approve with the signed doken (records toward quorum) ─
   const requestModel = bytesToBase64(approval.approved.request);
   const result = await adminClient.iga.approve({
     id: changeRequestId,
@@ -155,12 +165,76 @@ export async function runMultiAdminApproval(
   console.log("[TIDE-APPROVAL] POST /approve (phase 2) result", {
     changeRequestId,
     mode: result.mode,
-    committed: result.committed,
+    readyToCommit: result.readyToCommit,
     authCount: result.authCount,
     threshold: result.threshold,
   });
 
   return { kind: "recorded", result };
+}
+
+/**
+ * Outcome of the APPLY-only `/commit` step.
+ *
+ *  - `kind: "committed"` — the change was applied; the CR is now APPROVED.
+ *  - `kind: "quorum-not-met"` — 412 `QUORUM_NOT_MET`: commit was attempted
+ *    before the threshold was met. Sign more approvals (`/approve`) first. The
+ *    caller surfaces this as a soft, non-error message.
+ *
+ * Every other failure (other 412 codes, 403, 404, 409, transport) is thrown for
+ * the caller's try/catch, with the RFC 7807 detail/code on the error.
+ */
+export type CommitOutcome =
+  | { kind: "committed"; result: IgaCommitResult }
+  | { kind: "quorum-not-met"; message: string };
+
+/**
+ * Extract the Tide problem `code` from a thrown error, if it is a
+ * {@link NetworkError} carrying an RFC 7807 problem body. Returns `undefined`
+ * for any other error shape.
+ */
+function problemCodeOf(err: unknown): string | undefined {
+  return err instanceof NetworkError ? err.problem?.code : undefined;
+}
+
+/**
+ * Drive the APPLY-only `POST /iga/change-requests/{id}/commit` step for a
+ * single CR. This applies a change that has already been signed to its
+ * threshold via {@link runMultiAdminApproval}; it performs NO signing and opens
+ * NO enclave.
+ *
+ * Returns a discriminated {@link CommitOutcome} so the caller can surface the
+ * 412 `QUORUM_NOT_MET` "approve to quorum before committing" case softly rather
+ * than as a hard error. All other failures (other 412 codes, 403/404/409,
+ * transport) are re-thrown for the caller's try/catch.
+ */
+export async function commitChangeRequest(
+  adminClient: KeycloakAdminClient,
+  changeRequestId: string,
+): Promise<CommitOutcome> {
+  console.log("[TIDE-APPROVAL] commitChangeRequest: start", {
+    changeRequestId,
+  });
+  try {
+    const result = await adminClient.iga.commit({ id: changeRequestId });
+    console.log("[TIDE-APPROVAL] POST /commit result", {
+      changeRequestId,
+      committed: result.committed,
+      status: result.status,
+    });
+    return { kind: "committed", result };
+  } catch (err) {
+    if (problemCodeOf(err) === "QUORUM_NOT_MET") {
+      return {
+        kind: "quorum-not-met",
+        message:
+          "Not enough approvals yet — approve to quorum before committing.",
+      };
+    }
+    // Other 412 (DEPENDENCY_NOT_MET / PENDING_ADMIN_GRANTS), 403, 404, 409,
+    // transport: re-throw with the RFC 7807 detail/code intact for the caller.
+    throw err;
+  }
 }
 
 /** Per-CR outcome of the bulk batch approval. Mirrors {@link ApprovalModelOutcome}
@@ -173,8 +247,10 @@ export type BatchApprovalOutcome = { changeRequestId: string } & (
 );
 
 /**
- * Bulk approval over the unified `/approve` endpoint that opens the Heimdall
- * enclave **exactly once** for the whole batch.
+ * Bulk SIGN over the `/approve` endpoint that opens the Heimdall enclave
+ * **exactly once** for the whole batch. This SIGNS only — it does NOT apply any
+ * change; applying is the separate {@link commitChangeRequest} step (bulk
+ * Commit calls it per quorum-met CR).
  *
  * The per-CR {@link runMultiAdminApproval} opens the enclave once per CR (N
  * pop-ups / N round-trips). The enclave's `approve()` accepts an ARRAY of
@@ -183,16 +259,16 @@ export type BatchApprovalOutcome = { changeRequestId: string } & (
  * helper exploits that:
  *
  *   1. Phase 1 — POST `/approve` (empty body) for every CR. firstAdmin/Tideless/
- *      simple CRs come back `mode: "recorded"` (recorded + auto-committed inline,
- *      no enclave); they never add a carrier to the batch. multiAdmin CRs come
- *      back `mode: "needs-approval"` carrying the Policy:1 carrier, which we
- *      decode and collect into ONE array.
+ *      simple CRs come back `mode: "recorded"` (authorization recorded inline,
+ *      no enclave, change NOT applied); they never add a carrier to the batch.
+ *      multiAdmin CRs come back `mode: "needs-approval"` carrying the Policy:1
+ *      carrier, which we decode and collect into ONE array.
  *   2. Phase 2a — call `approveTideRequests(allCarriers)` ONCE. One enclave
  *      pop-up; the admin authorizes once; the enclave signs all N carriers and
  *      returns N approvals, each tagged with its CR id.
  *   3. Phase 2b — for each approved carrier, POST its own doken-embedded model
- *      back to `/approve` (per-CR; the server auto-commits at quorum). This is
- *      plain HTTP — no further enclave interaction.
+ *      back to `/approve` (per-CR; records toward the threshold, does NOT
+ *      apply). This is plain HTTP — no further enclave interaction.
  *
  * Correctness is preserved: each CR keeps its own carrier and its own returned
  * signature, mapped back by id. The single doken established at
@@ -240,7 +316,8 @@ export async function runMultiAdminApprovalBatch(
     }
 
     if (phase1.mode !== "needs-approval") {
-      // firstAdmin/Tideless/simple (or already-resolved): recorded inline.
+      // firstAdmin/Tideless/simple (or already-signed): recorded inline,
+      // change NOT applied (Commit is a separate step).
       outcomes.set(changeRequestId, {
         changeRequestId,
         kind: "recorded",
@@ -296,7 +373,7 @@ export async function runMultiAdminApprovalBatch(
     });
 
     // ── Phase 2b: per-CR POST /approve of each returned approval (plain HTTP);
-    //    the server auto-commits at quorum. No further enclave interaction. ─
+    //    records toward the threshold, does NOT apply. No further enclave. ─
     for (const carrier of carriers) {
       const approval = byId.get(carrier.id);
       if (!approval) {

@@ -36,7 +36,7 @@ import type { IgaCrAuthorizerRepresentation } from "@keycloak/keycloak-admin-cli
 import type IgaComment from "@keycloak/keycloak-admin-client/lib/defs/igaCommentRepresentation";
 
 import { canApprove, blockedReasonOf } from "./canApprove";
-import { runMultiAdminApproval } from "./approvalModel";
+import { runMultiAdminApproval, commitChangeRequest } from "./approvalModel";
 import {
   actionTypeLabel,
   authCountOf,
@@ -118,15 +118,14 @@ export function ChangeRequestsDetail({
     void fetchAll();
   }, [fetchAll]);
 
-  const onAuthorize = async () => {
+  // Approve SIGNS ONLY: it records this admin's authorization toward the
+  // threshold via /approve and never applies the change. Applying is the
+  // separate Commit action below. Approve stays available while PENDING so
+  // admins can sign toward quorum (already-signed = idempotent no-op).
+  const onApprove = async () => {
     if (!cr) return;
     setIsWorking(true);
     try {
-      // multiAdmin CRs take a two-phase enclave round-trip via /approval-model
-      // and only record an approval (commit is a separate step). firstAdmin /
-      // Tideless realms refuse /approval-model with 409 NOT_MULTI_ADMIN, and
-      // runMultiAdminApproval then runs the single-phase authorize+commit
-      // itself, reporting `committed`.
       const outcome = await runMultiAdminApproval(
         adminClient,
         approveTideRequests,
@@ -144,67 +143,43 @@ export function ChangeRequestsDetail({
         onChanged();
         return;
       }
-      // recorded: the unified /approve endpoint recorded the approval and, when
-      // the threshold was met, AUTO-COMMITTED inline (committed === true). There
-      // is no separate legacy /commit step for these CRs.
-      const { committed, authCount, threshold } = outcome.result;
-      if (committed) {
-        addAlert(
-          "Change request approved and committed.",
-          AlertVariant.success,
-        );
-      } else {
-        addAlert(
-          `Approved, ${authCount} of ${threshold}.`,
-          AlertVariant.success,
-        );
-      }
+      // recorded: the SIGN-only /approve endpoint recorded this approval. It did
+      // NOT apply the change — Commit is the separate step. `readyToCommit`
+      // says whether the threshold is now met.
+      const { authCount, threshold, readyToCommit } = outcome.result;
+      const atQuorum = readyToCommit ?? authCount >= threshold;
+      addAlert(
+        atQuorum
+          ? `Approved, ${authCount} of ${threshold}. Ready to commit.`
+          : `Approved, ${authCount} of ${threshold}.`,
+        AlertVariant.success,
+      );
       onChanged();
     } catch (err) {
-      addError(`Failed to authorize change request: ${errorMessage(err)}`, err);
+      addError(`Failed to approve change request: ${errorMessage(err)}`, err);
     } finally {
       setIsWorking(false);
     }
   };
 
-  // "Commit" routes through the SAME unified /approve flow as Authorize, never
-  // the legacy /commit endpoint. For a multiAdmin CR the legacy /commit is
-  // REFUSED (iga-core: MULTIADMIN_REQUIRES_APPROVAL_ENCLAVE) — /approve collects
-  // the caller's doken in the enclave and AUTO-COMMITS at quorum. For a
-  // firstAdmin/Tideless CR, /approve records the authorization and commits
-  // inline once the threshold is met. So a single code path commits correctly
-  // in both modes; there is no separate legacy commit step to get wrong.
+  // Commit APPLIES ONLY: it calls the quorum-gated /commit endpoint to apply a
+  // CR that has already been signed to its threshold. No signing, no enclave.
+  // A 412 QUORUM_NOT_MET is surfaced as a soft message telling the admin to
+  // approve to quorum first; other 412/403/404/409 errors surface via addError.
   const onCommit = async () => {
     if (!cr) return;
     setIsWorking(true);
     try {
-      const outcome = await runMultiAdminApproval(
-        adminClient,
-        approveTideRequests,
-        cr.id,
-      );
-      if (outcome.kind === "denied") {
-        addAlert("Approval was denied in the enclave.", AlertVariant.warning);
-        return;
-      }
-      if (outcome.kind === "pending") {
-        addAlert(
-          "Approval is pending, awaiting other operators.",
-          AlertVariant.info,
-        );
+      const outcome = await commitChangeRequest(adminClient, cr.id);
+      if (outcome.kind === "quorum-not-met") {
+        addAlert(outcome.message, AlertVariant.warning);
         onChanged();
         return;
       }
-      const { committed } = outcome.result;
-      addAlert(
-        committed
-          ? "Change request committed."
-          : "Approval recorded, awaiting other operators.",
-        AlertVariant.success,
-      );
+      addAlert("Change request committed.", AlertVariant.success);
       onChanged();
     } catch (err) {
-      addError(`Cannot commit yet: ${errorMessage(err)}`, err);
+      addError(`Failed to commit change request: ${errorMessage(err)}`, err);
     } finally {
       setIsWorking(false);
     }
@@ -294,79 +269,85 @@ export function ChangeRequestsDetail({
 
   const blockedReason = cr ? blockedReasonOf(cr) : "";
 
-  // Pick the most useful primary CTA: Commit > Authorize. Never both.
-  // A blocked CR can be neither authorized nor committed until its
-  // prerequisites are committed, so suppress both active CTAs.
-  const showCommitCta =
-    !!cr &&
-    cr.status === "PENDING" &&
-    !cr.blocked &&
-    approvable &&
-    cr.readyToCommit;
-  const showAuthorizeCta =
-    !!cr &&
-    cr.status === "PENDING" &&
-    !cr.blocked &&
-    approvable &&
-    !cr.readyToCommit &&
-    !alreadySigned;
+  // Approve and Commit are now TWO SEPARATE actions, rendered side by side
+  // whenever the CR is PENDING:
+  //   • Approve SIGNS (records an authorization toward quorum). Available while
+  //     PENDING and the admin is an approver who has not already signed; a
+  //     blocked CR cannot be signed. Already-signed disables it (no-op).
+  //   • Commit APPLIES. Enabled only once the threshold is met (readyToCommit)
+  //     and the admin can approve and the CR is not blocked; otherwise it is
+  //     disabled with a tooltip explaining why.
+  const isPending = !!cr && cr.status === "PENDING";
 
-  const primaryCta = (() => {
-    if (!cr) return null;
-    if (showCommitCta) {
-      return (
-        <Tooltip
-          key="commit-tip"
-          content="Threshold met — apply this change now."
-        >
-          <Button
-            key="commit"
-            variant="primary"
-            isLoading={isWorking}
-            isDisabled={isWorking}
-            onClick={onCommit}
-          >
-            Commit
-          </Button>
-        </Tooltip>
-      );
-    }
-    if (showAuthorizeCta) {
-      return (
-        <Button
-          key="authorize"
-          variant="primary"
-          isLoading={isWorking}
-          isDisabled={isWorking}
-          onClick={onAuthorize}
-        >
-          Authorize
-        </Button>
-      );
-    }
-    // Disabled placeholder with a tooltip explaining why.
-    if (cr.status !== "PENDING") return null;
-    let tip = requiredRolesText || "Cannot act on this change request";
-    if (cr.blocked) {
-      tip = blockedReason;
-    } else if (approvable && alreadySigned && !cr.readyToCommit) {
-      tip = "You have already signed; awaiting other approvers.";
-    } else if (approvable && !cr.readyToCommit) {
-      tip = `Threshold not met (${authCountOf(cr)}/${cr.threshold})`;
-    }
-    const noop = () => {
-      /* disabled placeholder */
-    };
-    return (
-      <Tooltip key="cta-disabled-tip" content={tip}>
-        <span>
-          <Button variant="primary" isAriaDisabled onClick={noop}>
-            Authorize
-          </Button>
-        </span>
-      </Tooltip>
-    );
+  const canApproveNow =
+    isPending && !cr!.blocked && approvable && !alreadySigned;
+  const approveTip = (() => {
+    if (!cr) return "";
+    if (cr.blocked) return blockedReason;
+    if (!approvable)
+      return requiredRolesText || "Cannot act on this change request";
+    if (alreadySigned)
+      return "You have already signed; awaiting other approvers.";
+    return "";
   })();
+
+  const canCommitNow =
+    isPending && !cr!.blocked && approvable && cr!.readyToCommit;
+  const commitTipText = (() => {
+    if (!cr) return "";
+    if (cr.blocked) return blockedReason;
+    if (!approvable)
+      return requiredRolesText || "Cannot act on this change request";
+    if (!cr.readyToCommit)
+      return `Threshold not met (${authCountOf(cr)}/${cr.threshold}) — approve to quorum before committing.`;
+    return "Threshold met — apply this change now.";
+  })();
+
+  const noop = () => {
+    /* disabled placeholder */
+  };
+
+  const approveButton = !isPending ? null : canApproveNow ? (
+    <Button
+      key="approve"
+      variant="secondary"
+      isLoading={isWorking}
+      isDisabled={isWorking}
+      onClick={onApprove}
+    >
+      Approve
+    </Button>
+  ) : (
+    <Tooltip key="approve-tip" content={approveTip || "Cannot approve"}>
+      <span>
+        <Button key="approve" variant="secondary" isAriaDisabled onClick={noop}>
+          Approve
+        </Button>
+      </span>
+    </Tooltip>
+  );
+
+  const commitButton = !isPending ? null : canCommitNow ? (
+    <Tooltip key="commit-tip" content={commitTipText}>
+      <Button
+        key="commit"
+        variant="primary"
+        isLoading={isWorking}
+        isDisabled={isWorking}
+        onClick={onCommit}
+      >
+        Commit
+      </Button>
+    </Tooltip>
+  ) : (
+    <Tooltip key="commit-tip" content={commitTipText || "Cannot commit"}>
+      <span>
+        <Button key="commit" variant="primary" isAriaDisabled onClick={noop}>
+          Commit
+        </Button>
+      </span>
+    </Tooltip>
+  );
 
   const signers: IgaCrAuthorizerRepresentation[] = cr?.authorizers ?? [];
 
@@ -380,7 +361,8 @@ export function ChangeRequestsDetail({
         actions={
           cr
             ? ([
-                primaryCta,
+                commitButton,
+                approveButton,
                 <Button
                   key="download-diagnostic-bundle"
                   variant="secondary"

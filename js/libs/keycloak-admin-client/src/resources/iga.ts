@@ -5,6 +5,7 @@ import type IgaChangeRequest from "../defs/igaChangeRequestRepresentation.js";
 import type {
   IgaChangeRequestStatus,
   IgaApproveResult,
+  IgaCommitResult,
 } from "../defs/igaChangeRequestRepresentation.js";
 import type IgaComment from "../defs/igaCommentRepresentation.js";
 import type ClientRepresentation from "../defs/clientRepresentation.js";
@@ -27,27 +28,26 @@ export class Iga extends Resource<{ realm?: string }> {
   });
 
   /**
-   * Unified approval endpoint — the single call the Approvals inbox uses to
-   * approve (and, at quorum, auto-commit) a change request.
+   * SIGN-ONLY approval endpoint. Records the caller's authorization toward the
+   * CR's threshold; it does NOT apply the change. Applying is the separate
+   * {@link commit} step (`POST .../commit`), enabled once the threshold is met.
    *
-   * The SERVER decides which ceremony applies. The legacy `authorize`+`commit`
-   * and two-phase `approval-model` lanes have been removed from this client;
-   * the only commit path is this endpoint:
+   * The SERVER decides which ceremony applies:
    *
-   *  - firstAdmin / Tideless / simple-attestor: call with an empty body. The
-   *    server records the caller's authorization inline and, if the threshold
-   *    is now met, runs the full commit pipeline. Result is
-   *    `{ mode: "recorded", committed, ... }`.
+   *  - firstAdmin / Tideless / simple-attestor, or an already-signed CR: call
+   *    with an empty body. The caller's authorization is recorded (idempotent
+   *    no-op if already signed — NOT a 409). Result is
+   *    `{ mode: "recorded", authCount, threshold, readyToCommit, status }`.
    *  - multiAdmin: inherently two-phase over this SAME endpoint.
    *      • Phase 1 (empty body) → `{ mode: "needs-approval", requestModel }`:
    *        the Base64 `Policy:1` carrier to hand to the Heimdall enclave.
    *      • Phase 2 (body `{ requestModel: <signed doken Base64> }`) → records
-   *        the doken toward threshold and AUTO-COMMITS at quorum. Result is
-   *        `{ mode: "recorded", committed, ... }`.
+   *        the doken toward the threshold. Result is
+   *        `{ mode: "recorded", authCount, threshold, readyToCommit, status }`.
    *
    * `id` is templated into the path; the optional `{ requestModel }` becomes
-   * the JSON body. `committed` in the `"recorded"` result is authoritative —
-   * there is no separate legacy `/commit` step for CRs approved this way.
+   * the JSON body. `readyToCommit` (`authCount >= threshold`) is the signal the
+   * UI uses to enable the separate {@link commit} action.
    */
   public approve = this.makeRequest<
     { id: string; requestModel?: string },
@@ -55,6 +55,29 @@ export class Iga extends Resource<{ realm?: string }> {
   >({
     method: "POST",
     path: "/iga/change-requests/{id}/approve",
+    urlParamKeys: ["id"],
+  });
+
+  /**
+   * APPLY-ONLY commit endpoint — the second of the two decoupled steps. After
+   * a CR has been signed to its threshold via {@link approve}, this applies the
+   * change. It is NOT the old refused legacy `/commit` lane; it is the new
+   * quorum-gated apply step.
+   *
+   * Success: `{ committed: true, changeRequestId, status: "APPROVED",
+   * changeRequest }`. Failures the caller must handle:
+   *  - 412 `QUORUM_NOT_MET` — committed before the threshold was met; sign more
+   *    approvals first.
+   *  - 412 `DEPENDENCY_NOT_MET` / `PENDING_ADMIN_GRANTS` — a blocking
+   *    prerequisite CR must commit first.
+   *  - 403 / 404 / 409 — not authorized / gone / already resolved.
+   *
+   * The error code is carried on the thrown `NetworkError`'s `problem.code`
+   * (RFC 7807); `response.status` carries the HTTP status.
+   */
+  public commit = this.makeRequest<{ id: string }, IgaCommitResult>({
+    method: "POST",
+    path: "/iga/change-requests/{id}/commit",
     urlParamKeys: ["id"],
   });
 
