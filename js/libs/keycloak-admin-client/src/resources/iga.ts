@@ -6,6 +6,7 @@ import type {
   IgaChangeRequestStatus,
   IgaApprovalModel,
   IgaApprovalSubmitResult,
+  IgaApproveResult,
 } from "../defs/igaChangeRequestRepresentation.js";
 import type IgaComment from "../defs/igaCommentRepresentation.js";
 import type ClientRepresentation from "../defs/clientRepresentation.js";
@@ -36,6 +37,37 @@ export class Iga extends Resource<{ realm?: string }> {
   public commit = this.makeRequest<{ id: string }, IgaChangeRequest>({
     method: "POST",
     path: "/iga/change-requests/{id}/commit",
+    urlParamKeys: ["id"],
+  });
+
+  /**
+   * Unified approval endpoint — the single call the Approvals inbox uses to
+   * approve (and, at quorum, auto-commit) a change request.
+   *
+   * The SERVER decides which ceremony applies; the client does not probe
+   * `/approval-model` or fall back to the legacy `authorize`+`commit` lane:
+   *
+   *  - firstAdmin / Tideless / simple-attestor: call with an empty body. The
+   *    server records the caller's authorization inline and, if the threshold
+   *    is now met, runs the full commit pipeline. Result is
+   *    `{ mode: "recorded", committed, ... }`.
+   *  - multiAdmin: inherently two-phase over this SAME endpoint.
+   *      • Phase 1 (empty body) → `{ mode: "needs-approval", requestModel }`:
+   *        the Base64 `Policy:1` carrier to hand to the Heimdall enclave.
+   *      • Phase 2 (body `{ requestModel: <signed doken Base64> }`) → records
+   *        the doken toward threshold and AUTO-COMMITS at quorum. Result is
+   *        `{ mode: "recorded", committed, ... }`.
+   *
+   * `id` is templated into the path; the optional `{ requestModel }` becomes
+   * the JSON body. `committed` in the `"recorded"` result is authoritative —
+   * there is no separate legacy `/commit` step for CRs approved this way.
+   */
+  public approve = this.makeRequest<
+    { id: string; requestModel?: string },
+    IgaApproveResult
+  >({
+    method: "POST",
+    path: "/iga/change-requests/{id}/approve",
     urlParamKeys: ["id"],
   });
 

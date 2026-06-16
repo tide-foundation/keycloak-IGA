@@ -95,3 +95,44 @@ export interface IgaApprovalSubmitResult {
   threshold: number;
   readyForCommit: boolean;
 }
+
+/**
+ * Result of the unified `POST /iga/change-requests/{id}/approve` endpoint.
+ *
+ * This is the single endpoint the Approvals inbox calls; the server decides
+ * which ceremony applies (firstAdmin/Tideless inline-commit, or multiAdmin
+ * two-phase enclave) rather than the client probing `/approval-model` and
+ * falling back to the legacy `authorize`+`commit` lane.
+ *
+ * The `mode` discriminator distinguishes the two server responses:
+ *
+ *  - `"needs-approval"` (multiAdmin phase 1, empty request body): the server
+ *    built and persisted the `Policy:1` carrier the approving admin must hand
+ *    to the Heimdall enclave. `requestModel` is the Base64-encoded carrier;
+ *    the UI decodes it, runs `approveTideRequests`, then calls `approve` AGAIN
+ *    with the signed doken in the body (phase 2).
+ *
+ *  - `"recorded"` (firstAdmin/Tideless single round-trip, OR multiAdmin phase
+ *    2 with the signed doken): the caller's authorization was recorded and, if
+ *    the threshold was met, the server ran the FULL commit pipeline inline.
+ *    `committed` is authoritative: `true` means the change has already been
+ *    applied (the unified endpoint auto-commits at quorum, so there is no
+ *    separate legacy `/commit` step for these CRs).
+ */
+export interface IgaApproveResult {
+  mode: "needs-approval" | "recorded";
+  changeRequestId: string;
+  /** multiAdmin phase 1 only (`mode === "needs-approval"`). */
+  actionType?: string;
+  /** multiAdmin phase 1 only: Base64 `Policy:1` carrier for the enclave. */
+  requestModel?: string;
+  /**
+   * `mode === "recorded"` only. `true` once the threshold was met and the
+   * server auto-committed the change inline. Authoritative.
+   */
+  committed?: boolean;
+  authCount: number;
+  threshold: number;
+  /** `mode === "recorded"` only: the CR status after the commit attempt. */
+  crStatus?: string;
+}

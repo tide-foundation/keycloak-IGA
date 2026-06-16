@@ -138,29 +138,27 @@ export function ChangeRequestsDetail({
       }
       if (outcome.kind === "pending") {
         addAlert(
-          "Approval is pending — awaiting other operators.",
+          "Approval is pending, awaiting other operators.",
           AlertVariant.info,
         );
         onChanged();
         return;
       }
-      if (outcome.kind === "committed") {
-        // firstAdmin single-phase: authorize + commit already ran.
+      // recorded: the unified /approve endpoint recorded the approval and, when
+      // the threshold was met, AUTO-COMMITTED inline (committed === true). There
+      // is no separate legacy /commit step for these CRs.
+      const { committed, authCount, threshold } = outcome.result;
+      if (committed) {
         addAlert(
           "Change request approved and committed.",
           AlertVariant.success,
         );
-        onChanged();
-        return;
+      } else {
+        addAlert(
+          `Approved, ${authCount} of ${threshold}.`,
+          AlertVariant.success,
+        );
       }
-      // recorded: multiAdmin two-phase approval counted toward threshold.
-      const { authCount, threshold, readyForCommit } = outcome.result;
-      addAlert(
-        readyForCommit
-          ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
-          : `Approved — ${authCount} of ${threshold}.`,
-        AlertVariant.success,
-      );
       onChanged();
     } catch (err) {
       addError(`Failed to authorize change request: ${errorMessage(err)}`, err);
@@ -169,12 +167,41 @@ export function ChangeRequestsDetail({
     }
   };
 
+  // "Commit" routes through the SAME unified /approve flow as Authorize, never
+  // the legacy /commit endpoint. For a multiAdmin CR the legacy /commit is
+  // REFUSED (iga-core: MULTIADMIN_REQUIRES_APPROVAL_ENCLAVE) — /approve collects
+  // the caller's doken in the enclave and AUTO-COMMITS at quorum. For a
+  // firstAdmin/Tideless CR, /approve records the authorization and commits
+  // inline once the threshold is met. So a single code path commits correctly
+  // in both modes; there is no separate legacy commit step to get wrong.
   const onCommit = async () => {
     if (!cr) return;
     setIsWorking(true);
     try {
-      await adminClient.iga.commit({ id: cr.id });
-      addAlert("Change request committed.", AlertVariant.success);
+      const outcome = await runMultiAdminApproval(
+        adminClient,
+        approveTideRequests,
+        cr.id,
+      );
+      if (outcome.kind === "denied") {
+        addAlert("Approval was denied in the enclave.", AlertVariant.warning);
+        return;
+      }
+      if (outcome.kind === "pending") {
+        addAlert(
+          "Approval is pending, awaiting other operators.",
+          AlertVariant.info,
+        );
+        onChanged();
+        return;
+      }
+      const { committed } = outcome.result;
+      addAlert(
+        committed
+          ? "Change request committed."
+          : "Approval recorded, awaiting other operators.",
+        AlertVariant.success,
+      );
       onChanged();
     } catch (err) {
       addError(`Cannot commit yet: ${errorMessage(err)}`, err);

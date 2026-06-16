@@ -467,17 +467,15 @@ export default function ChangeRequestsSection() {
         throw new Error("Approval was denied in the enclave.");
       }
       if (outcome.kind === "pending") {
-        return "Approval pending — awaiting other operators.";
+        return "Approval pending, awaiting other operators.";
       }
-      if (outcome.kind === "committed") {
-        // firstAdmin single-phase: authorize + commit already ran.
+      // recorded: the unified /approve endpoint recorded the approval and, when
+      // the threshold was met, auto-committed inline (committed === true).
+      const { committed, authCount, threshold } = outcome.result;
+      if (committed) {
         return "Change request approved and committed.";
       }
-      // recorded: multiAdmin two-phase approval counted toward threshold.
-      const { authCount, threshold, readyForCommit } = outcome.result;
-      return readyForCommit
-        ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
-        : `Approved — ${authCount} of ${threshold}.`;
+      return `Approved, ${authCount} of ${threshold}.`;
     },
     [adminClient, approveTideRequests],
   );
@@ -497,15 +495,15 @@ export default function ChangeRequestsSection() {
         throw new Error("Approval was denied in the enclave.");
       }
       if (outcome.kind === "pending") {
-        return "Approval pending — awaiting other operators.";
+        return "Approval pending, awaiting other operators.";
       }
-      if (outcome.kind === "committed") {
+      // recorded: /approve recorded the approval; committed === true means the
+      // threshold was met and the server auto-committed inline.
+      const { committed, authCount, threshold } = outcome.result;
+      if (committed) {
         return "Change request approved and committed.";
       }
-      const { authCount, threshold, readyForCommit } = outcome.result;
-      return readyForCommit
-        ? `Approved — ${authCount} of ${threshold}. Ready to commit.`
-        : `Approved — ${authCount} of ${threshold}.`;
+      return `Approved, ${authCount} of ${threshold}.`;
     },
     [],
   );
@@ -641,11 +639,52 @@ export default function ChangeRequestsSection() {
           (a.actionType === "REGEN_ADMIN_POLICY" ? 1 : 0) -
           (b.actionType === "REGEN_ADMIN_POLICY" ? 1 : 0),
       );
-      for (const cr of ordered) {
-        try {
-          await adminClient.iga.commit({ id: cr.id });
-          results.push({ id: cr.id, ok: true });
-        } catch (err) {
+      // Commit through the unified /approve flow, NOT the legacy /commit (which
+      // iga-core refuses for multiAdmin CRs). The batch helper opens the Heimdall
+      // enclave ONCE for every multiAdmin carrier and auto-commits each at quorum;
+      // firstAdmin/Tideless CRs are recorded + committed inline with no enclave.
+      // The list is passed in REGEN-last order (preserved by the batch helper) so
+      // the per-CR /approve phase-2 commits run in the right sequence.
+      try {
+        const outcomes = await runMultiAdminApprovalBatch(
+          adminClient,
+          approveTideRequests,
+          ordered,
+        );
+        for (const outcome of outcomes) {
+          if (outcome.kind === "error") {
+            results.push({
+              id: outcome.changeRequestId,
+              ok: false,
+              message: errorMessage(outcome.error),
+            });
+          } else if (outcome.kind === "denied") {
+            results.push({
+              id: outcome.changeRequestId,
+              ok: false,
+              message: "Approval was denied in the enclave.",
+            });
+          } else if (outcome.kind === "pending") {
+            results.push({
+              id: outcome.changeRequestId,
+              ok: false,
+              message: "Approval pending, awaiting other operators.",
+            });
+          } else {
+            // recorded: ok when the threshold was met and the change committed.
+            results.push({
+              id: outcome.changeRequestId,
+              ok: Boolean(outcome.result.committed),
+              message: outcome.result.committed
+                ? undefined
+                : "Approval recorded, awaiting other operators.",
+            });
+          }
+        }
+      } catch (err) {
+        // A batch-wide failure (e.g. the single enclave call rejected): mark
+        // every CR in the batch as failed so the operator sees the real error.
+        for (const cr of ordered) {
           results.push({ id: cr.id, ok: false, message: errorMessage(err) });
         }
       }
@@ -724,8 +763,32 @@ export default function ChangeRequestsSection() {
       if (!isCommittable(cr, userRoles)) return;
       setIsProcessing(true);
       try {
-        await adminClient.iga.commit({ id: cr.id });
-        addAlert("Change request committed.", AlertVariant.success);
+        // Route the row-level Commit through the SAME unified /approve flow as
+        // Authorize, never the legacy /commit (which iga-core REFUSES for
+        // multiAdmin CRs). /approve collects the doken in the enclave and
+        // auto-commits at quorum (multiAdmin), or records + commits inline
+        // (firstAdmin/Tideless).
+        const outcome = await runMultiAdminApproval(
+          adminClient,
+          approveTideRequests,
+          cr.id,
+        );
+        if (outcome.kind === "denied") {
+          throw new Error("Approval was denied in the enclave.");
+        }
+        if (outcome.kind === "pending") {
+          addAlert(
+            "Approval pending, awaiting other operators.",
+            AlertVariant.info,
+          );
+        } else {
+          addAlert(
+            outcome.result.committed
+              ? "Change request committed."
+              : "Approval recorded, awaiting other operators.",
+            AlertVariant.success,
+          );
+        }
         // A committed CR may flip realm-level settings — refresh realm context
         // so realm-settings toggles update without a hard reload.
         refreshRealm();
@@ -736,7 +799,15 @@ export default function ChangeRequestsSection() {
         setIsProcessing(false);
       }
     },
-    [adminClient, userRoles, addAlert, addError, refresh, refreshRealm],
+    [
+      adminClient,
+      approveTideRequests,
+      userRoles,
+      addAlert,
+      addError,
+      refresh,
+      refreshRealm,
+    ],
   );
 
   const onDenyRow = useCallback(

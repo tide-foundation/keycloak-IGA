@@ -1,52 +1,40 @@
 /** TIDECLOAK IMPLEMENTATION */
 //
-// M1b — multiAdmin two-phase change-request approval (+ firstAdmin single-phase).
+// multiAdmin / firstAdmin change-request approval over the UNIFIED `/approve`
+// endpoint.
 //
-// A multiAdmin CR approval is an enclave round-trip against the iga server's
-// `/approval-model` endpoints:
+// The Approvals inbox calls ONE endpoint — `POST /iga/change-requests/{id}/approve`
+// — and the SERVER decides which ceremony applies (it knows the attestor and
+// the firstAdmin/multiAdmin mode). The client no longer probes
+// `/approval-model` then 409-falls-back to the legacy `authorize`+`commit`
+// lane. Crucially, the legacy `POST .../commit` is REFUSED for multiAdmin CRs
+// (iga-core: MULTIADMIN_REQUIRES_APPROVAL_ENCLAVE) — `/approve` collects the
+// doken and AUTO-COMMITS at quorum, so there is no separate commit step.
 //
-//   1. GET  /iga/change-requests/{id}/approval-model
-//        -> { requiresApprovalPopup, requestModel }   (requestModel = Base64)
-//   2. Base64-decode requestModel -> bytes; hand to the Heimdall enclave via
-//      approveTideRequests([{ id, request: bytes }]); the enclave returns the
-//      doken+approval-embedded request bytes.
-//   3. Base64-encode those bytes; POST them back to /approval-model
-//        -> { recorded, authCount, threshold, readyForCommit }.
+//   firstAdmin / Tideless / simple attestor (single round-trip):
+//     POST /approve  (empty body)
+//        -> { mode: "recorded", committed, authCount, threshold, crStatus }
+//     The server records the authorization inline and, if the threshold is met,
+//     runs the full commit pipeline. `committed` is authoritative.
 //
-// firstAdmin / Tideless realms are NOT multiAdmin: the backend's
-// `GET /approval-model` REFUSES with HTTP 409 + body `{ error: "NOT_MULTI_ADMIN" }`
-// (see IgaAdminResource.getApprovalModel — it never returns
-// `requiresApprovalPopup === false`). We detect that 409 here and run the
-// single-phase flow instead: `POST .../authorize` then `POST .../commit`
-// (firstAdmin authorize does NOT auto-commit — commit is an explicit step).
-// This keeps the dual-mode branch UI-only, with no backend change.
+//   multiAdmin (two-phase, SAME endpoint):
+//     1. POST /approve  (empty body)
+//          -> { mode: "needs-approval", requestModel }   (requestModel = Base64)
+//     2. Base64-decode requestModel -> bytes; hand to the Heimdall enclave via
+//        approveTideRequests([{ id, request: bytes }]); the enclave returns the
+//        doken+approval-embedded request bytes.
+//     3. POST /approve  (body { requestModel: <Base64 doken> })
+//          -> { mode: "recorded", committed, authCount, threshold, crStatus }.
+//        At quorum the server auto-commits; `committed` reflects that.
+//
+// This keeps the dual-mode branch UI-only, routed entirely through `/approve`.
 
 import type KeycloakAdminClient from "@keycloak/keycloak-admin-client";
 import type IgaChangeRequest from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
-import type { IgaApprovalSubmitResult } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
-import { NetworkError } from "@keycloak/keycloak-admin-client";
+import type { IgaApproveResult } from "@keycloak/keycloak-admin-client/lib/defs/igaChangeRequestRepresentation";
 
 import { base64ToBytes, bytesToBase64 } from "../utils/tideSerialization";
 import { crNamesMap, type CrNamesMap } from "./formatters";
-
-/**
- * True when `err` is the backend's "this realm is not multiAdmin" refusal from
- * `GET /iga/change-requests/{id}/approval-model`: HTTP 409 CONFLICT carrying a
- * JSON body `{ error: "NOT_MULTI_ADMIN", ... }`. Any other failure (other 409s,
- * 403, 404, network) must NOT be treated as a single-phase signal — it has to
- * surface to the operator.
- */
-function isNotMultiAdmin(err: unknown): boolean {
-  if (!(err instanceof NetworkError) || err.response.status !== 409) {
-    return false;
-  }
-  const data = err.responseData;
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    (data as { error?: unknown }).error === "NOT_MULTI_ADMIN"
-  );
-}
 
 /** The enclave approve entry point as exposed by `useEnvironment()`.
  *
@@ -67,78 +55,72 @@ export type ApproveTideRequests = (
 
 export type ApprovalModelOutcome =
   /**
-   * firstAdmin / Tideless realm (server answered the two-phase probe with
-   * 409 NOT_MULTI_ADMIN): the helper has already run the single-phase
-   * `authorize` then `commit` and the change has been applied. The caller just
-   * shows a success message and refreshes.
+   * The authorization was recorded by the unified `/approve` endpoint. For a
+   * firstAdmin/Tideless/simple CR this is a single round-trip; for a multiAdmin
+   * CR this is phase 2 (after the enclave sign). `committed` is the server's
+   * authoritative flag: `true` means the threshold was met and the change was
+   * auto-committed inline — there is NO separate legacy `/commit` step. When
+   * `false` the approval counted toward the threshold but more approvers are
+   * still required.
    */
-  | { kind: "committed" }
-  /** The two-phase round-trip completed and the server recorded the approval. */
-  | { kind: "recorded"; result: IgaApprovalSubmitResult }
+  | { kind: "recorded"; result: IgaApproveResult }
   /** The operator denied the request in the enclave popup. */
   | { kind: "denied" }
   /** The enclave returned pending (e.g. awaiting more operators). */
   | { kind: "pending" };
 
 /**
- * Run the multiAdmin two-phase approval round-trip for a single CR.
+ * Run the unified `/approve` flow for a single CR.
  *
- * Returns a discriminated outcome rather than throwing for the
- * denied/pending/single-phase cases, so the UI can surface an appropriate
- * message. Genuine transport/enclave failures still throw and are handled by
- * the caller's existing try/catch.
+ * One endpoint, server-decided ceremony: firstAdmin/Tideless realms get a
+ * single inline record+commit round-trip; multiAdmin realms get the two-phase
+ * enclave ceremony (phase 1 returns the carrier, phase 2 submits the signed
+ * doken and auto-commits at quorum). The legacy `authorize`/`commit`/
+ * `approval-model` endpoints are NOT used here.
+ *
+ * Returns a discriminated outcome rather than throwing for the denied/pending
+ * cases, so the UI can surface an appropriate message. Genuine transport/
+ * enclave failures still throw and are handled by the caller's try/catch.
  */
 export async function runMultiAdminApproval(
   adminClient: KeycloakAdminClient,
   approveTideRequests: ApproveTideRequests,
   changeRequestId: string,
 ): Promise<ApprovalModelOutcome> {
-  // ── Phase 1: fetch the model the admin must approve ───────────────────
+  // ── Phase 1: POST /approve with no body. ──────────────────────────────
   //
-  // Probe the two-phase endpoint. firstAdmin / Tideless realms refuse with
-  // 409 NOT_MULTI_ADMIN — in that case run the single-phase authorize+commit
-  // flow. Any OTHER error (other 409s, 403, 404, transport) must propagate so
-  // the operator sees the real failure (don't swallow genuine errors).
+  // The server returns mode "recorded" for firstAdmin/Tideless/simple CRs
+  // (it recorded + auto-committed inline), or mode "needs-approval" carrying
+  // the Policy:1 enclave carrier for multiAdmin CRs.
   console.log("[TIDE-APPROVAL] runMultiAdminApproval: start", {
     changeRequestId,
   });
-  let model;
-  try {
-    model = await adminClient.iga.getApprovalModel({ id: changeRequestId });
-    console.log("[TIDE-APPROVAL] GET /approval-model result", {
-      changeRequestId,
-      requiresApprovalPopup: model.requiresApprovalPopup,
-      requestModelLength:
-        typeof model.requestModel === "string"
-          ? model.requestModel.length
-          : null,
-    });
-  } catch (err) {
-    if (isNotMultiAdmin(err)) {
-      console.log(
-        "[TIDE-APPROVAL] GET /approval-model -> 409 NOT_MULTI_ADMIN; running single-phase firstAdmin authorize+commit",
-        { changeRequestId },
-      );
-      // firstAdmin single-phase: authorize, then commit (authorize alone does
-      // not apply the change — commit is an explicit second step server-side).
-      await adminClient.iga.authorize({ id: changeRequestId });
-      await adminClient.iga.commit({ id: changeRequestId });
-      return { kind: "committed" };
-    }
-    throw err;
+  const phase1 = await adminClient.iga.approve({ id: changeRequestId });
+  console.log("[TIDE-APPROVAL] POST /approve (phase 1) result", {
+    changeRequestId,
+    mode: phase1.mode,
+    committed: phase1.committed,
+    requestModelLength:
+      typeof phase1.requestModel === "string"
+        ? phase1.requestModel.length
+        : null,
+  });
+
+  // firstAdmin / Tideless / simple, OR a multiAdmin CR the server resolved
+  // without an enclave round-trip: the unified endpoint already recorded (and,
+  // when committed===true, auto-committed) the change.
+  if (phase1.mode !== "needs-approval") {
+    return { kind: "recorded", result: phase1 };
   }
 
-  // Defensive: if a backend ever DID answer the probe with
-  // `requiresApprovalPopup === false` instead of a 409, treat it the same as
-  // the single-phase realm (authorize + commit).
-  if (!model.requiresApprovalPopup) {
-    await adminClient.iga.authorize({ id: changeRequestId });
-    await adminClient.iga.commit({ id: changeRequestId });
-    return { kind: "committed" };
+  if (!phase1.requestModel) {
+    throw new Error(
+      "Server requested enclave approval but returned no requestModel carrier.",
+    );
   }
 
   // ── Phase 2a: enclave approve (decode -> approve -> read result) ──────
-  const requestBytes = base64ToBytes(model.requestModel);
+  const requestBytes = base64ToBytes(phase1.requestModel);
   console.log(
     "[TIDE-APPROVAL] Phase 2a: handing request to enclave via approveTideRequests (opens Heimdall approval popup)",
     { changeRequestId, requestBytesLength: requestBytes.length },
@@ -164,11 +146,18 @@ export async function runMultiAdminApproval(
     return { kind: "pending" };
   }
 
-  // ── Phase 2b: submit the doken-embedded model back to the server ─────
+  // ── Phase 2b: POST /approve with the signed doken; server auto-commits ─
   const requestModel = bytesToBase64(approval.approved.request);
-  const result = await adminClient.iga.submitApprovalModel({
+  const result = await adminClient.iga.approve({
     id: changeRequestId,
     requestModel,
+  });
+  console.log("[TIDE-APPROVAL] POST /approve (phase 2) result", {
+    changeRequestId,
+    mode: result.mode,
+    committed: result.committed,
+    authCount: result.authCount,
+    threshold: result.threshold,
   });
 
   return { kind: "recorded", result };
@@ -177,34 +166,33 @@ export async function runMultiAdminApproval(
 /** Per-CR outcome of the bulk batch approval. Mirrors {@link ApprovalModelOutcome}
  *  but always carries the originating CR id so the caller can map back. */
 export type BatchApprovalOutcome = { changeRequestId: string } & (
-  | { kind: "committed" }
-  | { kind: "recorded"; result: IgaApprovalSubmitResult }
+  | { kind: "recorded"; result: IgaApproveResult }
   | { kind: "denied" }
   | { kind: "pending" }
   | { kind: "error"; error: unknown }
 );
 
 /**
- * Bulk multiAdmin approval that opens the Heimdall enclave **exactly once** for
- * the whole batch.
+ * Bulk approval over the unified `/approve` endpoint that opens the Heimdall
+ * enclave **exactly once** for the whole batch.
  *
- * Today the per-CR {@link runMultiAdminApproval} opens the enclave once per CR
- * (N pop-ups / N round-trips). The enclave's `approve()` already accepts an
- * ARRAY of `{ id, request }` carriers and signs them all in a single popup
- * interaction (one doken, one open), returning an array of approvals keyed by
- * id. This helper exploits that:
+ * The per-CR {@link runMultiAdminApproval} opens the enclave once per CR (N
+ * pop-ups / N round-trips). The enclave's `approve()` accepts an ARRAY of
+ * `{ id, request }` carriers and signs them all in a single popup interaction
+ * (one doken, one open), returning an array of approvals keyed by id. This
+ * helper exploits that:
  *
- *   1. Phase 1 — GET `/approval-model` for every CR and collect the decoded
- *      carriers `{ id, request: bytes }` into ONE array. firstAdmin / Tideless
- *      CRs (409 NOT_MULTI_ADMIN, or `requiresApprovalPopup === false`) take the
- *      single-phase authorize+commit path immediately — they never touch the
- *      enclave, so they don't add a carrier to the batch.
+ *   1. Phase 1 — POST `/approve` (empty body) for every CR. firstAdmin/Tideless/
+ *      simple CRs come back `mode: "recorded"` (recorded + auto-committed inline,
+ *      no enclave); they never add a carrier to the batch. multiAdmin CRs come
+ *      back `mode: "needs-approval"` carrying the Policy:1 carrier, which we
+ *      decode and collect into ONE array.
  *   2. Phase 2a — call `approveTideRequests(allCarriers)` ONCE. One enclave
  *      pop-up; the admin authorizes once; the enclave signs all N carriers and
  *      returns N approvals, each tagged with its CR id.
  *   3. Phase 2b — for each approved carrier, POST its own doken-embedded model
- *      back to `/approval-model` (per-CR commit; there is no bulk submit
- *      endpoint). This is plain HTTP — no further enclave interaction.
+ *      back to `/approve` (per-CR; the server auto-commits at quorum). This is
+ *      plain HTTP — no further enclave interaction.
  *
  * Correctness is preserved: each CR keeps its own carrier and its own returned
  * signature, mapped back by id. The single doken established at
@@ -213,10 +201,10 @@ export type BatchApprovalOutcome = { changeRequestId: string } & (
  * interaction (each carrier carries its own request model).
  *
  * Returns one {@link BatchApprovalOutcome} per input id (order preserved). Phase-1
- * GET failures and phase-2 POST failures are captured per-CR as `error`
- * outcomes so one bad CR doesn't sink the batch. A failure of the single
- * `approveTideRequests` call (the enclave itself) DOES throw, since that is a
- * batch-wide failure the caller must surface.
+ * and phase-2 POST failures are captured per-CR as `error` outcomes so one bad
+ * CR doesn't sink the batch. A failure of the single `approveTideRequests` call
+ * (the enclave itself) DOES throw, since that is a batch-wide failure the caller
+ * must surface.
  */
 export async function runMultiAdminApprovalBatch(
   adminClient: KeycloakAdminClient,
@@ -237,31 +225,12 @@ export async function runMultiAdminApprovalBatch(
   const carriers: { id: string; request: Uint8Array; names?: CrNamesMap }[] =
     [];
 
-  // ── Phase 1: fetch every carrier; run single-phase CRs immediately ────
+  // ── Phase 1: POST /approve per CR; resolve inline-committed CRs now ────
   for (const changeRequestId of changeRequestIds) {
-    let model;
+    let phase1: IgaApproveResult;
     try {
-      model = await adminClient.iga.getApprovalModel({ id: changeRequestId });
+      phase1 = await adminClient.iga.approve({ id: changeRequestId });
     } catch (err) {
-      if (isNotMultiAdmin(err)) {
-        // firstAdmin single-phase: authorize + commit; no enclave carrier.
-        try {
-          console.log(
-            "[TIDE-APPROVAL] batch: 409 NOT_MULTI_ADMIN; single-phase authorize+commit",
-            { changeRequestId },
-          );
-          await adminClient.iga.authorize({ id: changeRequestId });
-          await adminClient.iga.commit({ id: changeRequestId });
-          outcomes.set(changeRequestId, { changeRequestId, kind: "committed" });
-        } catch (innerErr) {
-          outcomes.set(changeRequestId, {
-            changeRequestId,
-            kind: "error",
-            error: innerErr,
-          });
-        }
-        continue;
-      }
       outcomes.set(changeRequestId, {
         changeRequestId,
         kind: "error",
@@ -270,19 +239,24 @@ export async function runMultiAdminApprovalBatch(
       continue;
     }
 
-    if (!model.requiresApprovalPopup) {
-      // Defensive single-phase fallback (see runMultiAdminApproval).
-      try {
-        await adminClient.iga.authorize({ id: changeRequestId });
-        await adminClient.iga.commit({ id: changeRequestId });
-        outcomes.set(changeRequestId, { changeRequestId, kind: "committed" });
-      } catch (innerErr) {
-        outcomes.set(changeRequestId, {
-          changeRequestId,
-          kind: "error",
-          error: innerErr,
-        });
-      }
+    if (phase1.mode !== "needs-approval") {
+      // firstAdmin/Tideless/simple (or already-resolved): recorded inline.
+      outcomes.set(changeRequestId, {
+        changeRequestId,
+        kind: "recorded",
+        result: phase1,
+      });
+      continue;
+    }
+
+    if (!phase1.requestModel) {
+      outcomes.set(changeRequestId, {
+        changeRequestId,
+        kind: "error",
+        error: new Error(
+          "Server requested enclave approval but returned no requestModel carrier.",
+        ),
+      });
       continue;
     }
 
@@ -298,7 +272,7 @@ export async function runMultiAdminApprovalBatch(
 
     carriers.push({
       id: changeRequestId,
-      request: base64ToBytes(model.requestModel),
+      request: base64ToBytes(phase1.requestModel),
       ...(names ? { names } : {}),
     });
   }
@@ -321,7 +295,8 @@ export async function runMultiAdminApprovalBatch(
       ids: approvals.map((a) => a.id),
     });
 
-    // ── Phase 2b: per-CR commit of each returned approval (plain HTTP) ───
+    // ── Phase 2b: per-CR POST /approve of each returned approval (plain HTTP);
+    //    the server auto-commits at quorum. No further enclave interaction. ─
     for (const carrier of carriers) {
       const approval = byId.get(carrier.id);
       if (!approval) {
@@ -350,7 +325,7 @@ export async function runMultiAdminApprovalBatch(
       }
       try {
         const requestModel = bytesToBase64(approval.approved.request);
-        const result = await adminClient.iga.submitApprovalModel({
+        const result = await adminClient.iga.approve({
           id: carrier.id,
           requestModel,
         });
