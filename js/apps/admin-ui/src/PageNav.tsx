@@ -6,7 +6,7 @@ import {
   PageSidebar,
   PageSidebarBody,
 } from "@patternfly/react-core";
-import { FormEvent, useState, useEffect } from "react";
+import { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAccess } from "./context/access/Access";
@@ -16,7 +16,6 @@ import { Environment } from "./environment";
 import { toPage } from "./page/routes";
 import { routes } from "./routes";
 import useIsFeatureEnabled, { Feature } from "./utils/useIsFeatureEnabled";
-import { useAdminClient } from "./admin-client";
 
 import "./page-nav.css";
 
@@ -24,7 +23,7 @@ type LeftNavProps = {
   title: string;
   path: string;
   id?: string;
-  label?: string // TIDECLOAK IMPLEMENTATION
+  label?: string; // TIDECLOAK IMPLEMENTATION
 };
 
 const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
@@ -58,34 +57,38 @@ const LeftNav = ({ title, path, id, label }: LeftNavProps) => {
           `pf-v5-c-nav__link${isActive ? " pf-m-current" : ""}`
         }
       >
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-        {t(title)}
-      {label && (
         <span
           style={{
-            backgroundColor: '#0066cc',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            minWidth: '20px',
-            textAlign: 'center',
-            lineHeight: '1.2'
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
           }}
         >
-          {label}
+          {t(title)}
+          {label && (
+            <span
+              style={{
+                backgroundColor: "#0066cc",
+                color: "#fff",
+                padding: "2px 8px",
+                borderRadius: "12px",
+                fontSize: "12px",
+                fontWeight: "bold",
+                minWidth: "20px",
+                textAlign: "center",
+                lineHeight: "1.2",
+              }}
+            >
+              {label}
+            </span>
+          )}
         </span>
-      )}
-    </span>
       </NavLink>
     </li>
   );
 };
 
 export const PageNav = () => {
-  const { adminClient } = useAdminClient();
-
   const { t } = useTranslation();
   const { environment } = useEnvironment<Environment>();
   const { hasAccess, hasSomeAccess } = useAccess();
@@ -95,29 +98,6 @@ export const PageNav = () => {
     componentTypes?.["org.keycloak.services.ui.extend.UiPageProvider"];
   const navigate = useNavigate();
   const { realm, realmRepresentation } = useRealm();
-  const [changeRequestsCount, setClientRequestCount] = useState<number>(0)
-
-  useEffect(() => {
-    const getCount = async () => {
-      const userRequest = await adminClient.tideUsersExt.getRequestedChangesForUsers();
-      const roleRequest = await adminClient.tideUsersExt.getRequestedChangesForRoles();
-      const groupRequest = await adminClient.tideUsersExt.getRequestedChangesForGroups();
-      const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
-      const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
-      const realmLicensingRequest = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
-      let policyCount = 0;
-      try {
-        const realmPolicy: any = await adminClient.tideUsersExt.getRealmPolicy();
-        if (realmPolicy && realmPolicy.status === "pending") policyCount = 1;
-      } catch (_) { /* ignore */ }
-
-      setClientRequestCount(userRequest.length + roleRequest.length + groupRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length + policyCount)
-    }
-
-    getCount();
-
-  }
-  , [realmRepresentation])
 
   type SelectedItem = {
     groupId: number | string;
@@ -182,13 +162,7 @@ export const PageNav = () => {
               <LeftNav title="sessions" path="/sessions" />
               <LeftNav title="events" path="/events" />
               {/** TIDECLOAK IMPLEMENTATION */}
-              <LeftNav
-                title="Change Requests "
-                path="/change-requests"
-                label={changeRequestsCount > 0 ? changeRequestsCount.toString() : undefined}
-              />
-              {/** TIDECLOAK IMPLEMENTATION */}
-              <LeftNav title="Policies" path="/tide-policies" />
+              <LeftNav title="Change Requests" path="/change-requests" />
             </NavGroup>
           )}
 

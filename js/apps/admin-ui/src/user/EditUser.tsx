@@ -33,6 +33,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -44,6 +45,7 @@ import { UserAttributes } from "./UserAttributes";
 import { UserConsents } from "./UserConsents";
 import { UserCredentials } from "./UserCredentials";
 import { BruteForced, UserForm } from "./UserForm";
+import { ExportLoginDiagnosticsModal } from "./ExportLoginDiagnosticsModal";
 import { UserGroups } from "./UserGroups";
 import { UserIdentityProviderLinks } from "./UserIdentityProviderLinks";
 import { UserRoleMapping } from "./UserRoleMapping";
@@ -59,6 +61,7 @@ import {
 import { UserParams, UserTab, toUser } from "./routes/User";
 import { toUsers } from "./routes/Users";
 import { isLightweightUser } from "./utils";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 
 import "./user-section.css";
 import { AdminEvents } from "../events/AdminEvents";
@@ -89,6 +92,7 @@ export default function EditUser() {
     useState<UserProfileMetadata>();
   const [refreshCount, setRefreshCount] = useState(0);
   const refresh = () => setRefreshCount((count) => count + 1);
+  const [exportDiagnosticsOpen, setExportDiagnosticsOpen] = useState(false);
   const lightweightUser = isLightweightUser(user?.id);
   const [upConfig, setUpConfig] = useState<UserProfileConfig>();
 
@@ -248,7 +252,28 @@ export default function EditUser() {
         if (lightweightUser) {
           await adminClient.users.logout({ id: user!.id! });
         } else {
-          await adminClient.users.del({ id: user!.id! });
+          // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+          // change-request envelope (the agent unwraps it; `del` is typed void
+          // but resolves with the parsed body). Detect it with the established
+          // `notifyIfPendingChangeRequest` helper and do NOT report a deletion.
+          const result = await adminClient.users.del({ id: user!.id! });
+          if (
+            notifyIfPendingChangeRequest(
+              result,
+              t,
+              addAlert,
+              { realm: realmName, navigate },
+              {
+                titleKey: "deletePendingChangeRequestCreated",
+                useEnvelopeMessage: true,
+              },
+            )
+          ) {
+            // Entity still exists pending approval — stay on this page and
+            // refresh from server rather than navigating away as if deleted.
+            refresh();
+            return;
+          }
         }
         addAlert(t("userDeletedSuccess"), AlertVariant.success);
         navigate(toUsers({ realm: realmName }));
@@ -288,6 +313,13 @@ export default function EditUser() {
       <ImpersonateConfirm />
       <DeleteConfirm />
       <DisableConfirm />
+      {exportDiagnosticsOpen && (
+        <ExportLoginDiagnosticsModal
+          userId={user.id!}
+          username={user.username!}
+          onClose={() => setExportDiagnosticsOpen(false)}
+        />
+      )}
       <ViewHeader
         titleKey={user.username!}
         className="kc-username-view-header"
@@ -319,6 +351,12 @@ export default function EditUser() {
             {t("impersonate")}
           </DropdownItem>,
           <DropdownItem
+            key="export-login-diagnostics"
+            onClick={() => setExportDiagnosticsOpen(true)}
+          >
+            {t("exportLoginDiagnostics")}
+          </DropdownItem>,
+          <DropdownItem
             key="delete"
             isDisabled={!user.access?.manage}
             onClick={() => toggleDeleteDialog()}
@@ -339,6 +377,7 @@ export default function EditUser() {
         isEnabled={user.enabled}
       />
 
+      <IgaPageBanner entityType="user" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <UserProfileProvider>
           <FormProvider {...form}>

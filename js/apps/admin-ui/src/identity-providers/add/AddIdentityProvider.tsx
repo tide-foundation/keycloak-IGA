@@ -5,9 +5,9 @@ import {
   Button,
   PageSection,
   Grid,
-  GridItem
+  GridItem,
 } from "@patternfly/react-core";
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
@@ -24,7 +24,6 @@ import { toIdentityProvider } from "../routes/IdentityProvider";
 import type { IdentityProviderCreateParams } from "../routes/IdentityProviderCreate";
 import { toIdentityProviders } from "../routes/IdentityProviders";
 import { GeneralSettings } from "./GeneralSettings";
-import { findTideComponent } from "../utils/SignSettingsUtil";
 
 export default function AddIdentityProvider() {
   const { adminClient } = useAdminClient();
@@ -58,52 +57,62 @@ export default function AddIdentityProvider() {
 
   const { addAlert, addError } = useAlerts();
   const navigate = useNavigate();
-  const { realm, realmRepresentation } = useRealm();
+  const { realm } = useRealm();
 
   /** TIDECLOAK IMPLEMENTATION START */
-  const currentHost = window.location.origin;
-  const backgroundUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/BACKGROUND_IMAGE`;
-  const logoUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/LOGO`;
-
-  useEffect(() => {
-    const signSettings = async () => {
-      const tideComponent = await findTideComponent(adminClient, realm);
-
-      if (tideComponent) {
-        try {
-          await adminClient.tideAdmin.signIdpSettings();
-        } catch (error) {
-          addError("SignSettingsError", error);
-        }
-      }
-
-    }
-    const doStuff = async () => {
-      const changeSetEndpoint = `${window.location.origin}`
-
-      form.setValue("config.ImageURL", backgroundUrl);
-      form.setValue("config.LogoURL", logoUrl);
-      form.setValue("config.clientSecret", "null");
-      form.setValue("config.changeSetEndpoint", changeSetEndpoint);
+  // For the `tide` provider, do NOT create the IdP piecemeal (toggle-ragnarok +
+  // identityProviders.create + sign-idp-settings). Instead call the backend
+  // `setUpTideRealm` endpoint once with `skipLicense=true`: it creates the
+  // `tide` IdP, the tide-vendor-key component, and signs the IdP settings —
+  // WITHOUT acquiring a license. Licensing is a separate, manual Stripe Checkout
+  // step performed later from the licensing tab (where Stripe collects the email
+  // and T&Cs), so no email is collected here.
+  const setUpTideRealm = async (provider: IdentityProviderRepresentation) => {
+    try {
       const data = new FormData();
+      data.append("skipLicense", "true");
       data.append("isRagnarokEnabled", "true");
-      await adminClient.tideAdmin.toggleRagnarok(data)
-      form.setValue("config.backupOn", "true");
-    };
+      await adminClient.tideAdmin.setUpTideRealm(data);
 
-    const handleSubmit = async () => {
-      if (providerId === "tide") {
-        await doStuff();
-        onSubmit(form.getValues());
-        await signSettings();
-      }
-    };
+      addAlert(t("createIdentityProviderSuccess"), AlertVariant.success);
+      navigate(
+        toIdentityProvider({
+          realm,
+          providerId,
+          alias: provider.alias!,
+          tab: "settings",
+        }),
+      );
+    } catch (error) {
+      addError("createError", error);
+    }
+  };
 
-    handleSubmit();
+  // Auto-provision the `tide` IdP on mount. Selecting "Tide" in the IdP list
+  // navigates here; there are no form fields to fill (email/licensing is a
+  // separate manual Stripe step), so there is no Add button for tide and the
+  // submit-button path can never fire (the form is never "dirty"/valid). Instead
+  // we call `setUpTideRealm` exactly once when the page loads. The ref guard
+  // prevents re-runs across re-renders / React 18 StrictMode double-invoke.
+  const tideProvisioned = useRef(false);
+  useEffect(() => {
+    if (providerId !== "tide" || tideProvisioned.current) {
+      return;
+    }
+    tideProvisioned.current = true;
+    void setUpTideRealm({
+      alias: providerId,
+    } as IdentityProviderRepresentation);
   }, [providerId]);
   /** TIDECLOAK IMPLEMENTATION END */
 
   const onSubmit = async (provider: IdentityProviderRepresentation) => {
+    /** TIDECLOAK IMPLEMENTATION START */
+    if (providerId === "tide") {
+      await setUpTideRealm(provider);
+      return;
+    }
+    /** TIDECLOAK IMPLEMENTATION END */
     try {
       await adminClient.identityProviders.create({
         ...provider,
@@ -113,8 +122,6 @@ export default function AddIdentityProvider() {
         providerId,
         alias: provider.alias!,
       });
-
-      /** TIDECLOAK IMPLEMENTATION END */
 
       addAlert(t("createIdentityProviderSuccess"), AlertVariant.success);
       navigate(
@@ -163,14 +170,16 @@ export default function AddIdentityProvider() {
                 )}
               </FormProvider>
               <ActionGroup>
-                {providerId !== "tide" && (<Button
-                  isDisabled={!isValid}
-                  variant="primary"
-                  type="submit"
-                  data-testid="createProvider"
-                >
-                  {t("add")}
-                </Button>
+                {/** TIDECLOAK: tide auto-provisions on mount, no submit button */}
+                {providerId !== "tide" && (
+                  <Button
+                    isDisabled={!isValid}
+                    variant="primary"
+                    type="submit"
+                    data-testid="createProvider"
+                  >
+                    {t("add")}
+                  </Button>
                 )}
                 <Button
                   variant="link"
