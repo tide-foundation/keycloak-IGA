@@ -22,14 +22,29 @@ export function AlertPanel({ alerts, onCloseAlert }: AlertPanelProps) {
       isToast
       style={{ whiteSpace: "pre-wrap" }}
     >
-      {alerts.map((alert, index) => (
-        <AlertItem
-          key={alert.id}
-          alert={alert}
-          isFirst={index === 0}
-          onClose={() => onCloseAlert(alert.id)}
-        />
-      ))}
+      {alerts.map(
+        ({ id, variant, message, description, actionLinks }, index) => (
+          <Alert
+            key={id}
+            data-testid={index === 0 ? "last-alert" : undefined}
+            isLiveRegion
+            variant={AlertVariant[variant]}
+            component="p"
+            variantLabel=""
+            title={message}
+            actionClose={
+              <AlertActionCloseButton
+                title={message}
+                onClose={() => onCloseAlert(id)}
+              />
+            }
+            // TIDECLOAK IMPLEMENTATION
+            actionLinks={actionLinks}
+          >
+            {description && <p>{description}</p>}
+          </Alert>
+        ),
+      )}
     </AlertGroup>
   );
 }

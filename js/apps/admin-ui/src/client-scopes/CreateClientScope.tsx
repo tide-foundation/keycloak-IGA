@@ -7,6 +7,7 @@ import {
   ClientScopeDefaultOptionalType,
   changeScope,
 } from "../components/client-scope/ClientScopeTypes";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { convertFormValuesToObject } from "../util";
@@ -61,6 +62,7 @@ export default function CreateClientScope() {
   return (
     <>
       <ViewHeader titleKey="createClientScope" />
+      <IgaPageBanner entityType="client scope" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <PageSection variant="light">
           <ScopeForm save={onSubmit} />

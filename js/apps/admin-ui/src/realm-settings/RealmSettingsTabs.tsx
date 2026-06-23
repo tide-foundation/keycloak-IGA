@@ -23,6 +23,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -32,6 +33,7 @@ import helpUrls from "../help-urls";
 import { convertFormValuesToObject, convertToFormValues } from "../util";
 import { getAuthorizationHeaders } from "../utils/getAuthorizationHeaders";
 import { joinPath } from "../utils/joinPath";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import useLocale from "../utils/useLocale";
 import { RealmSettingsEmailTab } from "./EmailTab";
@@ -259,7 +261,24 @@ export const RealmSettingsTabs = () => {
         },
       );
       if (!response.ok) throw new Error(response.statusText);
-      addAlert(t("realmSaveSuccess"), AlertVariant.success);
+      // TIDECLOAK IMPLEMENTATION
+      // When IGA is enabled, saving a realm attribute is intercepted as a
+      // SET_REALM_ATTRIBUTE change request (HTTP 202 + envelope body) instead
+      // of being applied. 202 is `response.ok`, so surface the change-request
+      // toast rather than the normal success message.
+      let pendingBody: unknown;
+      try {
+        pendingBody = await response.clone().json();
+      } catch {
+        pendingBody = undefined;
+      }
+      const pending = notifyIfPendingChangeRequest(pendingBody, t, addAlert, {
+        realm: realmName,
+        navigate,
+      });
+      if (!pending) {
+        addAlert(t("realmSaveSuccess"), AlertVariant.success);
+      }
     } catch (error) {
       addError("realmSaveError", error);
     }
@@ -320,6 +339,7 @@ export const RealmSettingsTabs = () => {
           />
         )}
       />
+      <IgaPageBanner entityType="realm" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <RoutableTabs
           isBox
@@ -336,7 +356,11 @@ export const RealmSettingsTabs = () => {
             {...generalTab}
           >
             {/* TIDECLOAK IMPLEMENTATION */}
-            <RealmSettingsGeneralTab realm={realm!} save={save} refresh={refresh} />
+            <RealmSettingsGeneralTab
+              realm={realm!}
+              save={save}
+              refresh={refresh}
+            />
           </Tab>
           <Tab
             title={<TabTitleText>{t("login")}</TabTitleText>}
