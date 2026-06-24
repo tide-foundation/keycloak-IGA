@@ -21,6 +21,5 @@ export default {
   guides: `${keycloakHomepageURL}/guides`,
   community: `${keycloakHomepageURL}/community`,
   blog: `${keycloakHomepageURL}/blog`,
-  workflowsUrl: `https://www.keycloak.org/2025/10/workflows-experimental-26-4`,
-  changeRequests: "", // TIDECLOAK IMPLEMENTATION
+  workflowsUrl: `${adminGuide}#_managing_workflows`,
 };
