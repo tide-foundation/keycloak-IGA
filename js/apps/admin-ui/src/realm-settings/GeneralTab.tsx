@@ -146,6 +146,71 @@ async function readDisableIgaPending(
   return null;
 }
 
+// TIDECLOAK IMPLEMENTATION
+// Shape of the ON-toggle POST response body when iga-core finishes
+// `completed_with_warnings` (HTTP 200): some ADOPT change-requests could not be
+// signed (e.g. ORK down) and were left PENDING. `commitFailures` lists each
+// failure; the synthetic `actionType === "SIGN_DEFAULTS_SWEEP"` entry is the
+// closure/converge sign rather than a per-CR failure.
+type ToggleIgaCommitFailure = {
+  crId?: string;
+  actionType?: string;
+  outcome?: string;
+  message?: string;
+};
+type ToggleIgaWarnings = {
+  state?: string;
+  warningsSummary?: string;
+  warnings?: { commitFailures?: ToggleIgaCommitFailure[] };
+};
+
+// The synthetic converge/closure-sweep entry is reported as a commit failure but
+// is NOT a per-CR failure, so it is excluded from the "N change requests failed"
+// count.
+const SIGN_DEFAULTS_SWEEP = "SIGN_DEFAULTS_SWEEP";
+
+// TIDECLOAK IMPLEMENTATION
+// Normalise the ON-toggle POST result (raw `Response` or an already-parsed
+// body) into the warnings payload, or `null` when the run completed cleanly /
+// the body carries no warning signal.
+async function readToggleIgaWarnings(
+  result: unknown,
+): Promise<ToggleIgaWarnings | null> {
+  let body: Record<string, unknown> | null = null;
+  if (result instanceof Response) {
+    try {
+      body = (await result.clone().json()) as Record<string, unknown> | null;
+    } catch {
+      return null;
+    }
+  } else if (result && typeof result === "object") {
+    body = result as Record<string, unknown>;
+  }
+  if (!body) {
+    return null;
+  }
+
+  const warnings = body.warnings as
+    | { commitFailures?: ToggleIgaCommitFailure[] }
+    | undefined;
+  const hasWarningSignal =
+    body.state === "completed_with_warnings" ||
+    typeof body.warningsSummary === "string" ||
+    (Array.isArray(warnings?.commitFailures) &&
+      warnings!.commitFailures!.length > 0);
+  if (!hasWarningSignal) {
+    return null;
+  }
+  return {
+    state: typeof body.state === "string" ? body.state : undefined,
+    warningsSummary:
+      typeof body.warningsSummary === "string"
+        ? body.warningsSummary
+        : undefined,
+    warnings,
+  };
+}
+
 const UNMANAGED_ATTRIBUTE_POLICIES = [
   UnmanagedAttributePolicy.Disabled,
   UnmanagedAttributePolicy.Enabled,
@@ -239,10 +304,43 @@ function RealmSettingsGeneralTabForm({
       const data = new FormData();
       data.append("isIGAEnabled", "true");
       data.append("jobId", jobId);
-      await adminClient.tideAdmin.toggleIGA(data);
-      // POST resolved successfully: success toast + refresh. The modal will
-      // also observe state=completed via polling and mark all stages done.
-      addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
+      const result = await adminClient.tideAdmin.toggleIGA(data);
+
+      // POST resolved with HTTP 200. iga-core may have finished
+      // `completed_with_warnings` — some ADOPT change-requests could not be
+      // signed (e.g. ORK down) and were left PENDING. Inspect the body and tell
+      // the user HOW MANY failed instead of claiming a clean success.
+      const warnings = await readToggleIgaWarnings(result);
+      if (warnings) {
+        const failures = warnings.warnings?.commitFailures ?? [];
+        // Per-CR failures exclude the synthetic converge/closure-sweep entry.
+        const perCrFailures = failures.filter(
+          (f) => f.actionType !== SIGN_DEFAULTS_SWEEP,
+        );
+        const sweepFailure = failures.find(
+          (f) => f.actionType === SIGN_DEFAULTS_SWEEP,
+        );
+        const count = perCrFailures.length;
+
+        if (count > 0) {
+          // Mix of per-CR failures (and possibly a sweep failure too): report
+          // the count of change requests left pending.
+          addAlert(t("enableSwitchWarning", { count }), AlertVariant.warning);
+        } else {
+          // Only the converge/closure sign failed (no per-CR failures): there
+          // is no meaningful count, so surface the failure message / a
+          // closure-signing-failed wording.
+          addAlert(
+            t("enableSwitchWarningClosure"),
+            AlertVariant.warning,
+            sweepFailure?.message || warnings.warningsSummary || undefined,
+          );
+        }
+      } else {
+        // Clean completion: keep the plain success toast. The modal will also
+        // observe state=completed via polling and mark all stages done.
+        addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
+      }
       setIgaToggleInFlight(false);
       setIgaProgressJobId(null);
       refresh();

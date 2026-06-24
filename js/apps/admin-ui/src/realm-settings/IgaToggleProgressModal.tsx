@@ -36,7 +36,13 @@ type IgaToggleProgressModalProps = {
   onClose: () => void;
 };
 
-type StepVariant = "default" | "success" | "info" | "pending" | "danger";
+type StepVariant =
+  | "default"
+  | "success"
+  | "info"
+  | "pending"
+  | "warning"
+  | "danger";
 
 /**
  * Map a backend stage `status` onto a PatternFly ProgressStep variant.
@@ -48,6 +54,8 @@ function statusToVariant(status: string): StepVariant {
       return "success";
     case "running":
       return "info";
+    case "warning":
+      return "warning";
     case "failed":
       return "danger";
     case "pending":
@@ -91,7 +99,15 @@ export const IgaToggleProgressModal = ({
           return;
         }
         setStatus(next);
-        if (next.state === "completed" && !completedRef.current) {
+        // Both `completed` and `completed_with_warnings` are terminal-success
+        // states: the run finished and the modal should close. The warning
+        // (left-pending CRs) is surfaced separately via the warning block below
+        // and the parent's toggle toast.
+        if (
+          (next.state === "completed" ||
+            next.state === "completed_with_warnings") &&
+          !completedRef.current
+        ) {
           completedRef.current = true;
           onCompleteRef.current();
         }
@@ -119,6 +135,7 @@ export const IgaToggleProgressModal = ({
   const doneCount = stages.filter((s) => s.status === "done").length;
   const totalCount = stages.length;
   const isFailed = status?.state === "failed";
+  const hasWarnings = status?.state === "completed_with_warnings";
   const isTerminal = status != null && status.state !== "running";
 
   return (
@@ -158,7 +175,7 @@ export const IgaToggleProgressModal = ({
           </StackItem>
         )}
         <StackItem>
-          {totalCount === 0 && !isFailed ? (
+          {totalCount === 0 && !isFailed && !hasWarnings ? (
             <TextContent>
               <Text component={TextVariants.p}>
                 <Spinner size="md" /> {t("igaToggleProgressStarting")}
@@ -206,6 +223,18 @@ export const IgaToggleProgressModal = ({
                 className="pf-v5-u-danger-color-100"
               >
                 {status?.error?.message ?? t("igaToggleProgressFailed")}
+              </Text>
+            </TextContent>
+          </StackItem>
+        )}
+        {hasWarnings && (
+          <StackItem>
+            <TextContent>
+              <Text
+                component={TextVariants.p}
+                className="pf-v5-u-warning-color-100"
+              >
+                {status?.error?.message ?? t("igaToggleProgressWarning")}
               </Text>
             </TextContent>
           </StackItem>

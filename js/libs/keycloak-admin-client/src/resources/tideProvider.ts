@@ -33,15 +33,48 @@ interface scheduledTaskInfo {
 export interface ToggleIGAStage {
   id: string;
   label: string;
-  status: "pending" | "running" | "done" | "failed";
+  status: "pending" | "running" | "done" | "warning" | "failed";
   current?: number;
   total?: number;
+}
+
+/* TIDECLOAK IMPLEMENTATION
+ * A single commit failure carried in the toggle POST response body's
+ * `warnings.commitFailures`. The synthetic `actionType === "SIGN_DEFAULTS_SWEEP"`
+ * entry represents a failed closure/converge sign rather than a per-CR failure
+ * and is excluded from the "N failed" count by the admin-ui. */
+export interface ToggleIGACommitFailure {
+  crId?: string;
+  actionType?: string;
+  outcome?: string;
+  message?: string;
+}
+
+/* TIDECLOAK IMPLEMENTATION
+ * Warning payload returned on the toggle POST response body (HTTP 200) when the
+ * ON-toggle finished `completed_with_warnings` (e.g. ORK signing failed and
+ * left ADOPT change-requests PENDING). NOTE: this lives on the POST body, not on
+ * the polled status — the polled status surfaces the same summary via
+ * `error.message`. */
+export interface ToggleIGAWarnings {
+  commitFailures?: ToggleIGACommitFailure[];
+}
+
+/* TIDECLOAK IMPLEMENTATION
+ * Body of the ON-toggle POST response. On a clean run only `jobId` is set; on a
+ * `completed_with_warnings` run the body also carries `warnings` +
+ * `warningsSummary` so the caller can tell the user HOW MANY CRs failed. */
+export interface ToggleIGAResponse {
+  jobId?: string;
+  state?: "running" | "completed" | "completed_with_warnings" | "failed";
+  warnings?: ToggleIGAWarnings;
+  warningsSummary?: string;
 }
 
 /* TIDECLOAK IMPLEMENTATION */
 export interface ToggleIGAStatus {
   jobId: string;
-  state: "running" | "completed" | "failed";
+  state: "running" | "completed" | "completed_with_warnings" | "failed";
   currentStageId?: string | null;
   stages: ToggleIGAStage[];
   error?: { stageId?: string; message?: string } | null;
