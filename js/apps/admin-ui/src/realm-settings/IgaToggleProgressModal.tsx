@@ -18,6 +18,10 @@ import type { ToggleIGAStatus } from "@keycloak/keycloak-admin-client/lib/resour
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAdminClient } from "../admin-client";
+import {
+  IgaToggleWarningDetail,
+  type IgaCommitFailure,
+} from "./igaToggleWarnings";
 
 const POLL_INTERVAL_MS = 1000;
 
@@ -26,8 +30,22 @@ type IgaToggleProgressModalProps = {
   jobId: string;
   realm: string;
   isOpen: boolean;
-  /** Called once the run reaches a terminal `completed` state. */
-  onComplete: () => void;
+  /**
+   * Structured per-CR failures from the toggle POST response body, when the run
+   * finished `completed_with_warnings`. The polled status only carries a flat
+   * `error.message`, so the caller (which sees the richer POST body) passes the
+   * structured `commitFailures` here so the modal can render a clean list
+   * instead of the raw string. Undefined while the run is still in flight or on
+   * a clean completion.
+   */
+  commitFailures?: IgaCommitFailure[];
+  /**
+   * Called once the run reaches a terminal success state. `withWarnings` is
+   * true when the terminal state is `completed_with_warnings` (some CRs left
+   * pending) so the parent can keep the modal open for the user to read the
+   * warning detail rather than auto-closing it.
+   */
+  onComplete: (withWarnings: boolean) => void;
   /**
    * Called when the user dismisses the modal. Available at any time, including
    * mid-run ("Run in background") — dismissing only stops the status poll; the
@@ -68,6 +86,7 @@ export const IgaToggleProgressModal = ({
   jobId,
   realm,
   isOpen,
+  commitFailures,
   onComplete,
   onClose,
 }: IgaToggleProgressModalProps) => {
@@ -79,7 +98,7 @@ export const IgaToggleProgressModal = ({
   const completedRef = useRef(false);
   // Keep the latest onComplete without restarting the poll when the parent
   // re-renders (it passes a fresh callback each render).
-  const onCompleteRef = useRef(onComplete);
+  const onCompleteRef = useRef<(withWarnings: boolean) => void>(onComplete);
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
@@ -109,7 +128,7 @@ export const IgaToggleProgressModal = ({
           !completedRef.current
         ) {
           completedRef.current = true;
-          onCompleteRef.current();
+          onCompleteRef.current(next.state === "completed_with_warnings");
         }
         // Stop polling on any terminal state.
         if (next.state !== "running") {
@@ -217,26 +236,36 @@ export const IgaToggleProgressModal = ({
         </StackItem>
         {isFailed && (
           <StackItem>
+            {/* Failure path: the polled status carries only a flat
+                `error.message`. Present it as a single concise headline + a
+                normalised one-line detail (the raw "WORD:ClassName:" prefix
+                noise stripped) instead of dumping the raw string. */}
             <TextContent>
               <Text
                 component={TextVariants.p}
                 className="pf-v5-u-danger-color-100"
               >
-                {status?.error?.message ?? t("igaToggleProgressFailed")}
+                {t("igaToggleProgressFailed")}
               </Text>
             </TextContent>
+            <IgaToggleWarningDetail
+              message={status?.error?.message}
+              tone="danger"
+            />
           </StackItem>
         )}
         {hasWarnings && (
           <StackItem>
-            <TextContent>
-              <Text
-                component={TextVariants.p}
-                className="pf-v5-u-warning-color-100"
-              >
-                {status?.error?.message ?? t("igaToggleProgressWarning")}
-              </Text>
-            </TextContent>
+            {/* Warning path: prefer the structured per-CR `commitFailures`
+                handed down from the caller (which sees the richer POST body);
+                fall back to the polled flat `error.message` when structured
+                data is not available. Either way render the tidy
+                headline + capped list + collapsible Details composition. */}
+            <IgaToggleWarningDetail
+              commitFailures={commitFailures}
+              message={status?.error?.message}
+              tone="warning"
+            />
           </StackItem>
         )}
       </Stack>

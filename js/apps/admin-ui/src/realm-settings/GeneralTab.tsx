@@ -42,6 +42,10 @@ import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import { UIRealmRepresentation } from "./RealmSettingsTabs";
 import { SIGNATURE_ALGORITHMS } from "../clients/add/SamlSignature";
 import { IgaToggleProgressModal } from "./IgaToggleProgressModal"; // TIDECLOAK IMPLEMENTATION
+import {
+  SIGN_DEFAULTS_SWEEP,
+  type IgaCommitFailure,
+} from "./igaToggleWarnings"; // TIDECLOAK IMPLEMENTATION
 
 type RealmSettingsGeneralTabProps = {
   realm: UIRealmRepresentation;
@@ -152,22 +156,11 @@ async function readDisableIgaPending(
 // signed (e.g. ORK down) and were left PENDING. `commitFailures` lists each
 // failure; the synthetic `actionType === "SIGN_DEFAULTS_SWEEP"` entry is the
 // closure/converge sign rather than a per-CR failure.
-type ToggleIgaCommitFailure = {
-  crId?: string;
-  actionType?: string;
-  outcome?: string;
-  message?: string;
-};
 type ToggleIgaWarnings = {
   state?: string;
   warningsSummary?: string;
-  warnings?: { commitFailures?: ToggleIgaCommitFailure[] };
+  warnings?: { commitFailures?: IgaCommitFailure[] };
 };
-
-// The synthetic converge/closure-sweep entry is reported as a commit failure but
-// is NOT a per-CR failure, so it is excluded from the "N change requests failed"
-// count.
-const SIGN_DEFAULTS_SWEEP = "SIGN_DEFAULTS_SWEEP";
 
 // TIDECLOAK IMPLEMENTATION
 // Normalise the ON-toggle POST result (raw `Response` or an already-parsed
@@ -191,7 +184,7 @@ async function readToggleIgaWarnings(
   }
 
   const warnings = body.warnings as
-    | { commitFailures?: ToggleIgaCommitFailure[] }
+    | { commitFailures?: IgaCommitFailure[] }
     | undefined;
   const hasWarningSignal =
     body.state === "completed_with_warnings" ||
@@ -253,6 +246,12 @@ function RealmSettingsGeneralTabForm({
   // OFF-toggle stays on the synchronous path it has always used.
   const [igaToggleInFlight, setIgaToggleInFlight] = useState(false);
   const [igaProgressJobId, setIgaProgressJobId] = useState<string | null>(null);
+  // Structured per-CR failures from the ON-toggle POST body, handed to the
+  // progress modal so it can render a clean list (the polled status it sees has
+  // only a flat error.message). Empty/cleared on a clean run.
+  const [igaCommitFailures, setIgaCommitFailures] = useState<
+    IgaCommitFailure[] | undefined
+  >(undefined);
 
   // TIDECLOAK IMPLEMENTATION
   const updateSwitchValue = async (value: boolean) => {
@@ -317,33 +316,31 @@ function RealmSettingsGeneralTabForm({
         const perCrFailures = failures.filter(
           (f) => f.actionType !== SIGN_DEFAULTS_SWEEP,
         );
-        const sweepFailure = failures.find(
-          (f) => f.actionType === SIGN_DEFAULTS_SWEEP,
-        );
         const count = perCrFailures.length;
 
+        // Hand the structured failures to the still-open modal so it can render
+        // the tidy headline + capped list + collapsible Details, and keep the
+        // modal open (do NOT clear the jobId) so the user can read that detail.
+        setIgaCommitFailures(failures);
+
+        // The toast is just a concise headline — the scannable detail lives in
+        // the modal, not in an auto-dismissing blob.
         if (count > 0) {
-          // Mix of per-CR failures (and possibly a sweep failure too): report
-          // the count of change requests left pending.
           addAlert(t("enableSwitchWarning", { count }), AlertVariant.warning);
         } else {
-          // Only the converge/closure sign failed (no per-CR failures): there
-          // is no meaningful count, so surface the failure message / a
-          // closure-signing-failed wording.
-          addAlert(
-            t("enableSwitchWarningClosure"),
-            AlertVariant.warning,
-            sweepFailure?.message || warnings.warningsSummary || undefined,
-          );
+          addAlert(t("enableSwitchWarningClosure"), AlertVariant.warning);
         }
+        setIgaToggleInFlight(false);
+        refresh();
       } else {
-        // Clean completion: keep the plain success toast. The modal will also
-        // observe state=completed via polling and mark all stages done.
+        // Clean completion: keep the plain success toast and close the modal.
+        // The modal also observes state=completed via polling.
         addAlert(t("enableSwitchSuccess", { switch: t("IGA") }));
+        setIgaCommitFailures(undefined);
+        setIgaToggleInFlight(false);
+        setIgaProgressJobId(null);
+        refresh();
       }
-      setIgaToggleInFlight(false);
-      setIgaProgressJobId(null);
-      refresh();
     } catch (error) {
       // POST failed: surface the error toast and leave the modal open so it
       // can render the failed stage (it stays mounted while jobId is set).
@@ -471,16 +468,23 @@ function RealmSettingsGeneralTabForm({
               jobId={igaProgressJobId}
               realm={realmName}
               isOpen={!!igaProgressJobId}
-              onComplete={() => {
-                // Terminal success observed by the poll; the awaited POST also
-                // handles the toast/refresh. Close once complete.
+              commitFailures={igaCommitFailures}
+              onComplete={(withWarnings) => {
+                // Terminal state observed by the poll; the awaited POST handles
+                // the toast/refresh. On a CLEAN completion, close the modal. On
+                // `completed_with_warnings`, keep it open so the user can read
+                // the headline + structured pending-CR list; they close it via
+                // the Close button.
                 setIgaToggleInFlight(false);
-                setIgaProgressJobId(null);
+                if (!withWarnings) {
+                  setIgaProgressJobId(null);
+                }
                 refresh();
               }}
               onClose={() => {
                 setIgaProgressJobId(null);
                 setIgaToggleInFlight(false);
+                setIgaCommitFailures(undefined);
               }}
             />
           )}
