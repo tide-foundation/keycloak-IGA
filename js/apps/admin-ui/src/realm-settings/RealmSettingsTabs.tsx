@@ -101,7 +101,28 @@ const RealmSettingsHeader = ({
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.realms.del({ realm: realmName });
+        // TIDECLOAK IMPLEMENTATION
+        // When IGA is enabled, deleting a realm is intercepted as a
+        // DELETE_REALM change request (HTTP 202 + envelope body) instead of
+        // being applied. The agent layer resolves `del` with that body. Detect
+        // it with the shared helper, surface the change-request notice, and
+        // stay on the realm (it still exists) rather than reporting a
+        // successful deletion and bouncing to the master realm.
+        const result = await adminClient.realms.del({ realm: realmName });
+        const pending = notifyIfPendingChangeRequest(
+          result,
+          t,
+          addAlert,
+          { realm: realmName, navigate },
+          {
+            titleKey: "deletePendingChangeRequestCreated",
+            useEnvelopeMessage: true,
+          },
+        );
+        if (pending) {
+          refresh();
+          return;
+        }
         addAlert(t("deletedSuccessRealmSetting"), AlertVariant.success);
         navigate(toDashboard({ realm: environment.masterRealm }));
         refresh();
