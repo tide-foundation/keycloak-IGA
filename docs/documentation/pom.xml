@@ -5,7 +5,7 @@
     <parent>
         <artifactId>keycloak-docs-parent</artifactId>
         <groupId>org.keycloak</groupId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -14,7 +14,7 @@
 
     <groupId>org.keycloak.documentation</groupId>
     <artifactId>documentation-parent</artifactId>
-    <version>26.5.5</version>
+    <version>26.7.0</version>
     <packaging>pom</packaging>
 
     <properties>
