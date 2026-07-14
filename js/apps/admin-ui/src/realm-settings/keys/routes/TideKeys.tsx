@@ -21,9 +21,9 @@ const TideKeyForm = lazy(() => import("../key-providers/KeyProviderForm"));
 export const TideKeyRoute: AppRouteObject = {
   path: "/:realm/realm-settings/keys/providers/:id/:providerType/settings",
   element: <TideKeyForm />,
-  breadcrumb: (t) => t("tideKeyForm"),
   handle: {
     access: "view-realm",
+    breadcrumb: (t) => t("tideKeyForm"),
   },
 };
 

@@ -12,7 +12,6 @@ import {
   useAlerts,
   useEnvironment,
   useFetch,
-  useAlerts,
 } from "@keycloak/keycloak-ui-shared";
 import {
   AlertVariant,
@@ -226,8 +225,6 @@ function RealmSettingsGeneralTabForm({
   const {
     environment: { serverBaseUrl },
   } = useEnvironment();
-  const { adminClient } = useAdminClient();
-
   const { t } = useTranslation();
   const { realm: realmName } = useRealm();
   const { adminClient } = useAdminClient();
@@ -281,8 +278,6 @@ function RealmSettingsGeneralTabForm({
         );
       },
     });
-
-  const { addAlert, addError } = useAlerts();
 
   // TIDECLOAK IMPLEMENTATION - IGA toggle progress state
   // While a toggle is in flight the switch is disabled. The ON-toggle opens a

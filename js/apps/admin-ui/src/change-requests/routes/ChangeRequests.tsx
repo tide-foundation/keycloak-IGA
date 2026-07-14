@@ -12,9 +12,9 @@ const ChangeRequestsSection = lazy(() => import("../ChangeRequestsSection"));
 export const changeRequestsRoute: AppRouteObject = {
   path: "/:realm/change-requests",
   element: <ChangeRequestsSection />,
-  breadcrumb: (t) => t("Change Requests"),
   handle: {
     access: "query-users",
+    breadcrumb: (t) => t("Change Requests"),
   },
 };
 
