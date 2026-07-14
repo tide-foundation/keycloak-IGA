@@ -18,8 +18,11 @@ import { useGroupResource } from "../context/group-resource/GroupResourceContext
 import { useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom"; // TIDECLOAK IMPLEMENTATION
 import { useAdminClient } from "../admin-client";
+import { useRealm } from "../context/realm-context/RealmContext"; // TIDECLOAK IMPLEMENTATION
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 
 type GroupsModalProps = {
   id?: string;
@@ -51,6 +54,8 @@ export const GroupsModal = ({
   const { t } = useTranslation();
   const groups = useGroupResource();
   const { addAlert, addError } = useAlerts();
+  const navigate = useNavigate(); // TIDECLOAK IMPLEMENTATION
+  const { realm } = useRealm(); // TIDECLOAK IMPLEMENTATION
   const isFeatureEnabled = useIsFeatureEnabled();
   const [duplicateGroupDetails, setDuplicateGroupDetails] =
     useState<GroupRepresentation | null>(null);
@@ -125,6 +130,18 @@ export const GroupsModal = ({
       const createdGroup = parentId
         ? await groups.createChildGroup({ id: parentId }, newGroup)
         : await groups.create(newGroup);
+
+      // TIDECLOAK IMPLEMENTATION: if IGA intercepts the create, the duplicate
+      // chain (members, roles, sub-groups) cannot proceed. Show the pending
+      // toast and bail out — the duplicate will complete after approval.
+      if (
+        notifyIfPendingChangeRequest(createdGroup, t, addAlert, {
+          realm,
+          navigate,
+        })
+      ) {
+        return createdGroup;
+      }
 
       const members = await groups.listMembers({
         id: sourceGroup.id!,
@@ -240,7 +257,17 @@ export const GroupsModal = ({
       if (duplicateId && duplicateGroupDetails) {
         await duplicateGroup(duplicateGroupDetails, group.name);
       } else if (!id) {
-        await groups.create(group);
+        const createResult = await groups.create(group);
+        // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
+        if (
+          notifyIfPendingChangeRequest(createResult, t, addAlert, {
+            realm,
+            navigate,
+          })
+        ) {
+          handleModalToggle();
+          return;
+        }
       } else if (rename) {
         await groups.update(
           { id },

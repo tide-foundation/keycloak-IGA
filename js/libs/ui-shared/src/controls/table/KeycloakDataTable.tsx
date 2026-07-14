@@ -24,12 +24,15 @@ import { cloneDeep, get, intersectionBy } from "lodash-es";
 import {
   ComponentClass,
   ReactNode,
+  forwardRef,
   isValidElement,
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
+  type ForwardedRef,
   type JSX,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -133,7 +136,8 @@ function DataTable<T>({
       intersectionBy(
         selectedRows,
         rows.map((row) => row.data),
-        "id",
+        // # TIDE IMPLEMENTATION # draft records have no `id` yet, key off `draftRecordId`
+        (item) => get(item, "id") ?? get(item, "draftRecordId"),
       ),
     [selectedRows, rows],
   );
@@ -162,14 +166,18 @@ function DataTable<T>({
       updateSelectedRows(selectedRow);
     } else {
       if (rowIndex === -1) {
-        const rowsSelectedOnPageIds = rowsSelectedOnPage.map((v) =>
-          get(v, "id"),
+        // # TIDE IMPLEMENTATION # fall back to draftRecordId for unsaved draft rows
+        const rowsSelectedOnPageIds = rowsSelectedOnPage.map(
+          (v) => get(v, "id") ?? get(v, "draftRecordId"),
         );
         updateSelectedRows(
           isSelected
             ? [...selectedRows, ...rows.map((row) => row.data)]
             : selectedRows.filter(
-                (v) => !rowsSelectedOnPageIds.includes(get(v, "id")),
+                (v) =>
+                  !rowsSelectedOnPageIds.includes(
+                    get(v, "id") ?? get(v, "draftRecordId"),
+                  ),
               ),
         );
       } else {
@@ -178,7 +186,11 @@ function DataTable<T>({
         } else {
           updateSelectedRows(
             selectedRows.filter(
-              (v) => get(v, "id") !== (rows[rowIndex] as IRow).data.id,
+              // # TIDE IMPLEMENTATION #
+              (v) =>
+                (get(v, "id") ?? get(v, "draftRecordId")) !==
+                (get((rows[rowIndex] as IRow).data, "id") ??
+                  get((rows[rowIndex] as IRow).data, "draftRecordId")),
             ),
           );
         }
@@ -223,31 +235,64 @@ function DataTable<T>({
       </Thead>
       {!onCollapse ? (
         <Tbody>
-          {(rows as IRow[]).map((row, index) => (
-            <Tr key={index} isExpanded={expandedRows[index]}>
-              {canSelect && (
-                <Td
-                  select={{
-                    rowIndex: index,
-                    onSelect: (_, isSelected, rowIndex) => {
-                      updateState(rowIndex, isSelected);
-                    },
-                    isSelected: !!selectedRows.find(
-                      (v) => get(v, "id") === row.data.id,
-                    ),
-                    variant: isRadio ? "radio" : "checkbox",
-                    isDisabled: row.disableSelection,
-                  }}
+          {(rows as IRow[]).map((row, index) => {
+            // # TIDE IMPLEMENTATION #
+            // Derive a stable record id (draft rows have no `id`) and the row's
+            // selected flag, so the whole row can act as a selection target.
+            const recordId =
+              get(row.data, "id") ?? get(row.data, "draftRecordId");
+            const rowSelected = selectedRows.some(
+              (v) => (get(v, "id") ?? get(v, "draftRecordId")) === recordId,
+            );
+            const selectable = canSelect && !row.disableSelection;
+            // # TIDE IMPLEMENTATION STOP #
+
+            return (
+              <Tr
+                key={index}
+                isExpanded={expandedRows[index]}
+                // # TIDE IMPLEMENTATION # whole-row click / keyboard selection
+                onClick={
+                  selectable
+                    ? () => updateState(index, !rowSelected)
+                    : undefined
+                }
+                style={selectable ? { cursor: "pointer" } : undefined}
+                tabIndex={selectable ? 0 : undefined}
+                onKeyDown={
+                  selectable
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          updateState(index, !rowSelected);
+                        }
+                      }
+                    : undefined
+                }
+                // # TIDE IMPLEMENTATION STOP #
+              >
+                {canSelect && (
+                  <Td
+                    select={{
+                      rowIndex: index,
+                      onSelect: (_, isSelected, rowIndex) => {
+                        updateState(rowIndex, isSelected);
+                      },
+                      isSelected: rowSelected, // # TIDE IMPLEMENTATION #
+                      variant: isRadio ? "radio" : "checkbox",
+                      isDisabled: row.disableSelection,
+                    }}
+                  />
+                )}
+                <CellRenderer
+                  row={row}
+                  index={index}
+                  actions={actions}
+                  actionResolver={actionResolver}
                 />
-              )}
-              <CellRenderer
-                row={row}
-                index={index}
-                actions={actions}
-                actionResolver={actionResolver}
-              />
-            </Tr>
-          ))}
+              </Tr>
+            );
+          })}
         </Tbody>
       ) : (
         (rows as IRow[]).map((row, index) => (
@@ -324,6 +369,15 @@ export type SignaledLoader<T> = {
   loader: LoaderFunction<T>;
 };
 
+// # TIDE IMPLEMENTATION #
+// Imperative handle so a parent can trigger an in-place data re-fetch WITHOUT
+// remounting the table (a remount resets the internal selection state). Used by
+// screens that poll for fresh data while preserving the user's row selection.
+export type KeycloakDataTableHandle = {
+  refresh: () => void;
+};
+// # TIDE IMPLEMENTATION STOP #
+
 export type DataListProps<T> = Omit<
   TableProps,
   "rows" | "cells" | "onSelect"
@@ -372,28 +426,31 @@ export type DataListProps<T> = Omit<
  * @param {ReactNode} props.toolbarItem - Toolbar items that appear on the top of the table {@link toolbarItem}
  * @param {ReactNode} props.emptyState - ReactNode show when the list is empty could be any component but best to use {@link ListEmptyState}
  */
-export function KeycloakDataTable<T>({
-  ariaLabelKey,
-  searchPlaceholderKey,
-  isPaginated = false,
-  onSelect,
-  canSelectAll = false,
-  isNotCompact,
-  isRadio,
-  detailColumns,
-  isRowDisabled,
-  loader,
-  columns,
-  actions,
-  actionResolver,
-  searchTypeComponent,
-  toolbarItem,
-  subToolbar,
-  emptyState,
-  icon,
-  isSearching = false,
-  ...props
-}: DataListProps<T>) {
+function KeycloakDataTableInner<T>(
+  {
+    ariaLabelKey,
+    searchPlaceholderKey,
+    isPaginated = false,
+    onSelect,
+    canSelectAll = false,
+    isNotCompact,
+    isRadio,
+    detailColumns,
+    isRowDisabled,
+    loader,
+    columns,
+    actions,
+    actionResolver,
+    searchTypeComponent,
+    toolbarItem,
+    subToolbar,
+    emptyState,
+    icon,
+    isSearching = false,
+    ...props
+  }: DataListProps<T>,
+  ref: ForwardedRef<KeycloakDataTableHandle>, // # TIDE IMPLEMENTATION #
+) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<T[]>([]);
   const [rows, setRows] = useState<(Row<T> | SubRow<T>)[]>();
@@ -413,8 +470,21 @@ export function KeycloakDataTable<T>({
 
   const [key, setKey] = useState(0);
   const prevKey = useRef<number>();
-  const refresh = () => setKey(key + 1);
+  // # TIDE IMPLEMENTATION #
+  // Functional update: `refresh` is captured once by useImperativeHandle below
+  // (empty dep array), so `setKey(key + 1)` would close over a stale `key` and
+  // never advance past 1. The updater form is required for the ref to work.
+  const refresh = () => setKey((k) => k + 1);
+  // # TIDE IMPLEMENTATION STOP #
   const id = useId();
+
+  // # TIDE IMPLEMENTATION #
+  // Expose an in-place refresh to parents via ref. This re-runs the loader
+  // (bumps the internal fetch key) but does NOT remount the component, so the
+  // internal `selected` state is preserved. convertToColumns re-derives each
+  // row's selected flag by id, so the user's selection survives the refetch.
+  useImperativeHandle(ref, () => ({ refresh }), []);
+  // # TIDE IMPLEMENTATION STOP #
 
   const renderCell = (columns: (Field<T> | DetailField<T>)[], value: T) => {
     return columns.map((col) => {
@@ -443,7 +513,12 @@ export function KeycloakDataTable<T>({
             disableSelection: disabledRow,
             disableActions: disabledRow,
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- lodash get performs dynamic property access at runtime
-            selected: !!selected.find((v) => get(v, "id") === get(value, "id")),
+            // # TIDE IMPLEMENTATION # draft rows key off draftRecordId
+            selected: !!selected.find(
+              (v) =>
+                (get(v, "id") ?? get(v, "draftRecordId")) ===
+                (get(value, "id") ?? get(value, "draftRecordId")),
+            ),
             isOpen: isDetailColumnsEnabled(value) ? false : undefined,
             cells: renderCell(columns, value),
           },
@@ -651,3 +726,13 @@ export function KeycloakDataTable<T>({
     </>
   );
 }
+
+// # TIDE IMPLEMENTATION #
+// forwardRef wrapper that preserves the generic <T> signature. The cast keeps
+// callers that don't pass a ref fully back-compatible (ref is optional).
+export const KeycloakDataTable = forwardRef(KeycloakDataTableInner) as <T>(
+  props: Omit<DataListProps<T>, "ref"> & {
+    ref?: ForwardedRef<KeycloakDataTableHandle>;
+  },
+) => ReturnType<typeof KeycloakDataTableInner>;
+// # TIDE IMPLEMENTATION STOP #

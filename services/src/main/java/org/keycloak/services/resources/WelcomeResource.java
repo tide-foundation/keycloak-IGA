@@ -91,12 +91,22 @@ public class WelcomeResource {
     @GET
     @Produces(MediaType.TEXT_HTML_UTF_8)
     public Response getWelcomePage() throws URISyntaxException {
-        String requestUri = session.getContext().getUri().getRequestUri().toString();
-        if (!requestUri.endsWith("/")) {
-            return Response.seeOther(new URI(requestUri + "/")).build();
-        } else {
-            return createWelcomePage(null, null);
-        }
+        // Tide: the server root redirects to the tide-console bootstrap (create-a-realm wizard)
+        // instead of rendering the stock welcome page / redirecting to the Keycloak admin console.
+        URI tideConsoleUrl = session.getContext().getUri(UrlType.FRONTEND).getBaseUriBuilder()
+                .path("/realms/master/tide-console/").build();
+        return Response.status(302).location(tideConsoleUrl).build();
+    }
+
+    /**
+     * Tide: friendly entry point for the Keycloak admin console.
+     * Root ("/") now serves the Tide bootstrap, so the stock admin console is reachable via "/kc".
+     */
+    @GET
+    @Path("/kc")
+    public Response getKeycloakAdmin() {
+        URI adminUrl = session.getContext().getUri(UrlType.ADMIN).getBaseUriBuilder().path("/admin/").build();
+        return Response.status(302).location(adminUrl).build();
     }
 
     @POST

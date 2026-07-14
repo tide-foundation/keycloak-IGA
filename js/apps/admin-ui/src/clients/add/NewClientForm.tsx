@@ -10,8 +10,10 @@ import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAdminClient } from "../../admin-client";
+import { notifyIfPendingChangeRequest } from "../../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { useAlerts } from "@keycloak/keycloak-ui-shared";
 import { FormAccess } from "../../components/form/FormAccess";
+import { IgaPageBanner } from "../../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../../components/view-header/ViewHeader";
 import { useRealm } from "../../context/realm-context/RealmContext";
 import { convertFormValuesToObject } from "../../util";
@@ -22,6 +24,7 @@ import { CapabilityConfig } from "./CapabilityConfig";
 import { GeneralSettings } from "./GeneralSettings";
 import { LoginSettings } from "./LoginSettings";
 import { useState } from "react";
+import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil"; // TIDECLOAK IMPLEMENTATION
 
 const NewClientFooter = (newClientForm: any) => {
   const { t } = useTranslation();
@@ -88,7 +91,36 @@ export default function NewClientForm() {
         ...client,
         clientId: client.clientId?.trim(),
       });
+
+      // TIDECLOAK IMPLEMENTATION: IGA may intercept the create and return a
+      // pending change request instead of a real client id.
+      if (
+        notifyIfPendingChangeRequest(newClient, t, addAlert, {
+          realm,
+          navigate,
+        })
+      ) {
+        navigate(toClients({ realm }));
+        return;
+      }
+
       addAlert(t("createClientSuccess"), AlertVariant.success);
+
+      // TIDECLOAK IMPLEMENTATION
+      const signSettings = async () => {
+        const tideComponent = await findTideComponent(adminClient, realm);
+
+        if (tideComponent) {
+          try {
+            await adminClient.tideAdmin.signIdpSettings();
+          } catch (error) {
+            addError("SignSettingsError", error);
+          }
+        }
+      };
+
+      void signSettings();
+
       navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
     } catch (error) {
       addError("createClientError", error);
@@ -101,6 +133,7 @@ export default function NewClientForm() {
   return (
     <>
       <ViewHeader titleKey="createClient" subKey="clientsExplain" />
+      <IgaPageBanner entityType="client" />
       <PageSection variant="light">
         <FormProvider {...form}>
           <Wizard

@@ -65,8 +65,24 @@ export const DedicatedScope = ({ client, onChange }: DedicatedScopeProps) => {
     const newClient = { ...client, fullScopeAllowed: !client.fullScopeAllowed };
     try {
       await adminClient.clients.update({ id: client.id! }, newClient);
-      addAlert(t("clientScopeSuccess"), AlertVariant.success);
-      onChange?.(newClient);
+      // TIDECLOAK IMPLEMENTATION START
+      // Under IGA the update may be intercepted and turned into a pending change
+      // request, so re-read the client and compare against what we asked for.
+      // NOTE: 26.7.0 made DedicatedScope a controlled component (client + onChange);
+      // the fork's local `setClient` state is gone, so propagate via onChange.
+      const clientModel = await adminClient.clients.findOne({ id: client.id! });
+      if (newClient.fullScopeAllowed === clientModel!.fullScopeAllowed) {
+        addAlert(t("clientScopeSuccess"), AlertVariant.success);
+      } else {
+        // FIXME(tide): untranslated literal used as an i18n key (pre-existing in
+        // the fork). i18next falls back to rendering the key text verbatim.
+        addAlert(
+          t("Change request created, pending review."),
+          AlertVariant.success,
+        );
+      }
+      onChange?.(clientModel!);
+      // TIDECLOAK IMPLEMENTATION END
     } catch (error) {
       addError("clientScopeError", error);
     }

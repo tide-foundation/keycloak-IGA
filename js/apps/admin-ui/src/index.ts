@@ -333,3 +333,9 @@ export {
 export { AppContexts } from "./App";
 export * as PermissionsConfigurationSection from "./permissions-configuration/PermissionsConfigurationSection";
 export { routes } from "./routes";
+
+/** TIDECLOAK IMPLEMENTATION */
+export { default as ChangeRequestsSection } from "./change-requests/ChangeRequestsSection";
+export { TideLicenseHistory } from "./components/tide-licensing-tab/TideLicenseHistory";
+export { TideLicensingTab } from "./components/tide-licensing-tab/TideLicensingTab";
+export { TideScheduledTasks } from "./components/tide-licensing-tab/TideScheduledTasks";

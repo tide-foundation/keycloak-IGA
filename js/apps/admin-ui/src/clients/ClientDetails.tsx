@@ -36,6 +36,7 @@ import {
   ViewHeader,
   ViewHeaderBadge,
 } from "../components/view-header/ViewHeader";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
 import {
@@ -47,6 +48,9 @@ import {
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import { useParams } from "../utils/useParams";
 import useToggle from "../utils/useToggle";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
+import { isPendingChangeRequest } from "@keycloak/keycloak-admin-client/lib/utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
+import { useIsIgaEnabled } from "../utils/useIsIgaEnabled"; // TIDECLOAK IMPLEMENTATION
 import { AdvancedTab } from "./AdvancedTab";
 import { ClientSessions } from "./ClientSessions";
 import { ClientSettings } from "./ClientSettings";
@@ -78,6 +82,7 @@ import { getProtocolName, isRealmClient } from "./utils";
 import { UserEvents } from "../events/UserEvents";
 import { useIsAdminPermissionsClient } from "../utils/useIsAdminPermissionsClient";
 import { AdminEvents } from "../events/AdminEvents";
+import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil"; // TIDECLOAK IMPLEMENTATION
 
 type ClientDetailHeaderProps = {
   onChange: (value: boolean) => void;
@@ -197,6 +202,7 @@ export default function ClientDetails() {
   const { t } = useTranslation();
   const { addAlert, addError } = useAlerts();
   const { realm, realmRepresentation } = useRealm();
+  const igaEnabled = useIsIgaEnabled(); // TIDECLOAK IMPLEMENTATION
   const { hasAccess } = useAccess();
   const isFeatureEnabled = useIsFeatureEnabled();
 
@@ -341,7 +347,26 @@ export default function ClientDetails() {
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.clients.del({ id: clientId });
+        // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+        // change-request envelope (the agent unwraps it; `del` is typed void
+        // but resolves with the parsed body). Detect it with the established
+        // helper and do NOT navigate away as if deleted — refresh in place.
+        const result = await adminClient.clients.del({ id: clientId });
+        if (
+          notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          )
+        ) {
+          refresh();
+          return;
+        }
         addAlert(t("clientDeletedSuccess"), AlertVariant.success);
         navigate(toClients({ realm }));
       } catch (error) {
@@ -419,9 +444,41 @@ export default function ClientDetails() {
 
       newClient.clientId = newClient.clientId?.trim();
 
-      await adminClient.clients.update({ id: clientId }, newClient);
+      const updateResult = await adminClient.clients.update(
+        { id: clientId },
+        newClient,
+      );
       setupForm(newClient);
       setClient(newClient);
+
+      // TIDECLOAK IMPLEMENTATION
+      const signSettings = async () => {
+        const tideComponent = await findTideComponent(adminClient, realm);
+
+        if (tideComponent) {
+          try {
+            await adminClient.tideAdmin.signIdpSettings();
+          } catch (error) {
+            addError("SignSettingsError", error);
+          }
+        }
+      };
+
+      // TIDECLOAK IMPLEMENTATION
+      // On an IGA realm a client edit is captured (parked) rather than applied
+      // to live state. Unlike delete/create, a client UPDATE does NOT surface
+      // an HTTP 202 envelope: the adapter files the per-field CRs
+      // (UPDATE_CLIENT_*, SET_CLIENT_ATTRIBUTE, ...) via coalesceOrCreate and
+      // the PUT returns a normal success, so isPendingChangeRequest(updateResult)
+      // is false. Re-signing here would sign over stale live settings and break
+      // login ("Signed Settings were not able to be verified"). Gate on IGA
+      // being active for the realm (the definitive "parked" signal for updates);
+      // the backend re-signs at commit time. Non-IGA realms apply live and still
+      // sign.
+      const parked = igaEnabled || isPendingChangeRequest(updateResult);
+      if (!parked) {
+        void signSettings();
+      }
       addAlert(t(messageKey), AlertVariant.success);
     } catch (error) {
       addError("clientSaveError", error);
@@ -474,6 +531,7 @@ export default function ClientDetails() {
           />
         )}
       />
+      <IgaPageBanner entityType="client" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <FormProvider {...form}>
           <RoutableTabs

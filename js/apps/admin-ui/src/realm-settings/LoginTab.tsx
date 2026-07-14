@@ -10,6 +10,12 @@ import { FormAccess } from "../components/form/FormAccess";
 import { SettingsShortcut } from "../components/settings-shortcut/SettingsShortcut";
 import { useRealm } from "../context/realm-context/RealmContext";
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
+import { findTideComponent } from "../identity-providers/utils/SignSettingsUtil";
+import { isPendingChangeRequest } from "@keycloak/keycloak-admin-client/lib/utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
+import { useIsIgaEnabled } from "../utils/useIsIgaEnabled"; // TIDECLOAK IMPLEMENTATION
+/** TIDECLOAK IMPLEMENTATION START */
+import { useState, useEffect } from "react";
+/** TIDECLOAK IMPLEMENTATION END */
 
 type RealmSettingsLoginTabProps = {
   realm: RealmRepresentation;
@@ -29,13 +35,39 @@ export const RealmSettingsLoginTab = ({
   const { realm: realmName } = useRealm();
   const isFeatureEnabled = useIsFeatureEnabled();
   const passkeysVisible = isFeatureEnabled(Feature.Passkeys);
+
+  const igaEnabled = useIsIgaEnabled(); // TIDECLOAK IMPLEMENTATION
+
+  /** TIDECLOAK IMPLEMENTATION START */
+  const [isTideBackupEnabled, setIsTideBackupEnabled] = useState(false);
+  const [isLoadingTideConfig, setIsLoadingTideConfig] = useState(true);
+
+  useEffect(() => {
+    const checkTideBackupConfig = async () => {
+      try {
+        const tideIdp = await adminClient.identityProviders.findOne({
+          alias: "tide",
+        });
+        const backupEnabled = tideIdp?.config?.backupOn === "true";
+        setIsTideBackupEnabled(backupEnabled);
+      } catch {
+        setIsTideBackupEnabled(false);
+      } finally {
+        setIsLoadingTideConfig(false);
+      }
+    };
+
+    void checkTideBackupConfig();
+  }, [adminClient, realmName]);
+  /** TIDECLOAK IMPLEMENTATION END */
+
   const updateSwitchValue = async (switches: SwitchType | SwitchType[]) => {
     const name = Array.isArray(switches)
       ? Object.keys(switches[0])[0]
       : Object.keys(switches)[0];
 
     try {
-      await adminClient.realms.update(
+      const updateResult = await adminClient.realms.update(
         {
           realm: realmName,
         },
@@ -43,6 +75,28 @@ export const RealmSettingsLoginTab = ({
           ? switches.reduce((realm, s) => Object.assign(realm, s), realm)
           : Object.assign(realm, switches),
       );
+
+      if (name === "registrationAllowed") {
+        // TIDECLOAK IMPLEMENTATION
+        const hasTideIdp = await adminClient.identityProviders.findOne({
+          alias: "tide",
+        });
+        const isTideKeyEnabled =
+          (await findTideComponent(adminClient, realmName)) === undefined
+            ? false
+            : true;
+        // TIDECLOAK IMPLEMENTATION
+        // On an IGA realm the toggle is parked (captured as a change request)
+        // instead of applied to live state. Skip re-signing over the stale
+        // live settings when parked, otherwise the signed settings fail
+        // verification at login. The realm update surfaces an HTTP 202 envelope
+        // here, but gate on IGA being active too so this stays correct even if
+        // a write is captured without a 202. The backend re-signs at commit.
+        const parked = igaEnabled || isPendingChangeRequest(updateResult);
+        if (isTideKeyEnabled && hasTideIdp && !parked) {
+          await adminClient.tideAdmin.signIdpSettings();
+        }
+      }
       addAlert(t("enableSwitchSuccess", { switch: t(name) }));
       refresh();
     } catch (error) {
@@ -233,6 +287,7 @@ export const RealmSettingsLoginTab = ({
                   { duplicateEmailsAllowed: false },
                 ]);
               }}
+              isDisabled={isLoadingTideConfig || isTideBackupEnabled} // TIDECLOAK IMPLEMENTATION
               aria-label={t("loginWithEmailAllowed")}
             />
           </FormGroup>
@@ -259,7 +314,10 @@ export const RealmSettingsLoginTab = ({
                 });
               }}
               isDisabled={
-                realm.loginWithEmailAllowed || realm.registrationEmailAsUsername
+                realm.loginWithEmailAllowed ||
+                realm.registrationEmailAsUsername ||
+                isLoadingTideConfig ||
+                isTideBackupEnabled // TIDECLOAK IMPLEMENTATION
               }
               aria-label={t("duplicateEmailsAllowed")}
             />
@@ -286,6 +344,7 @@ export const RealmSettingsLoginTab = ({
               onChange={async (_event, value) => {
                 await updateSwitchValue({ verifyEmail: value });
               }}
+              isDisabled={isLoadingTideConfig || isTideBackupEnabled} // TIDECLOAK IMPLEMENTATION
               aria-label={t("verifyEmail")}
             />
           </FormGroup>

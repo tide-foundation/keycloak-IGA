@@ -23,6 +23,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -36,6 +37,7 @@ import {
 } from "../util";
 import { getAuthorizationHeaders } from "../utils/getAuthorizationHeaders";
 import { joinPath } from "../utils/joinPath";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import useLocale from "../utils/useLocale";
 import { RealmSettingsEmailTab } from "./EmailTab";
@@ -103,7 +105,28 @@ const RealmSettingsHeader = ({
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.realms.del({ realm: realmName });
+        // TIDECLOAK IMPLEMENTATION
+        // When IGA is enabled, deleting a realm is intercepted as a
+        // DELETE_REALM change request (HTTP 202 + envelope body) instead of
+        // being applied. The agent layer resolves `del` with that body. Detect
+        // it with the shared helper, surface the change-request notice, and
+        // stay on the realm (it still exists) rather than reporting a
+        // successful deletion and bouncing to the master realm.
+        const result = await adminClient.realms.del({ realm: realmName });
+        const pending = notifyIfPendingChangeRequest(
+          result,
+          t,
+          addAlert,
+          { realm: realmName, navigate },
+          {
+            titleKey: "deletePendingChangeRequestCreated",
+            useEnvelopeMessage: true,
+          },
+        );
+        if (pending) {
+          refresh();
+          return;
+        }
         addAlert(t("deletedSuccessRealmSetting"), AlertVariant.success);
         navigate(toDashboard({ realm: environment.masterRealm }));
         refresh();
@@ -273,7 +296,24 @@ export const RealmSettingsTabs = () => {
         },
       );
       if (!response.ok) throw new Error(response.statusText);
-      addAlert(t("realmSaveSuccess"), AlertVariant.success);
+      // TIDECLOAK IMPLEMENTATION
+      // When IGA is enabled, saving a realm attribute is intercepted as a
+      // SET_REALM_ATTRIBUTE change request (HTTP 202 + envelope body) instead
+      // of being applied. 202 is `response.ok`, so surface the change-request
+      // toast rather than the normal success message.
+      let pendingBody: unknown;
+      try {
+        pendingBody = await response.clone().json();
+      } catch {
+        pendingBody = undefined;
+      }
+      const pending = notifyIfPendingChangeRequest(pendingBody, t, addAlert, {
+        realm: realmName,
+        navigate,
+      });
+      if (!pending) {
+        addAlert(t("realmSaveSuccess"), AlertVariant.success);
+      }
     } catch (error) {
       addError("realmSaveError", error);
     }
@@ -334,6 +374,7 @@ export const RealmSettingsTabs = () => {
           />
         )}
       />
+      <IgaPageBanner entityType="realm" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <RoutableTabs
           isBox
@@ -349,7 +390,12 @@ export const RealmSettingsTabs = () => {
             data-testid="rs-general-tab"
             {...generalTab}
           >
-            <RealmSettingsGeneralTab realm={realm!} save={save} />
+            {/* TIDECLOAK IMPLEMENTATION */}
+            <RealmSettingsGeneralTab
+              realm={realm!}
+              save={save}
+              refresh={refresh}
+            />
           </Tab>
           <Tab
             title={<TabTitleText>{t("login")}</TabTitleText>}

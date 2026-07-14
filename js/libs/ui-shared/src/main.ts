@@ -70,6 +70,8 @@ export {
   getErrorMessage,
   getNetworkErrorMessage,
   getNetworkErrorDescription,
+  getTideErrorInfo,
+  type TideErrorInfo,
 } from "./utils/errors";
 export { isDefined } from "./utils/isDefined";
 export { useRequiredContext } from "./utils/useRequiredContext";
@@ -86,6 +88,7 @@ export type {
   DetailField,
   LoaderFunction,
   SignaledLoader,
+  KeycloakDataTableHandle,
 } from "./controls/table/KeycloakDataTable";
 export { PaginatingTableToolbar } from "./controls/table/PaginatingTableToolbar";
 export { TableToolbar } from "./controls/table/TableToolbar";

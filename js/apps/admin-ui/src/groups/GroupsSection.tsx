@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import { GroupBreadCrumbs } from "../components/bread-crumb/GroupBreadCrumbs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { PermissionsTab } from "../components/permission-tab/PermissionTab";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
@@ -137,6 +138,7 @@ export default function GroupsSection({ orgId }: { orgId?: string } = {}) {
           handleModalToggle={() => setRename(undefined)}
         />
       )}
+      <IgaPageBanner entityType="group" /> {/* TIDECLOAK IMPLEMENTATION */}
       <PageSection
         variant={PageSectionVariants.light}
         className="pf-v5-u-p-0 keycloak-admin--groups__section"
