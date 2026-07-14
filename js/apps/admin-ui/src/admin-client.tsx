@@ -5,7 +5,7 @@ import {
   useEnvironment,
   useRequiredContext,
 } from "@keycloak/keycloak-ui-shared";
-import type Keycloak from "keycloak-js";
+import type { TideCloak } from "@tidecloak/js"; // TIDECLOAK IMPLEMENTATION
 import { PropsWithChildren, useEffect, useState } from "react";
 import type { Environment } from "./environment-types";
 

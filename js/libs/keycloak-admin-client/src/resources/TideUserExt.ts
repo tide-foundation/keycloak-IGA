@@ -125,11 +125,6 @@ export class TideUsersExt extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
-  public getRequestedChangesForRagnarokSettings = this.makeRequest<void, RequestedChanges[]>({
-    method: "GET",
-    path: "/ragnarok/change-set/offboarding/requests",
-  });
-  /* # TIDECLOAK IMPLEMENTATION */
     public getRequestedChangesForRealmLicensing = this.makeRequest<void, RequestedChanges[]>({
     method: "GET",
     path: "/tideAdminResources/change-set/licensing/requests",

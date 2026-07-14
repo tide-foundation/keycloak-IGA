@@ -22,4 +22,5 @@ export default {
   community: `${keycloakHomepageURL}/community`,
   blog: `${keycloakHomepageURL}/blog`,
   workflowsUrl: `${adminGuide}#_managing_workflows`,
+  changeRequests: "", // TIDECLOAK IMPLEMENTATION
 };

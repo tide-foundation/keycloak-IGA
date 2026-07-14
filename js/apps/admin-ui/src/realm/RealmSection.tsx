@@ -30,6 +30,7 @@ import { useRecentRealms } from "../context/RecentRealms";
 import { useWhoAmI } from "../context/whoami/WhoAmI";
 import type { Environment } from "../environment-types";
 import { resolveDisplayName } from "../util";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import NewRealmForm from "./add/NewRealmForm";
 import { toRealm } from "./RealmRoutes";
 import { toDashboard } from "../dashboard/routes/Dashboard";
@@ -167,13 +168,41 @@ export default function RealmSection() {
           ({ name }) => name !== environment.masterRealm,
         );
         if (filtered.length === 0) return;
-        await Promise.all(
-          filtered.map(({ name: realmName }) =>
-            adminClient.realms.del({ realm: realmName }),
-          ),
-        );
-        addAlert(t("deletedSuccessRealmSetting"));
-        if (selected.some(({ name }) => name === realm)) {
+        // TIDECLOAK IMPLEMENTATION
+        // A governed realm delete is intercepted as a DELETE_REALM change
+        // request (HTTP 202 + envelope body); the agent layer resolves `del`
+        // with that body. Detect it per realm so a pending deletion is
+        // reported as a change request (not a completed delete) and never
+        // triggers the bounce-to-master navigation for the current realm.
+        // NOTE: 26.7.0 sources the master realm name from the environment
+        // rather than hardcoding "master" — use environment.masterRealm.
+        let deletedCount = 0;
+        let currentRealmPending = false;
+        for (const { name: targetRealm } of filtered) {
+          const result = await adminClient.realms.del({ realm: targetRealm });
+          const pending = notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm: targetRealm, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          );
+          if (pending) {
+            if (targetRealm === realm) currentRealmPending = true;
+          } else {
+            deletedCount++;
+          }
+        }
+        if (deletedCount > 0) {
+          addAlert(t("deletedSuccessRealmSetting"));
+        }
+        if (
+          !currentRealmPending &&
+          selected.some(({ name }) => name === realm)
+        ) {
           navigate(toRealm({ realm: environment.masterRealm }));
         }
         refresh();

@@ -19,6 +19,9 @@ import { WhoAmI } from "./resources/whoAmI.js";
 import { Credentials, getToken, Settings } from "./utils/auth.js";
 import { defaultBaseUrl, defaultRealm } from "./utils/constants.js";
 import { DecodedToken, decodeToken } from "./utils/decode.js";
+import { TideProvider } from "./resources/tideProvider.js"; // TIDECLOAK IMPLEMENTATION
+import { TideUsersExt } from "./resources/TideUserExt.js"; // TIDECLOAK IMPLEMENTATION
+import { Iga } from "./resources/iga.js"; // TIDECLOAK IMPLEMENTATION
 
 export type RequestOptions = Omit<RequestInit, "signal">;
 
@@ -63,6 +66,7 @@ export class KeycloakAdminClient {
   public cache: Cache;
   public tideAdmin: TideProvider; // TIDECLOAK IMPLEMENTATION
   public tideUsersExt: TideUsersExt; // TIDECLOAK IMPLEMENTATION
+  public iga: Iga; // TIDECLOAK IMPLEMENTATION
 
   // Members
   public baseUrl: string;
@@ -109,6 +113,7 @@ export class KeycloakAdminClient {
     this.cache = new Cache(this);
     this.tideAdmin = new TideProvider(this); // TIDECLOAK IMPLEMENTATION
     this.tideUsersExt = new TideUsersExt(this); // TIDECLOAK IMPLEMENTATION
+    this.iga = new Iga(this); // TIDECLOAK IMPLEMENTATION
   }
 
   public async auth(credentials: Credentials) {

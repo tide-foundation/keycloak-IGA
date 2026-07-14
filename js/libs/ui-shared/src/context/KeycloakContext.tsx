@@ -48,7 +48,10 @@ export const useEnvironment = <
 
 interface KeycloakContextProps<T extends BaseEnvironment> {
   environment: T;
-  keycloak?: Keycloak;
+  // TIDECLOAK IMPLEMENTATION: 26.7.0 added this external-injection escape hatch.
+  // It is typed as TideCloak (not Keycloak) because the context contract exposes
+  // approveTideRequests, which a plain keycloak-js instance cannot satisfy.
+  keycloak?: TideCloak;
 }
 
 // Shape of the adapter JSON you're fetching for security-admin-console
@@ -81,6 +84,13 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
   useEffect(() => {
     let cancelled = false;
 
+    // TIDECLOAK IMPLEMENTATION: an externally-injected client is already
+    // configured and initialised — don't fetch (or require) the Tide config.
+    if (externalKeycloak) {
+      setLoadingConfig(false);
+      return;
+    }
+
     const loadConfig = async () => {
       try {
         setLoadingConfig(true);
@@ -109,16 +119,24 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     return () => {
       cancelled = true;
     };
-  }, [environment]);
+  }, [environment, externalKeycloak]);
 
   // -------------------------------
   // 2. Create TideCloak using JSON
   // -------------------------------
   const keycloak = useMemo(() => {
+    // TIDECLOAK IMPLEMENTATION: honour 26.7.0's external-injection escape hatch
+    // first; otherwise build a TideCloak from the runtime-fetched Tide config.
     if (externalKeycloak) {
       return externalKeycloak;
     }
-    const keycloak = new Keycloak({
+    if (!config) return null;
+
+    const originKey = `client-origin-auth-${window.location.origin}`;
+    const clientOriginAuth = config[originKey];
+
+    const kc = new TideCloak({
+      // prefer JSON values, fall back to environment just in case
       url: environment.serverBaseUrl,
       realm: environment.realm,
       clientId: environment.clientId,
@@ -127,10 +145,9 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       clientOriginAuth,
     });
 
-    keycloak.onAuthLogout = () => keycloak.login();
-
-    return keycloak;
-  }, [environment, externalKeycloak]);
+    kc.onAuthLogout = () => kc.login();
+    return kc;
+  }, [config, environment, externalKeycloak]);
 
   // -------------------------------
   // 3. Initialise TideCloak
@@ -140,6 +157,9 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     if (externalKeycloak) {
       return;
     }
+
+    // null until the Tide config resolves and the TideCloak is constructed
+    if (!keycloak) return;
 
     // only needed in dev mode
     if (calledOnce.current) {
@@ -160,7 +180,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       .catch((err: any) => setError(err));
 
     calledOnce.current = true;
-  }, [keycloak, externalKeycloak]);
+  }, [keycloak, environment, externalKeycloak]);
 
   // -------------------------------
   // Tide Methods
@@ -213,7 +233,11 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     );
   }
 
-  if (loadingConfig || !config || !keycloak || !init) {
+  // TIDECLOAK IMPLEMENTATION: `keycloak` stays null until the Tide config
+  // resolves, so !keycloak already covers the config-pending case. Gating on
+  // `config` directly would deadlock the externally-injected path, which
+  // never fetches one.
+  if (loadingConfig || !keycloak || !init) {
     return <Spinner />;
   }
 
