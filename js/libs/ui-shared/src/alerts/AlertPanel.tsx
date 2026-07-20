@@ -22,29 +22,14 @@ export function AlertPanel({ alerts, onCloseAlert }: AlertPanelProps) {
       isToast
       style={{ whiteSpace: "pre-wrap" }}
     >
-      {alerts.map(
-        ({ id, variant, message, description, actionLinks }, index) => (
-          <Alert
-            key={id}
-            data-testid={index === 0 ? "last-alert" : undefined}
-            isLiveRegion
-            variant={AlertVariant[variant]}
-            component="p"
-            variantLabel=""
-            title={message}
-            actionClose={
-              <AlertActionCloseButton
-                title={message}
-                onClose={() => onCloseAlert(id)}
-              />
-            }
-            // TIDECLOAK IMPLEMENTATION
-            actionLinks={actionLinks}
-          >
-            {description && <p>{description}</p>}
-          </Alert>
-        ),
-      )}
+      {alerts.map((alert, index) => (
+        <AlertItem
+          key={alert.id}
+          alert={alert}
+          isFirst={index === 0}
+          onClose={() => onCloseAlert(alert.id)}
+        />
+      ))}
     </AlertGroup>
   );
 }
@@ -59,7 +44,8 @@ function AlertItem({ alert, isFirst, onClose }: AlertItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  const { variant, message, description, code, traceId, source } = alert;
+  const { variant, message, description, code, traceId, source, actionLinks } =
+    alert;
   const hasTideMetadata = Boolean(code || traceId || source);
 
   return (
@@ -73,6 +59,8 @@ function AlertItem({ alert, isFirst, onClose }: AlertItemProps) {
       actionClose={
         <AlertActionCloseButton title={message} onClose={onClose} />
       }
+      // TIDECLOAK IMPLEMENTATION
+      actionLinks={actionLinks}
     >
       {description && <p>{description}</p>}
       {hasTideMetadata && (
