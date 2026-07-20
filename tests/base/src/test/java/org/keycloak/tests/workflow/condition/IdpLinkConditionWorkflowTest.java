@@ -28,7 +28,6 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.workflow.DisableUserStepProviderFactory;
 import org.keycloak.models.workflow.NotifyUserStepProviderFactory;
-import org.keycloak.models.workflow.ResourceOperationType;
 import org.keycloak.models.workflow.SetUserAttributeStepProviderFactory;
 import org.keycloak.models.workflow.Workflow;
 import org.keycloak.models.workflow.WorkflowProvider;
@@ -36,6 +35,8 @@ import org.keycloak.models.workflow.WorkflowStateProvider;
 import org.keycloak.models.workflow.WorkflowStateProvider.ScheduledStep;
 import org.keycloak.models.workflow.WorkflowStep;
 import org.keycloak.models.workflow.conditions.IdentityProviderWorkflowConditionFactory;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
+import org.keycloak.models.workflow.events.UserFedIdentityAddedWorkflowEventFactory;
 import org.keycloak.representations.idm.IdentityProviderRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.userprofile.config.UPConfig;
@@ -43,17 +44,15 @@ import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowScheduleRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.IdentityProviderBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.remote.providers.runonserver.RunOnServer;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
-import org.keycloak.testsuite.util.IdentityProviderBuilder;
 
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
-
-import static org.keycloak.models.workflow.ResourceOperationType.USER_CREATED;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
@@ -84,7 +83,7 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
 
         // create the workflow that triggers on IdP linking with a condition for the specific IdP
         WorkflowRepresentation workflow = WorkflowRepresentation.withName("idp-members-workflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .onCondition(IdentityProviderWorkflowConditionFactory.ID + "(" + IDP_OIDC_ALIAS + ")")
                 .withSteps(
                         WorkflowStepRepresentation.create()
@@ -96,7 +95,7 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
 
         // create a test user not linked to the identity provider
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("no-idp-user").email("generic-user@example.com").build())) {
             userId = ApiUtil.getCreatedId(response);
         }
@@ -106,7 +105,7 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
         assertThat(userRepresentation.getAttributes(), nullValue());
 
         // create another user linked to the identity provider - this time the workflow should trigger
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("idp-user").federatedLink(IDP_OIDC_ALIAS, UUID.randomUUID().toString(), "fed-user-123").build())) {
             userId = ApiUtil.getCreatedId(response);
         }
@@ -121,19 +120,19 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
     public void testAssignWorkflowToExistingResources() {
         // create some realm users
         for (int i = 0; i < 10; i++) {
-            managedRealm.admin().users().create(UserConfigBuilder.create().username("user-" + i).build()).close();
+            managedRealm.admin().users().create(UserBuilder.create().username("user-" + i).build()).close();
         }
 
         // create some users associated with a federated identity
         for (int i = 0; i < 10; i++) {
-            managedRealm.admin().users().create(UserConfigBuilder.create().username("idp-user-" + i)
+            managedRealm.admin().users().create(UserBuilder.create().username("idp-user-" + i)
                     .federatedLink(IDP_OIDC_ALIAS, UUID.randomUUID().toString(), "idp-user-" + i).build()).close();
         }
 
         setupIdentityProvider();
 
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(ResourceOperationType.USER_FEDERATED_IDENTITY_ADDED.name())
+                .onEvent(UserFedIdentityAddedWorkflowEventFactory.ID)
                 .onCondition(IdentityProviderWorkflowConditionFactory.ID + "(" + IDP_OIDC_ALIAS + ")")
                 .schedule(WorkflowScheduleRepresentation.create().after("1s").build())
                 .withSteps(
@@ -147,13 +146,13 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
 
         // now with the workflow in place, let's create a couple more idp users - these will be attached to the workflow on creation.
         for (int i = 0; i < 3; i++) {
-            managedRealm.admin().users().create(UserConfigBuilder.create().username("new-idp-user-" + i)
+            managedRealm.admin().users().create(UserBuilder.create().username("new-idp-user-" + i)
                     .federatedLink(IDP_OIDC_ALIAS, UUID.randomUUID().toString(), "new-idp-user-" + i).build()).close();
         }
 
         // new realm users created after the workflow - these should not be attached to the workflow because they are not idp users.
         for (int i = 0; i < 3; i++) {
-            managedRealm.admin().users().create(UserConfigBuilder.create().username("new-user-" + i).build()).close();
+            managedRealm.admin().users().create(UserBuilder.create().username("new-user-" + i).build()).close();
         }
 
         runOnServer.run((RunOnServer) session -> {
@@ -168,7 +167,7 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
 
             // check no workflows are yet attached to the previous users, only to the ones created after the workflow was in place
             WorkflowStateProvider stateProvider = session.getKeycloakSessionFactory().getProviderFactory(WorkflowStateProvider.class).create(session);
-            List<ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(workflow).toList();
+            List<ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(workflow.getId()).toList();
             assertEquals(3, scheduledSteps.size());
             scheduledSteps.forEach(scheduledStep -> {
                 assertEquals(notifyStep.getId(), scheduledStep.stepId());
@@ -191,7 +190,7 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
             WorkflowStep disableStep = workflow.getSteps().toList().get(1);
             WorkflowStateProvider stateProvider = session.getKeycloakSessionFactory().getProviderFactory(WorkflowStateProvider.class).create(session);
 
-            List<ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(workflow).toList();
+            List<ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(workflow.getId()).toList();
             assertEquals(3, scheduledSteps.size());
             scheduledSteps.forEach(scheduledStep -> {
                 assertEquals(disableStep.getId(), scheduledStep.stepId());
@@ -217,7 +216,7 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
                         Workflow workflow = registeredWorkflows.get(0);
                         // check workflow was correctly assigned to the old users, not affecting users already associated with the workflow.
                         WorkflowStateProvider stateProvider = session.getProvider(WorkflowStateProvider.class);
-                        List<ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(workflow).toList();
+                        List<ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(workflow.getId()).toList();
                         assertEquals(13, scheduledSteps.size());
 
                         List<WorkflowStep> steps = workflow.getSteps().toList();
@@ -248,14 +247,14 @@ public class IdpLinkConditionWorkflowTest extends AbstractWorkflowTest {
     private void setupIdentityProvider() {
         IdentityProviderRepresentation rep = IdentityProviderBuilder.create().alias(IDP_OIDC_ALIAS).providerId(IDP_OIDC_PROVIDER_ID)
                 .displayName(IDP_OIDC_PROVIDER_ID)
-                .setAttribute("clientId", "test-client")
-                .setAttribute("clientSecret", "secret")
-                .setAttribute("authorizationUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/auth")
-                .setAttribute("tokenUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/token")
-                .setAttribute("logoutUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/logout")
-                .setAttribute("userInfoUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/userinfo")
-                .setAttribute("defaultScope", "email profile")
-                .setAttribute("backchannelSupported", "true")
+                .attribute("clientId", "test-client")
+                .attribute("clientSecret", "secret")
+                .attribute("authorizationUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/auth")
+                .attribute("tokenUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/token")
+                .attribute("logoutUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/logout")
+                .attribute("userInfoUrl", "http://localhost:8080/realms/" + DEFAULT_REALM_NAME + "/protocol/openid-connect/userinfo")
+                .attribute("defaultScope", "email profile")
+                .attribute("backchannelSupported", "true")
                 .build();
 
         managedRealm.admin().identityProviders().create(rep).close();

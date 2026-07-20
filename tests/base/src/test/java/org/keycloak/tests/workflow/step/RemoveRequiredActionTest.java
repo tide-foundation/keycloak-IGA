@@ -5,18 +5,17 @@ import java.time.Duration;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.workflow.RemoveRequiredActionStepProvider;
 import org.keycloak.models.workflow.RemoveRequiredActionStepProviderFactory;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
 
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import static org.keycloak.models.workflow.ResourceOperationType.USER_CREATED;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
@@ -30,7 +29,7 @@ public class RemoveRequiredActionTest extends AbstractWorkflowTest {
     @Test
     public void testStepRun() {
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("remove-action-workflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(RemoveRequiredActionStepProviderFactory.ID)
@@ -38,7 +37,7 @@ public class RemoveRequiredActionTest extends AbstractWorkflowTest {
                                 .build()
                 ).build()).close();
 
-        managedRealm.admin().users().create(UserConfigBuilder.create()
+        managedRealm.admin().users().create(UserBuilder.create()
                 .username("testuser_remove")
                 .requiredActions(UserModel.RequiredAction.UPDATE_PASSWORD.name())
                 .build()).close();

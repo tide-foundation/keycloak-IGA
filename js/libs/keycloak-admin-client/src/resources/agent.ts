@@ -6,6 +6,7 @@ import {
   parseResponse,
 } from "../utils/fetchWithError.js";
 import { joinPath } from "../utils/joinPath.js";
+import { pendingChangeRequestFromResponse } from "../utils/pendingChangeRequest.js";
 import { stringifyQueryParams } from "../utils/stringifyQueryParams.js";
 
 // constants
@@ -148,9 +149,10 @@ export class Agent {
       const baseParams = this.#getBaseParams?.() ?? {};
 
       // Filter query parameters by queryParamKeys
-      const queryParams = queryParamKeys
-        ? (pick(query, queryParamKeys) as any)
-        : undefined;
+      const queryParams =
+        queryParamKeys.length > 0
+          ? (pick(query, queryParamKeys) as any)
+          : undefined;
 
       // Add filtered query parameters to base parameters
       const allUrlParamKeys = [...Object.keys(baseParams), ...urlParamKeys];
@@ -253,6 +255,27 @@ export class Agent {
           : {}),
       });
 
+      // TIDECLOAK IMPLEMENTATION
+      // The backend can intercept entity-create calls for IGA approval and
+      // respond with HTTP 202 + a `PendingChangeRequest` JSON body in place of
+      // the usual 201 + Location header. Surface that body to callers so they
+      // can show a friendly notice and skip post-create navigation.
+      if (res.status === 202) {
+        const body = await parseResponse(res);
+        const pending = pendingChangeRequestFromResponse(body);
+        if (pending) {
+          return pending;
+        }
+        // Not a recognised pending-change-request payload — fall through to
+        // the original behaviour so legitimate 202 responses still work.
+        if (returnResourceIdInLocationHeader) {
+          throw new Error(
+            `location header is not found in request: ${res.url}`,
+          );
+        }
+        return body;
+      }
+
       // now we get the response of the http request
       // if `resourceIdInLocationHeader` is true, we'll get the resourceId from the location header field
       // todo: find a better way to find the id in path, maybe some kind of pattern matching
@@ -307,9 +330,9 @@ export class Agent {
       return;
     }
 
-    Object.keys(keyMapping).some((key) => {
+    Object.keys(keyMapping).forEach((key) => {
       if (typeof payload[key] === "undefined") {
-        return false;
+        return;
       }
       const newKey = keyMapping[key];
       payload[newKey] = payload[key];

@@ -22,7 +22,7 @@
     <parent>
         <artifactId>keycloak-test-framework-parent</artifactId>
         <groupId>org.keycloak.testframework</groupId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -46,6 +46,11 @@
         <dependency>
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-server-spi-private</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-model-infinispan</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>

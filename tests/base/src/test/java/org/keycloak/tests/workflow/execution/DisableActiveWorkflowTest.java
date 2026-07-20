@@ -11,16 +11,16 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.workflow.DisableUserStepProviderFactory;
 import org.keycloak.models.workflow.NotifyUserStepProviderFactory;
-import org.keycloak.models.workflow.ResourceOperationType;
 import org.keycloak.models.workflow.Workflow;
 import org.keycloak.models.workflow.WorkflowProvider;
 import org.keycloak.models.workflow.WorkflowStateProvider;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
 import org.keycloak.testframework.mail.MailServer;
 import org.keycloak.testframework.mail.annotations.InjectMailServer;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.remote.providers.runonserver.RunOnServer;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
@@ -52,7 +52,7 @@ public class DisableActiveWorkflowTest extends AbstractWorkflowTest {
         // create a test workflow
         String workflowId;
         try (Response response = managedRealm.admin().workflows().create(WorkflowRepresentation.withName("test-workflow")
-                .onEvent(ResourceOperationType.USER_CREATED.toString())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(5))
@@ -71,7 +71,7 @@ public class DisableActiveWorkflowTest extends AbstractWorkflowTest {
         assertThat(workflow.getName(), is("test-workflow"));
 
         // create a new user - should bind the user to the workflow and setup the first step
-        managedRealm.admin().users().create(UserConfigBuilder.create().username("testuser").email("testuser@example.com").build()).close();
+        managedRealm.admin().users().create(UserBuilder.create().username("testuser").email("testuser@example.com").build()).close();
 
         // Advance time so the user is eligible for the first step, then run the scheduled steps so they transition to the next one.
         runScheduledSteps(Duration.ofDays(6));
@@ -95,7 +95,7 @@ public class DisableActiveWorkflowTest extends AbstractWorkflowTest {
         }
 
         // create another user - should NOT bind the user to the workflow as it is disabled
-        managedRealm.admin().users().create(UserConfigBuilder.create().username("anotheruser").build()).close();
+        managedRealm.admin().users().create(UserBuilder.create().username("anotheruser").build()).close();
 
         // Advance time so the first user would be eligible for the second step, then run the scheduled steps.
         runScheduledSteps(Duration.ofDays(12));
@@ -107,7 +107,7 @@ public class DisableActiveWorkflowTest extends AbstractWorkflowTest {
             List<Workflow> registeredWorkflow = provider.getWorkflows().toList();
             assertEquals(1, registeredWorkflow.size());
             WorkflowStateProvider stateProvider = session.getKeycloakSessionFactory().getProviderFactory(WorkflowStateProvider.class).create(session);
-            List<WorkflowStateProvider.ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(registeredWorkflow.get(0)).toList();
+            List<WorkflowStateProvider.ScheduledStep> scheduledSteps = stateProvider.getScheduledStepsByWorkflow(registeredWorkflow.get(0).getId()).toList();
 
             // verify that there's only one scheduled step, for the first user
             assertEquals(1, scheduledSteps.size());
@@ -127,7 +127,7 @@ public class DisableActiveWorkflowTest extends AbstractWorkflowTest {
         }
 
         // create a third user - should bind the user to the workflow as it is enabled again
-        managedRealm.admin().users().create(UserConfigBuilder.create().username("thirduser").email("thirduser@example.com").build()).close();
+        managedRealm.admin().users().create(UserBuilder.create().username("thirduser").email("thirduser@example.com").build()).close();
 
         // Advance time so the first user would be eligible for the second step, and third user would be eligible for the first step, then run the scheduled steps.
         runScheduledSteps(Duration.ofDays(12));

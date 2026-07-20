@@ -35,6 +35,9 @@ import org.keycloak.protocol.oid4vc.OID4VCLoginProtocolFactory;
 import org.keycloak.protocol.oid4vc.model.VerifiableCredential;
 import org.keycloak.protocol.oidc.mappers.OIDCAttributeMapperHelper;
 import org.keycloak.provider.ProviderConfigProperty;
+import org.keycloak.utils.JsonUtils;
+
+import org.apache.commons.collections4.ListUtils;
 
 /**
  * Allows adding user properties to the credential subject
@@ -83,9 +86,11 @@ public class OID4VCUserAttributeMapper extends OID4VCMapper {
 
     @Override
     public void setClaim(Map<String, Object> claims, UserSessionModel userSessionModel) {
-        List<String> attributePath = getMetadataAttributePath();
-        String propertyName = attributePath.get(attributePath.size() - 1);
+        String claimName = mapperModel.getConfig().get(CLAIM_NAME);
         String userAttribute = mapperModel.getConfig().get(USER_ATTRIBUTE_KEY);
+        if (claimName == null && userAttribute == null) {
+            return;
+        }
         boolean aggregateAttributes = Optional.ofNullable(mapperModel.getConfig().get(AGGREGATE_ATTRIBUTES_KEY))
                 .map(Boolean::parseBoolean).orElse(false);
         Collection<String> attributes =
@@ -93,16 +98,21 @@ public class OID4VCUserAttributeMapper extends OID4VCMapper {
                         aggregateAttributes);
         attributes.removeAll(Collections.singleton(null));
         if (!attributes.isEmpty()) {
-            claims.put(propertyName, String.join(",", attributes));
+            JsonUtils.mapClaim(
+                    JsonUtils.splitClaimPath(Optional.ofNullable(claimName).orElse(userAttribute)),
+                    String.join(",", attributes),
+                    claims,
+                    false
+            );
         }
     }
 
-    public static ProtocolMapperModel create(String mapperName, String userAttribute, String propertyName,
+    public static ProtocolMapperModel create(String mapperName, String claimName, String userAttribute,
                                              boolean aggregateAttributes) {
         ProtocolMapperModel mapperModel = new ProtocolMapperModel();
         mapperModel.setName(mapperName);
         Map<String, String> configMap = new HashMap<>();
-        configMap.put(CLAIM_NAME, propertyName);
+        configMap.put(CLAIM_NAME, claimName);
         configMap.put(USER_ATTRIBUTE_KEY, userAttribute);
         configMap.put(AGGREGATE_ATTRIBUTES_KEY, Boolean.toString(aggregateAttributes));
         mapperModel.setConfig(configMap);
@@ -129,5 +139,21 @@ public class OID4VCUserAttributeMapper extends OID4VCMapper {
     @Override
     public String getId() {
         return MAPPER_ID;
+    }
+
+    @Override
+    public List<String> getMetadataAttributePath() {
+        String claimName = mapperModel.getConfig().get(CLAIM_NAME);
+        final String userAttributeName = mapperModel.getConfig().get(USER_ATTRIBUTE_KEY);
+        // Split claim name into path segments for metadata endpoint.
+        final List<String> claimPath = Optional.ofNullable(claimName)
+                .map(JsonUtils::splitClaimPath)
+                .orElse(Optional.ofNullable(userAttributeName)
+                        .map(List::of)
+                        .orElse(Collections.emptyList()));
+        if (claimPath.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return ListUtils.union(getAttributePrefix(), claimPath);
     }
 }

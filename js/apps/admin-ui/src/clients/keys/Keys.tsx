@@ -13,6 +13,7 @@ import {
   Text,
   TextContent,
 } from "@patternfly/react-core";
+import { SyncAltIcon } from "@patternfly/react-icons";
 import { saveAs } from "file-saver";
 import { useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
@@ -23,7 +24,7 @@ import { DefaultSwitchControl } from "../../components/SwitchControl";
 import { convertAttributeNameToForm } from "../../util";
 import useToggle from "../../utils/useToggle";
 import { FormFields } from "../ClientDetails";
-import { Certificate } from "./Certificate";
+import { KeyInfoArea } from "./Certificate";
 import { GenerateKeyDialog, getFileExtension } from "./GenerateKeyDialog";
 import { ImportFile, ImportKeyDialog } from "./ImportKeyDialog";
 
@@ -157,9 +158,9 @@ export const Keys = ({
             />
             {useJwksUrl !== "true" &&
               (keyInfo ? (
-                <Certificate plain keyInfo={keyInfo} />
+                <KeyInfoArea keyInfo={keyInfo} />
               ) : (
-                "No client certificate configured"
+                "No public key configured"
               ))}
             {useJwksUrl === "true" && (
               <TextControl
@@ -191,6 +192,14 @@ export const Keys = ({
                 isDisabled={useJwksUrl === "true"}
               >
                 {t("import")}
+              </Button>
+              <Button
+                data-testid="reload"
+                variant="secondary"
+                onClick={refresh}
+                isDisabled={useJwksUrl === "true"}
+              >
+                <SyncAltIcon /> {t("refresh")}
               </Button>
             </ActionGroup>
           </FormAccess>

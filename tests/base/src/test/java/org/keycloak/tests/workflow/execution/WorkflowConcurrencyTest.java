@@ -10,22 +10,22 @@ import org.keycloak.models.UserModel;
 import org.keycloak.models.workflow.DisableUserStepProviderFactory;
 import org.keycloak.models.workflow.SetUserAttributeStepProviderFactory;
 import org.keycloak.models.workflow.WorkflowStateProvider;
+import org.keycloak.models.workflow.events.UserAuthenticatedWorkflowEventFactory;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.InjectUser;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
 import org.keycloak.testframework.injection.LifeCycle;
-import org.keycloak.testframework.realm.GroupConfigBuilder;
+import org.keycloak.testframework.realm.GroupBuilder;
 import org.keycloak.testframework.realm.ManagedUser;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.realm.UserConfig;
-import org.keycloak.testframework.realm.UserConfigBuilder;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import static org.keycloak.models.workflow.ResourceOperationType.USER_AUTHENTICATED;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
@@ -47,7 +47,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
     public void testWorkflowIsRestartedOnSameEvent() {
         // create a workflow that can be restarted on the same event - i.e. has concurrency setting with restart-in-progress=true
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_AUTHENTICATED.toString())
+                .onEvent(UserAuthenticatedWorkflowEventFactory.ID)
                 .concurrency().restartInProgress("true")
                 .withSteps(
                         WorkflowStepRepresentation.create()
@@ -62,7 +62,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
 
         // create a test group so we can use it to trigger a non-restarting event
         String testGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("testgroup").build())) {
             testGroupId = ApiUtil.getCreatedId(response);
         }
@@ -76,12 +76,12 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
     public void testWorkflowIsRestartedOnDifferentEvent() {
         // create a couple of test groups to trigger different group membership events
         String testGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("testgroup").build())) {
             testGroupId = ApiUtil.getCreatedId(response);
         }
         String anotherGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("anothergroup").build())) {
             anotherGroupId = ApiUtil.getCreatedId(response);
         }
@@ -89,7 +89,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
         // create a workflow that can be restarted on a different event - i.e. restart-in-progress is set to an event expression
         // in this case we will use user-group-membership-added event to restart the workflow when user joins the group "testgroup"
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_AUTHENTICATED.toString())
+                .onEvent(UserAuthenticatedWorkflowEventFactory.ID)
                 .concurrency().restartInProgress("user-group-membership-added(testgroup)")
                 .withSteps(
                         WorkflowStepRepresentation.create()
@@ -112,7 +112,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
     public void testWorkflowIsCancelledOnSameEvent() {
         // create a workflow that can be cancelled on the same event - i.e. has concurrency setting with cancel-in-progress=true
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_AUTHENTICATED.toString())
+                .onEvent(UserAuthenticatedWorkflowEventFactory.ID)
                 .concurrency().cancelInProgress("true")
                 .withSteps(
                         WorkflowStepRepresentation.create()
@@ -127,7 +127,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
 
         // create a test group so we can use it to trigger a non-restarting event
         String testGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("testgroup").build())) {
             testGroupId = ApiUtil.getCreatedId(response);
         }
@@ -141,12 +141,12 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
     public void testWorkflowIsCancelledOnDifferentEvent() {
         // create a couple of test groups to trigger different group membership events
         String testGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("testgroup").build())) {
             testGroupId = ApiUtil.getCreatedId(response);
         }
         String anotherGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("anothergroup").build())) {
             anotherGroupId = ApiUtil.getCreatedId(response);
         }
@@ -154,7 +154,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
         // create a workflow that can be cancelled on a different event - i.e. cancel-in-progress is set to an event expression
         // in this case we will use user-group-membership-added event to cancel the workflow when user joins the group "testgroup"
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_AUTHENTICATED.toString())
+                .onEvent(UserAuthenticatedWorkflowEventFactory.ID)
                 .concurrency().cancelInProgress("user-group-membership-added(testgroup)")
                 .withSteps(
                         WorkflowStepRepresentation.create()
@@ -177,19 +177,19 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
     public void testWorkflowIsRestartedOnSameEventAndCancelledOnDifferentEvent() {
         // create a couple of test groups to trigger different group membership events
         String testGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("testgroup").build())) {
             testGroupId = ApiUtil.getCreatedId(response);
         }
         String anotherGroupId;
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("anothergroup").build())) {
             anotherGroupId = ApiUtil.getCreatedId(response);
         }
 
         // create workflow with both settings - restart-in-progress on same event, cancel-in-progress on different event
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_AUTHENTICATED.toString())
+                .onEvent(UserAuthenticatedWorkflowEventFactory.ID)
                 .concurrency().restartInProgress("true")
                               .cancelInProgress("user-group-membership-added(testgroup)")
                 .withSteps(
@@ -230,7 +230,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
             oauth.openLoginForm();
             loginPage.fillLogin(username, userAlice.getPassword());
             loginPage.submit();
-            assertTrue(driver.page().getPageSource() != null && driver.page().getPageSource().contains("Happy days"));
+            Assertions.assertTrue(oauth.parseLoginResponse().isSuccess());
         }
 
         // store the first step id for later comparison
@@ -289,7 +289,7 @@ public class WorkflowConcurrencyTest extends AbstractWorkflowTest {
     private static class DefaultUserConfig implements UserConfig {
 
         @Override
-        public UserConfigBuilder configure(UserConfigBuilder user) {
+        public UserBuilder configure(UserBuilder user) {
             user.username("alice");
             user.password("alice");
             user.name("alice", "alice");

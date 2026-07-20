@@ -5,6 +5,7 @@ on:
     branches-ignore:
       - main
       - dependabot/**
+      - copilot/**
   pull_request:
   workflow_dispatch:
 
@@ -12,6 +13,8 @@ env:
   MAVEN_ARGS: "-B -nsu -Daether.connector.http.connectionMaxTtl=25"
   SUREFIRE_RERUN_FAILING_COUNT: 2
   SUREFIRE_RETRY: "-Dsurefire.rerunFailingTestsCount=2"
+  KC_TEST_GITHUB_SLOW_METHOD: "10"
+  KC_TEST_GITHUB_SLOW_CLASS: "60"
 
 concurrency:
   # Only cancel jobs for PR updates
@@ -51,7 +54,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: conditional
         uses: ./.github/actions/conditional
@@ -62,28 +65,47 @@ jobs:
         id: auroradb-tests
         run: |
           RUN_AURORADB_TESTS=false
-          if [[ $GITHUB_EVENT_NAME != "pull_request" && -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]]; then
+          if [[ $GITHUB_EVENT_NAME != "pull_request" && -n "${AWS_SECRET_ACCESS_KEY}" ]]; then
             RUN_AURORADB_TESTS=true
           fi
           echo "run-aurora-tests=$RUN_AURORADB_TESTS" >> $GITHUB_OUTPUT
 
+        env:
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       - name: Azure conditional check
         id: azure-tests
         run: |
           RUN_AZURE_TESTS=false
-          if [[ $GITHUB_EVENT_NAME != "pull_request" && -n "${{ secrets.AZURE_CREDENTIALS }}" ]]; then
+          if [[ $GITHUB_EVENT_NAME != "pull_request" && -n "${AZURE_CREDENTIALS}" ]]; then
             RUN_AZURE_TESTS=true
           fi
           echo "run-azure-tests=$RUN_AZURE_TESTS" >> $GITHUB_OUTPUT
 
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Additional DBs conditional check
         id: additional-dbs-tests
         run: |
           RUN_ADDITIONAL_DBS_TESTS=false
-          if [[ $GITHUB_EVENT_NAME != "pull_request" && -n "${{ secrets.PRIVATE_DBS_QUAY_USERNAME }}" && -n "${{ secrets.PRIVATE_DBS_QUAY_TOKEN }}" ]]; then
+          if [[ $GITHUB_EVENT_NAME != "pull_request" && -n "${PRIVATE_DBS_QUAY_USERNAME}" && -n "${PRIVATE_DBS_QUAY_TOKEN}" ]]; then
             RUN_ADDITIONAL_DBS_TESTS=true
           fi
           echo "run-additional-dbs-tests=$RUN_ADDITIONAL_DBS_TESTS" >> $GITHUB_OUTPUT
+
+        env:
+          PRIVATE_DBS_QUAY_USERNAME: ${{ secrets.PRIVATE_DBS_QUAY_USERNAME }}
+          PRIVATE_DBS_QUAY_TOKEN: ${{ secrets.PRIVATE_DBS_QUAY_TOKEN }}
+  testsuite-deprecation-check:
+    name: Testsuite Deprecation Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: conditional
+        uses: ./.github/actions/testsuite-deprecation-check
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
 
   build:
     name: Build
@@ -91,7 +113,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: conditional
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Check base testsuites
+        run: tests/base/check-base-suites.sh
 
       - name: Build Keycloak
         uses: ./.github/actions/build-keycloak
@@ -109,7 +134,7 @@ jobs:
     needs: build
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: unit-test-setup
         name: Unit test setup
@@ -129,7 +154,7 @@ jobs:
         group: [1, 2, 3, 4, 5, 6]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -155,11 +180,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
         uses: ./.github/actions/integration-test-setup
+        with:
+          jdk-version: '21'
 
       - name: Build adapter distributions
         run: ./mvnw install -DskipTests -f distribution/pom.xml
@@ -186,11 +213,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
         uses: ./.github/actions/integration-test-setup
+        with:
+          jdk-version: '21'
 
       - name: Build adapter distributions
         run: ./mvnw install -DskipTests -f distribution/pom.xml
@@ -219,9 +248,10 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       # We want to download Keycloak artifacts
       - id: integration-test-setup
@@ -239,7 +269,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        suite: [zip-slow, zip-fast, container, storage, smoke]
+        suite: [zip-slow, zip-fast, storage, smoke]
         full-testsuite:
           - ${{ needs.conditional.outputs.ci-quarkus == 'true' }}
         # Win runs always as includes are evaluated after excludes
@@ -253,8 +283,6 @@ jobs:
           - full-testsuite: false
             suite: zip-fast
           - full-testsuite: false
-            suite: container
-          - full-testsuite: false
             suite: storage
           - full-testsuite: true
             suite: smoke
@@ -263,7 +291,7 @@ jobs:
     env:
       MAVEN_OPTS: -Xmx1536m
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -281,15 +309,11 @@ jobs:
         run: |
           declare -A PARAMS
           PARAMS["win"]="-Dkc.quarkus.tests.groups=win"
-          PARAMS["zip-slow"]="-Dkc.quarkus.tests.groups=slow"
-          PARAMS["zip-fast"]='-Dkc.quarkus.tests.groups=!slow'
-          PARAMS["container"]="-Dkc.quarkus.tests.dist=docker"
+          PARAMS["zip-slow"]="-Dkc.quarkus.tests.groups=slow -Dkc.quarkus.tests.aot=true"
+          PARAMS["zip-fast"]='-Dkc.quarkus.tests.groups=!slow -Dkc.quarkus.tests.aot=true'
           PARAMS["storage"]="-Ptest-database"
           PARAMS["smoke"]="-Dkc.quarkus.tests.groups=smoke"
 
-          if [ "${{ matrix.suite }}" == "container" ]; then
-            ./mvnw install -pl quarkus/tests/integration -am -DskipTests
-          fi
           ./mvnw test -pl quarkus/tests/integration ${PARAMS["${{ matrix.suite }}"]} 2>&1 | misc/log/trimmer.sh
 
   jdk-integration-tests:
@@ -300,11 +324,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         dist: [temurin]
-        version: [17, 25]
+        version: [17, 21]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -350,7 +374,7 @@ jobs:
     timeout-minutes: 100
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -380,7 +404,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -414,7 +438,7 @@ jobs:
         variant: [clusterless, multi-site]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -438,6 +462,36 @@ jobs:
         with:
           job-name: External Infinispan IT
 
+  stateless-tests:
+    name: Stateless IT
+    needs: [ build, conditional ]
+    if: needs.conditional.outputs.ci-store == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: integration-test-setup
+        name: Integration test setup
+        uses: ./.github/actions/integration-test-setup
+
+      - name: Run base tests without caches
+        run: |
+          TESTS=`testsuite/integration-arquillian/tests/base/testsuites/suite.sh clusterless`
+          echo "Tests: $TESTS"
+          ./mvnw test ${{ env.SUREFIRE_RETRY }} -Pauth-server-quarkus -Dauth.server.feature=stateless -Dtest=$TESTS -pl testsuite/integration-arquillian/tests/base 2>&1 | misc/log/trimmer.sh
+
+      - name: Run new base tests without caches
+        run: |          
+          ./mvnw package -f tests/pom.xml -Dtest=StatelessTestSuite
+
+      - uses: ./.github/actions/upload-flaky-tests
+        name: Upload flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          job-name: Stateless IT
+
   auroradb-integration-tests:
     name: AuroraDB IT
     needs: conditional
@@ -448,11 +502,15 @@ jobs:
       contents: read
       actions: write
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: node-cache
         name: Node cache
         uses: ./.github/actions/node-cache
+
+      - name: Restore Quarkus snapshot cache
+        if: github.ref == 'refs/heads/quarkus-next' || github.base_ref == 'quarkus-next'
+        uses: ./.github/actions/quarkus-snapshot-cache
 
       - id: aurora-init
         name: Initialize Aurora environment
@@ -460,8 +518,8 @@ jobs:
           AWS_REGION=us-east-1
           echo "AWS Region: ${AWS_REGION}"
           
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+          aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
           aws configure set region ${AWS_REGION}
           
           AURORA_CLUSTER_NAME="gh-action-$(git rev-parse --short HEAD)-${{ github.run_id }}-${{ github.run_attempt }}"
@@ -472,10 +530,13 @@ jobs:
           echo "aurora-cluster-password=${PASS}" >> $GITHUB_OUTPUT
           echo "region=${AWS_REGION}" >> $GITHUB_OUTPUT
           curl --fail-with-body https://truststore.pki.rds.amazonaws.com/${AWS_REGION}/${AWS_REGION}-bundle.pem -o aws.pem
-          PROPS+=' -Dkeycloak.connectionsJpa.jdbcParameters=\"?ssl=true&sslmode=verify-ca&sslrootcert=/opt/keycloak/aws.pem\"'
           
-          echo "maven_properties=${PROPS}" >> $GITHUB_OUTPUT
+          JDBC_PARAMS='?ssl=true&sslmode=verify-ca&sslrootcert=/opt/keycloak/aws.pem'
+          echo "jdbc_params=${JDBC_PARAMS}" >> $GITHUB_OUTPUT
 
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       - id: aurora-create
         name: Create Aurora DB
         uses: ./.github/actions/aurora-create-database
@@ -493,15 +554,15 @@ jobs:
           
           git archive --format=zip --output /tmp/keycloak.zip $GITHUB_REF
           zip -u /tmp/keycloak.zip aws.pem
-          tar -C ~/ -czvf m2.tar.gz .m2
- 
+          tar -C ~/ -czvf /tmp/m2.tar.gz .m2
+
           cd .github/scripts/ansible
           python3 -m venv .venv
           source .venv/bin/activate
           ./aws_ec2.sh requirements
           pipx inject ansible-core boto3 botocore
           ./aws_ec2.sh create ${AWS_REGION} ${EC2_CLUSTER_NAME}
-          ./keycloak_remote_installer.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} /tmp/keycloak.zip m2.tar.gz
+          ./keycloak_remote_installer.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} /tmp/keycloak.zip /tmp/m2.tar.gz
           ./mvn_remote_runner.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} "clean install -B -DskipTests -Pdistribution -DskipProtoLock=true"
           ./mvn_remote_runner.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} "clean install -B -DskipTests -pl testsuite/integration-arquillian/servers/auth-server/quarkus -Pauth-server-quarkus -Pdb-aurora-postgres -Dmaven.build.cache.enabled=true"
 
@@ -509,13 +570,14 @@ jobs:
         id: aurora-migration-tests
         env:
           old-version: 24.0.4
+          JAVA_VERSION: 21 # Keycloak 24 is not compatible with Java 25+
         run: |
           EC2_CLUSTER_NAME=${{ steps.ec2-create.outputs.ec2_cluster }}
           AWS_REGION=${{ steps.aurora-init.outputs.region }}
-          PROPS='${{ steps.aurora-init.outputs.maven_properties }}'
-          
+          PROPS="-Dkeycloak.connectionsJpa.jdbcParameters=\"${{ steps.aurora-init.outputs.jdbc_params }}\""
+
           PROPS+=" -Dauth.server.db.host=${{ steps.aurora-create.outputs.endpoint }} -Dkeycloak.connectionsJpa.password=${{ steps.aurora-init.outputs.aurora-cluster-password }}"
-          PROPS+=" -Djdbc.mvn.groupId=software.amazon.jdbc -Djdbc.mvn.artifactId=aws-advanced-jdbc-wrapper -Djdbc.mvn.version=2.3.1 -Djdbc.driver.tmp.dir=target/unpacked/keycloak-${{ env.old-version }}/providers"
+          PROPS+=" -Djdbc.mvn.groupId=software.amazon.jdbc -Djdbc.mvn.artifactId=aws-advanced-jdbc-wrapper -Djdbc.mvn.version=4.0.1 -Djdbc.driver.tmp.dir=target/unpacked/keycloak-${{ env.old-version }}/providers"
 
           cd .github/scripts/ansible
           ./mvn_remote_runner.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} "clean install -B ${{ env.SUREFIRE_RETRY }} -Pauth-server-quarkus -Pdb-aurora-postgres -Pauth-server-migration $PROPS -Dtest=MigrationTest -Dmigration.mode=auto -Dmigrated.auth.server.version=${{ env.old-version }} -Dmigration.import.file.name=migration-realm-${{ env.old-version }}.json -Dauth.server.ssl.required=false -f testsuite/integration-arquillian/pom.xml 2>&1 | misc/log/trimmer.sh"
@@ -535,7 +597,7 @@ jobs:
 
       - name: EC2 Maven Logs
         if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: auroraDB-migration-tests-mvn-logs
           path: .github/scripts/ansible/files
@@ -545,7 +607,7 @@ jobs:
         run: |
           EC2_CLUSTER_NAME=${{ steps.ec2-create.outputs.ec2_cluster }}
           AWS_REGION=${{ steps.aurora-init.outputs.region }}
-          PROPS='${{ steps.aurora-init.outputs.maven_properties }}'          
+          PROPS="-Dkeycloak.connectionsJpa.jdbcParameters=\"${{ steps.aurora-init.outputs.jdbc_params }}\""
           PROPS+=" -Dauth.server.db.host=${{ steps.aurora-create.outputs.endpoint }} -Dkeycloak.connectionsJpa.password=${{ steps.aurora-init.outputs.aurora-cluster-password }}"
           
           TESTS=`testsuite/integration-arquillian/tests/base/testsuites/suite.sh database`
@@ -568,9 +630,53 @@ jobs:
 
       - name: EC2 Maven Logs
         if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: aurora-integration-tests-mvn-logs
+          path: .github/scripts/ansible/files
+
+      - name: Clear Aurora DB schema
+        id: aurora-clear-db-schema
+        run: |
+         EC2_CLUSTER_NAME=${{ steps.ec2-create.outputs.ec2_cluster }}
+         AWS_REGION=${{ steps.aurora-init.outputs.region }}
+         
+         cd .github/scripts/ansible
+         ./mvn_remote_runner.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} "-Pexecute-sql -f tests/base/pom.xml sql:execute@clear-schema-psql -Dautocommit=true -Ddriver=software.amazon.jdbc.Driver -Durl=\"jdbc:aws-wrapper:postgresql://${{ steps.aurora-create.outputs.endpoint }}/keycloak${{ steps.aurora-init.outputs.jdbc_params }}\" -Dusername=keycloak -Dpassword=${{ steps.aurora-init.outputs.aurora-cluster-password }}"
+
+      - name: Run Aurora new database tests on EC2
+        id: aurora-new-integration-tests
+        run: |
+          EC2_CLUSTER_NAME=${{ steps.ec2-create.outputs.ec2_cluster }}
+          AWS_REGION=${{ steps.aurora-init.outputs.region }}
+
+          PROPS="-Dkc.test.database=remote -Dkc.test.database.vendor=postgres"
+          PROPS+=" -Dkc.test.database.user=keycloak"
+          PROPS+=" -Dkc.test.database.password=${{ steps.aurora-init.outputs.aurora-cluster-password }}"
+          PROPS+=" -Dkc.test.database.url=\"jdbc:aws-wrapper:postgresql://${{ steps.aurora-create.outputs.endpoint }}/keycloak${{ steps.aurora-init.outputs.jdbc_params }}\""
+          PROPS+=" -Dkc.test.database.driver=software.amazon.jdbc.Driver"
+          PROPS+=" -Dkc.test.database.driver.artifact=software.amazon.jdbc:aws-advanced-jdbc-wrapper"
+
+          cd .github/scripts/ansible
+          ./mvn_remote_runner.sh ${AWS_REGION} ${EC2_CLUSTER_NAME} "$PROPS package -f tests/pom.xml -Dtest=DatabaseTestSuite"
+
+          # Copy returned surefire-report directories to workspace root to ensure they're discovered
+          results=(files/keycloak/results/*)
+          rsync -a $results/* ../../../
+          rm -rf $results
+
+      - uses: ./.github/actions/upload-flaky-tests
+        name: Upload flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          job-name: AuroraDB IT
+
+      - name: EC2 Maven Logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aurora-new-integration-tests-mvn-logs
           path: .github/scripts/ansible/files
 
       - name: Delete EC2 Instance
@@ -587,9 +693,10 @@ jobs:
             -f name=${{ steps.aurora-init.outputs.aurora-cluster-name }} \
             -f region=${{ steps.aurora-init.outputs.region }} \
             --repo ${{ github.repository }} \
-            --ref ${{ github.ref_name }}
+            --ref "${REF_NAME}"
         env:
           GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
 
   azure-integration-tests:
     name: AzureDB IT
@@ -601,11 +708,15 @@ jobs:
       contents: read
       actions: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: node-cache
         name: Node cache
         uses: ./.github/actions/node-cache
+
+      - name: Restore Quarkus snapshot cache
+        if: github.ref == 'refs/heads/quarkus-next' || github.base_ref == 'quarkus-next'
+        uses: ./.github/actions/quarkus-snapshot-cache
 
       - id: azure-init
         name: Initialize Azure environment
@@ -624,7 +735,7 @@ jobs:
         id: parse-creds
         shell: bash
         run: |
-          SUBSCRIPTION=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.subscriptionId')
+          SUBSCRIPTION=$(echo "${AZURE_CREDENTIALS}" | jq -r '.subscriptionId')
           if [[ -z "$SUBSCRIPTION" || "$SUBSCRIPTION" == "null" ]]; then
             echo "ERROR: Failed to parse subscriptionId from AZURE_CREDENTIALS"
             exit 1
@@ -633,8 +744,10 @@ jobs:
           echo "::add-mask::$SUBSCRIPTION"
           echo "subscription=$SUBSCRIPTION" >> $GITHUB_OUTPUT
 
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Login to Azure
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
@@ -660,12 +773,12 @@ jobs:
           echo "az_vm_cluster=${AZ_VM_CLUSTER_NAME}" >> $GITHUB_OUTPUT
 
           git archive --format=zip --output /tmp/keycloak.zip $GITHUB_REF
-          tar -C ~/ -czvf m2.tar.gz .m2 || true
+          tar -C ~/ -czvf /tmp/m2.tar.gz .m2 || true
 
           cd .github/scripts/ansible
           ./azure_vm_manager.sh create ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME}
 
-          ./keycloak_remote_installer.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} /tmp/keycloak.zip m2.tar.gz
+          ./keycloak_remote_installer.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} /tmp/keycloak.zip /tmp/m2.tar.gz
           ./mvn_remote_runner.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} "clean install -B -DskipTests -Pdistribution -DskipProtoLock=true -Dmaven.build.cache.enabled=true"
           ./mvn_remote_runner.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} "clean install -B -DskipTests -pl testsuite/integration-arquillian/servers/auth-server/quarkus -Pdb-mssql-azure -Dmaven.build.cache.enabled=true"
 
@@ -673,10 +786,11 @@ jobs:
         id: azure-migration-build
         env:
           old-version: 24.0.4
+          JAVA_VERSION: 21 # Keycloak 24 is not compatible with Java 25+
         run: |
           AZ_VM_CLUSTER_NAME=${{ steps.vm-create.outputs.az_vm_cluster }}
           AZURE_REGION=${{ steps.azure-init.outputs.region }}
-          
+
           cd .github/scripts/ansible
           ./mvn_remote_runner.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} 'clean install -B -DskipTests -pl testsuite/integration-arquillian/servers/migration -Pauth-server-migration -Dmigrated.auth.server.version=${{ env.old-version }} -Dmaven.build.cache.enabled=true -Pdb-mssql-azure -Dkeycloak.connectionsJpa.user=${{ steps.azure-create.outputs.username }} -Dkeycloak.connectionsJpa.password="${{ env.AZURE_DB_PASSWORD }}" -Dkeycloak.connectionsJpa.database=${{ steps.azure-create.outputs.db }} -Dkeycloak.connectionsJpa.url="jdbc:sqlserver://${{ steps.azure-create.outputs.endpoint }}:1433;databaseName=${{ steps.azure-create.outputs.db }};encrypt=true;trustServerCertificate=false;sendStringParametersAsUnicode=false" -Djdbc.driver.tmp.dir=target/unpacked/keycloak-${{ env.old-version }}/providers'
 
@@ -684,6 +798,7 @@ jobs:
         id: azure-migration-tests
         env:
           old-version: 24.0.4
+          JAVA_VERSION: 21 # Keycloak 24 is not compatible with Java 25+
         run: |
           AZ_VM_CLUSTER_NAME=${{ steps.vm-create.outputs.az_vm_cluster }}
           AZURE_REGION=${{ steps.azure-init.outputs.region }}
@@ -699,10 +814,11 @@ jobs:
         id: azure-integration-build
         env:
           old-version: 24.0.4
+          JAVA_VERSION: 21 # Keycloak 24 is not compatible with Java 25+
         run: |
           AZ_VM_CLUSTER_NAME=${{ steps.vm-create.outputs.az_vm_cluster }}
           AZURE_REGION=${{ steps.azure-init.outputs.region }}
-          
+
           cd .github/scripts/ansible
           ./mvn_remote_runner.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} 'clean install -B -DskipTests -pl testsuite/integration-arquillian/servers/migration -Pauth-server-migration -Dmigrated.auth.server.version=${{ env.old-version }} -Dmaven.build.cache.enabled=true -Pdb-mssql-azure -Dkeycloak.connectionsJpa.user=${{ steps.azure-create.outputs.username }} -Dkeycloak.connectionsJpa.password="${{ env.AZURE_DB_PASSWORD }}" -Dkeycloak.connectionsJpa.database=${{ steps.azure-create.outputs.db }} -Dkeycloak.connectionsJpa.url="jdbc:sqlserver://${{ steps.azure-create.outputs.endpoint }}:1433;databaseName=${{ steps.azure-create.outputs.db }};encrypt=true;trustServerCertificate=false;sendStringParametersAsUnicode=false" -Djdbc.driver.tmp.dir=target/unpacked/keycloak-${{ env.old-version }}/providers'
 
@@ -723,6 +839,7 @@ jobs:
           # Copy returned surefire-report directories to workspace root to ensure they're discovered
           results=(files/keycloak/results/*)
           rsync -a $results/* ../../../
+          rm -rf $results
 
       - uses: ./.github/actions/upload-flaky-tests
         name: Upload flaky tests
@@ -730,6 +847,63 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           job-name: AzureDB IT
+
+      - name: Azure VM Maven Logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: azure-integration-tests-mvn-logs
+          path: .github/scripts/ansible/files
+
+      - name: Clear Azure DB schema
+        id: azure-clear-db-schema
+        run: |
+         AZ_VM_CLUSTER_NAME=${{ steps.vm-create.outputs.az_vm_cluster }}
+         AZURE_REGION=${{ steps.azure-init.outputs.region }}
+         
+         cd .github/scripts/ansible
+         ./mvn_remote_runner.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} "-Pexecute-sql -f tests/base/pom.xml sql:execute@clear-schema-mssql -Dautocommit=true -Ddriver=com.microsoft.sqlserver.jdbc.SQLServerDriver -Durl=\"jdbc:sqlserver://${{ steps.azure-create.outputs.endpoint }}:1433;databaseName=${{ steps.azure-create.outputs.db }};encrypt=true;trustServerCertificate=false\" -Dusername=${{ steps.azure-create.outputs.username }} -Dpassword=${{ env.AZURE_DB_PASSWORD }}"
+
+      - name: Run Azure new database tests on VM
+        id: azure-new-integration-tests
+        run: |
+          AZ_VM_CLUSTER_NAME=${{ steps.vm-create.outputs.az_vm_cluster }}
+          AZURE_REGION=${{ steps.azure-init.outputs.region }}
+
+          PROPS="-Dkc.test.database=remote -Dkc.test.database.vendor=mssql"
+          PROPS+=" -Dkc.test.database.user=${{ steps.azure-create.outputs.username }}"
+          PROPS+=" -Dkc.test.database.password=${{ env.AZURE_DB_PASSWORD }}"
+          PROPS+=" -Dkc.test.database.url=\"jdbc:sqlserver://${{ steps.azure-create.outputs.endpoint }}:1433;databaseName=${{ steps.azure-create.outputs.db }};encrypt=true;trustServerCertificate=false;sendStringParametersAsUnicode=false\""
+          PROPS+=" -Dkc.test.database.driver=com.microsoft.sqlserver.jdbc.SQLServerDriver"
+          PROPS+=" -Dkc.test.database.driver.artifact=com.microsoft.sqlserver:mssql-jdbc"
+          PROPS+=" -Dkc.test.server.start.timeout=360"
+
+          cd .github/scripts/ansible
+          set +e
+          ./mvn_remote_runner.sh ${AZURE_REGION} ${AZ_VM_CLUSTER_NAME} "$PROPS package -f tests/pom.xml -Dtest=DatabaseTestSuite"
+          MVN_EXIT=$?
+          set -e
+
+          # Copy returned surefire-report directories to workspace root to ensure they're discovered
+          results=(files/keycloak/results/*)
+          rsync -a $results/* ../../../
+          rm -rf $results
+          
+          exit $MVN_EXIT
+
+      - uses: ./.github/actions/upload-flaky-tests
+        name: Upload flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          job-name: AzureDB IT
+
+      - name: Azure VM Maven Logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: azure-new-integration-tests-mvn-logs
+          path: .github/scripts/ansible/files
 
       - name: Delete all Azure resources (resource group)
         if: always()
@@ -747,7 +921,7 @@ jobs:
         db: [postgres, mysql, oracle, mssql, mariadb]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: run-store-tests
         name: Run Store Integration Tests - ${{ matrix.db }}
@@ -766,10 +940,10 @@ jobs:
         db: [edb]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Login to Quay.io
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           username: ${{ secrets.PRIVATE_DBS_QUAY_USERNAME }}
           password: ${{ secrets.PRIVATE_DBS_QUAY_TOKEN }}
@@ -788,7 +962,7 @@ jobs:
     if: needs.conditional.outputs.ci-store == 'true'
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -812,7 +986,7 @@ jobs:
     env:
       MAVEN_OPTS: -Xmx1536m
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -835,7 +1009,7 @@ jobs:
     needs: build
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: unit-test-setup
         name: Unit test setup
@@ -848,19 +1022,19 @@ jobs:
           sudo insmod fake_fips.ko
 
       - name: Run crypto tests
-        run: docker run --rm --workdir /github/workspace -v "${{ github.workspace }}":"/github/workspace" -v "$HOME/.m2":"/root/.m2" registry.access.redhat.com/ubi8/ubi:latest .github/scripts/run-fips-ut.sh
+        run: docker run --rm --workdir /github/workspace -v "${{ github.workspace }}":"/github/workspace" -v "$HOME/.m2":"/root/.m2" registry.access.redhat.com/ubi9/ubi:latest .github/scripts/run-fips-ut.sh
 
   fips-integration-tests:
     name: FIPS IT
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       matrix:
         mode: [non-strict, strict]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -875,7 +1049,7 @@ jobs:
           sudo insmod fake_fips.ko
 
       - name: Run base tests
-        run: docker run --rm --workdir /github/workspace -e "SUREFIRE_RERUN_FAILING_COUNT" -v "${{ github.workspace }}":"/github/workspace" -v "$HOME/.m2":"/root/.m2" registry.access.redhat.com/ubi8/ubi:latest .github/scripts/run-fips-it.sh ${{ matrix.mode }}
+        run: docker run --rm --workdir /github/workspace -e "SUREFIRE_RERUN_FAILING_COUNT" -v "${{ github.workspace }}":"/github/workspace" -v "$HOME/.m2":"/root/.m2" registry.access.redhat.com/ubi9/ubi:latest .github/scripts/run-fips-it.sh ${{ matrix.mode }}
 
       - uses: ./.github/actions/upload-flaky-tests
         name: Upload flaky tests
@@ -894,7 +1068,7 @@ jobs:
         browser: [chrome, firefox]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -927,7 +1101,7 @@ jobs:
     needs: build
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -962,7 +1136,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -975,7 +1149,7 @@ jobs:
 
       - id: cache-maven-repository
         name: ipa-data cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/ipa-data.tar
           key: ${{ steps.weekly-cache-key.outputs.key }}
@@ -994,11 +1168,13 @@ jobs:
         database: [postgres, mysql, oracle, mssql, mariadb]
       fail-fast: false
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
         uses: ./.github/actions/integration-test-setup
+        with:
+          jdk-version: 21 # Keycloak 24 is not compatible with Java 25+
 
       - name: Run Migration Tests
         run: |
@@ -1020,20 +1196,64 @@ jobs:
         with:
           job-name: Migration Tests
 
+  # Migration test with case-sensitive charset
+  migration-tests-cs:
+    name: Migration Tests (Case Sensitive DB)
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        old-version: [ 24.0.4 ]
+        database: [ mssql ]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: integration-test-setup
+        name: Integration test setup
+        uses: ./.github/actions/integration-test-setup
+        with:
+          jdk-version: 21 # Keycloak 24 is not compatible with Java 25+
+
+      - name: Run Migration Tests (Case Sensitive DB)
+        run: |
+          ./mvnw clean install ${{ env.SUREFIRE_RETRY }} \
+          -Pauth-server-quarkus -Pdb-${{ matrix.database }} -Pauth-server-migration \
+          -Dtest=MigrationTest \
+          -Dmigration.mode=auto \
+          -Dmigrated.auth.server.version=${{ matrix.old-version }} \
+          -Dmigration.import.file.name=migration-realm-${{ matrix.old-version }}.json \
+          -Dauth.server.ssl.required=false \
+          -Dauth.server.db.host=localhost \
+          -Dmssql.collation=Latin1_General_100_CS_AS_SC_UTF8 \
+          "-Dwebdriver.chrome.driver=$CHROMEWEBDRIVER/chromedriver" \
+          -f testsuite/integration-arquillian/pom.xml 2>&1 | misc/log/trimmer.sh
+
+      - uses: ./.github/actions/upload-flaky-tests
+        name: Upload flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          job-name: Migration Tests (Case Sensitive DB)
+
   test-framework:
     name: Test Framework
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
         uses: ./.github/actions/integration-test-setup
 
-      - name: Run tests
+      - name: Run tests with defaults
         run: ./mvnw package -f test-framework/pom.xml
+
+      - name: Run tests with embedded server
+        run: KC_TEST_SERVER=embedded ./mvnw package -f test-framework/tests/pom.xml -Dtest=CustomConfigTest,RunOnServerTest,TlsEnabledTest
 
   base-new-integration-tests:
     name: Base IT (new)
@@ -1042,10 +1262,11 @@ jobs:
       - build
     timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
-        suite: [Base1TestSuite, Base2TestSuite]
+        suite: [Base1TestSuite, Base2TestSuite, Base3TestSuite]
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -1059,6 +1280,67 @@ jobs:
       - name: Run tests
         run: ./mvnw package -f tests/pom.xml -Dtest=${{ matrix.suite }}
 
+  scim-integration-tests:
+    name: SCIM IT
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: integration-test-setup
+        name: Integration test setup
+        uses: ./.github/actions/integration-test-setup
+
+        # This step is necessary because test/clustering requires building a new Keycloak image built from tar.gz
+        # file that is not part of m2-keycloak.tzts archive
+      - name: Build tar keycloak-quarkus-dist
+        run: ./mvnw package -pl quarkus/server/,quarkus/dist/
+
+      - name: Run tests
+        run: ./mvnw package -f scim/tests/pom.xml
+
+  ssf-integration-tests:
+    name: SSF IT
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: integration-test-setup
+        name: Integration test setup
+        uses: ./.github/actions/integration-test-setup
+
+        # This step is necessary because test/clustering requires building a new Keycloak image built from tar.gz
+        # file that is not part of m2-keycloak.tzts archive
+      - name: Build tar keycloak-quarkus-dist
+        run: ./mvnw package -pl quarkus/server/,quarkus/dist/
+
+      - name: Run tests
+        run: ./mvnw package -f ssf/tests/pom.xml
+
+  authzen-integration-tests:
+    name: AuthZen IT
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: integration-test-setup
+        name: Integration test setup
+        uses: ./.github/actions/integration-test-setup
+
+      - name: Build tar keycloak-quarkus-dist
+        run: ./mvnw package -pl quarkus/server/,quarkus/dist/
+
+      - name: Run tests
+        run: ./mvnw package -f authzen/tests/pom.xml
+
   admin-v2-tests:
     name: Admin v2
     if: needs.conditional.outputs.ci-admin-v2 == 'true'
@@ -1068,7 +1350,7 @@ jobs:
       - conditional
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -1091,7 +1373,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - id: integration-test-setup
         name: Integration test setup
@@ -1106,6 +1388,48 @@ jobs:
         run: ./mvnw verify -pl tests/clustering
         env:
           KC_TEST_SERVER_IMAGES: "quay.io/keycloak/keycloak:${{ matrix.version }},-"
+
+      - name: Run tests with stateless
+        run: ./mvnw verify -pl tests/clustering -Dsurefire.reportsDirectory=target/surefire-reports-stateless
+        env:
+          KC_TEST_SERVER_IMAGES: "quay.io/keycloak/keycloak:${{ matrix.version }},-"
+          KC_TEST_SERVER_STATELESS: "true"
+
+      - uses: ./.github/actions/upload-flaky-tests
+        name: Upload flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          job-name: Cluster Compatibility Tests
+
+  stateless-cluster-integration-tests:
+    name: Clustering IT (Stateless)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - id: integration-test-setup
+        name: Integration test setup
+        uses: ./.github/actions/integration-test-setup
+
+        # This step is necessary because test/clustering requires building a new Keycloak image built from tar.gz
+        # file that is not part of m2-keycloak.tzts archive
+      - name: Build tar keycloak-quarkus-dist
+        run: ./mvnw package -pl quarkus/server/,quarkus/dist/
+
+      - name: Run tests
+        run: ./mvnw verify -pl tests/clustering
+        env:
+          KC_TEST_SERVER_STATELESS: "true"
+
+      - uses: ./.github/actions/upload-flaky-tests
+        name: Upload flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          job-name: Clustering IT (Stateless)
 
   check:
     name: Status Check - Keycloak CI
@@ -1130,14 +1454,19 @@ jobs:
       - webauthn-integration-tests
       - sssd-unit-tests
       - migration-tests
+      - migration-tests-cs
       - external-infinispan-tests
       - test-framework
       - base-new-integration-tests
       - mixed-cluster-compatibility-tests
+      - authzen-integration-tests
       - admin-v2-tests
+      - testsuite-deprecation-check
+      - stateless-tests
+      - stateless-cluster-integration-tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/status-check
         with:
           jobs: ${{ toJSON(needs) }}

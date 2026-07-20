@@ -19,7 +19,6 @@ import {
   Switch,
   Text,
   TextInput,
-  TextArea,
   TextVariants,
 } from "@patternfly/react-core";
 import { useState } from "react";
@@ -55,6 +54,8 @@ export const RealmSettingsTokensTab = ({
   const serverInfo = useServerInfo();
   const isFeatureEnabled = useIsFeatureEnabled();
   const { whoAmI } = useWhoAmI();
+  const openId4vciEnabled =
+    isFeatureEnabled(Feature.OpenId4VCI) && realm.verifiableCredentialsEnabled;
 
   const [defaultSigAlgDrpdwnIsOpen, setDefaultSigAlgDrpdwnOpen] =
     useState(false);
@@ -68,6 +69,8 @@ export const RealmSettingsTokensTab = ({
 
   const { control, register, reset, formState, handleSubmit } =
     useFormContext<RealmRepresentation>();
+  const credentialOfferLifespanDefaultValue =
+    realm.attributes?.["credentialOfferLifespanS"] ?? 300;
 
   // Show a global error notification if validation fails
   const onError = () => {
@@ -92,18 +95,12 @@ export const RealmSettingsTokensTab = ({
     defaultValue: false,
   });
 
-  const signedMetadataEnabled = useWatch({
+  const requestEncryptionRequired = useWatch({
     control,
     name: convertAttributeNameToForm(
-      "attributes.oid4vci.signed_metadata.enabled",
+      "attributes.oid4vci.request.encryption.required",
     ),
-    defaultValue: realm.attributes?.["oid4vci.signed_metadata.enabled"],
-  });
-
-  const encryptionRequired = useWatch({
-    control,
-    name: convertAttributeNameToForm("attributes.oid4vci.encryption.required"),
-    defaultValue: realm.attributes?.["oid4vci.encryption.required"],
+    defaultValue: realm.attributes?.["oid4vci.request.encryption.required"],
   });
 
   const strategy = useWatch({
@@ -211,12 +208,10 @@ export const RealmSettingsTokensTab = ({
                       id="oAuthDevicePollingInterval"
                       value={field.value}
                       min={0}
-                      onPlus={() => field.onChange(Number(field?.value) + 1)}
+                      onPlus={() => field.onChange(Number(field.value) + 1)}
                       onMinus={() =>
                         field.onChange(
-                          Number(field?.value) > 0
-                            ? Number(field?.value) - 1
-                            : 0,
+                          Number(field.value) > 0 ? Number(field.value) - 1 : 0,
                         )
                       }
                       onChange={(event) => {
@@ -654,7 +649,7 @@ export const RealmSettingsTokensTab = ({
               )}
             />
           </FormGroup>
-          {!isFeatureEnabled(Feature.OpenId4VCI) && (
+          {!openId4vciEnabled && (
             <FixedButtonsGroup
               name="tokens-tab"
               isSubmit
@@ -667,7 +662,7 @@ export const RealmSettingsTokensTab = ({
     },
     {
       title: t("oid4vciAttributes"),
-      isHidden: !isFeatureEnabled(Feature.OpenId4VCI),
+      isHidden: !openId4vciEnabled,
       panel: (
         <FormAccess
           isHorizontal
@@ -681,6 +676,7 @@ export const RealmSettingsTokensTab = ({
             )}
             label={t("oid4vciNonceLifetime")}
             labelIcon={t("oid4vciNonceLifetimeHelp")}
+            className="c-nonce-lifetime"
             controller={{
               defaultValue: 60,
               rules: { min: 30 },
@@ -690,67 +686,65 @@ export const RealmSettingsTokensTab = ({
           />
           <TimeSelectorControl
             name={convertAttributeNameToForm(
-              "attributes.preAuthorizedCodeLifespanS",
+              "attributes.credentialOfferLifespanS",
             )}
-            label={t("preAuthorizedCodeLifespan")}
-            labelIcon={t("preAuthorizedCodeLifespanHelp")}
+            label={t("credentialOfferLifespan")}
+            labelIcon={t("credentialOfferLifespanHelp")}
+            className="credential-offer-lifespan"
             controller={{
-              defaultValue: 30,
+              defaultValue: credentialOfferLifespanDefaultValue,
               rules: { min: 30 },
             }}
             min={30}
             units={["second", "minute", "hour"]}
           />
+          <TimeSelectorControl
+            name={convertAttributeNameToForm(
+              "attributes.oid4vci.signed_metadata.lifespan",
+            )}
+            label={t("signedMetadataLifespan")}
+            labelIcon={t("signedMetadataLifespanHelp")}
+            className="signed-metadata-lifespan"
+            controller={{
+              defaultValue: 60,
+            }}
+            units={["second", "minute", "hour"]}
+            data-testid="signed-metadata-lifespan"
+          />
+          <SelectControl
+            name={convertAttributeNameToForm(
+              "attributes.oid4vci.signed_metadata.alg",
+            )}
+            label={t("signedMetadataSigningAlgorithm")}
+            labelIcon={t("signedMetadataSigningAlgorithmHelp")}
+            controller={{
+              defaultValue: "RS256",
+            }}
+            options={asymmetricSigAlgOptions.map((p) => ({
+              key: p,
+              value: p,
+            }))}
+            data-testid="signed-metadata-signing-algorithm"
+          />
           <DefaultSwitchControl
             name={convertAttributeNameToForm(
-              "attributes.oid4vci.signed_metadata.enabled",
+              "attributes.oid4vci.request.encryption.required",
             )}
-            label={t("signedIssuerMetadata")}
-            labelIcon={t("signedIssuerMetadataHelp")}
+            label={t("requireRequestEncryption")}
+            labelIcon={t("requireRequestEncryptionHelp")}
             stringify
-            data-testid="signed-metadata-switch"
+            data-testid="require-request-encryption-switch"
           />
-          {signedMetadataEnabled === "true" && (
-            <>
-              <TimeSelectorControl
-                name={convertAttributeNameToForm(
-                  "attributes.oid4vci.signed_metadata.lifespan",
-                )}
-                label={t("signedMetadataLifespan")}
-                labelIcon={t("signedMetadataLifespanHelp")}
-                controller={{
-                  defaultValue: 60,
-                }}
-                units={["second", "minute", "hour"]}
-                data-testid="signed-metadata-lifespan"
-              />
-              <SelectControl
-                name={convertAttributeNameToForm(
-                  "attributes.oid4vci.signed_metadata.alg",
-                )}
-                label={t("signedMetadataSigningAlgorithm")}
-                labelIcon={t("signedMetadataSigningAlgorithmHelp")}
-                controller={{
-                  defaultValue: "RS256",
-                }}
-                options={asymmetricSigAlgOptions.map((p) => ({
-                  key: p,
-                  value: p,
-                }))}
-                data-testid="signed-metadata-signing-algorithm"
-              />
-            </>
-          )}
           <DefaultSwitchControl
             name={convertAttributeNameToForm(
-              "attributes.oid4vci.encryption.required",
+              "attributes.oid4vci.response.encryption.required",
             )}
-            label={t("requireEncryption")}
-            labelIcon={t("requireEncryptionHelp")}
+            label={t("requireResponseEncryption")}
+            labelIcon={t("requireResponseEncryptionHelp")}
             stringify
-            data-testid="require-encryption-switch"
+            data-testid="require-response-encryption-switch"
           />
-          {encryptionRequired === "true" && (
+          {requestEncryptionRequired === "true" && (
             <DefaultSwitchControl
               name={convertAttributeNameToForm(
                 "attributes.oid4vci.request.zip.algorithms",
@@ -774,62 +768,6 @@ export const RealmSettingsTokensTab = ({
             }}
             data-testid="batch-issuance-size"
           />
-
-          <Text
-            className="kc-override-action-tokens-subtitle"
-            component={TextVariants.h1}
-          >
-            {t("attestationTrust")}
-          </Text>
-          <FormGroup
-            label={t("trustedKeyIds")}
-            fieldId="trustedKeyIds"
-            labelIcon={
-              <HelpItem
-                helpText={t("trustedKeyIdsHelp")}
-                fieldLabelId="trustedKeyIds"
-              />
-            }
-          >
-            <TextInput
-              id="trustedKeyIds"
-              data-testid="trusted-key-ids"
-              {...register(
-                convertAttributeNameToForm(
-                  "attributes.oid4vc.attestation.trusted_key_ids",
-                ),
-              )}
-            />
-          </FormGroup>
-          <FormGroup
-            label={t("trustedKeys")}
-            fieldId="trustedKeys"
-            labelIcon={
-              <HelpItem
-                helpText={t("trustedKeysHelp")}
-                fieldLabelId="trustedKeys"
-              />
-            }
-          >
-            <Controller
-              name={convertAttributeNameToForm(
-                "attributes.oid4vc.attestation.trusted_keys",
-              )}
-              control={control}
-              defaultValue={
-                realm.attributes?.["oid4vc.attestation.trusted_keys"]
-              }
-              render={({ field }) => (
-                <TextArea
-                  id="trustedKeys"
-                  data-testid="trusted-keys"
-                  value={field.value}
-                  onChange={(_event, value) => field.onChange(value)}
-                  resizeOrientation="vertical"
-                />
-              )}
-            />
-          </FormGroup>
 
           <Text
             className="kc-override-action-tokens-subtitle"

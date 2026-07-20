@@ -20,7 +20,7 @@
     <parent>
         <artifactId>keycloak-docs-parent</artifactId>
         <groupId>org.keycloak</groupId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -53,6 +53,33 @@
         <dependency>
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-quarkus-server-deployment</artifactId>
+        </dependency>
+        <!-- Build ordering: these modules generate doc/example files read from the filesystem -->
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-admin-v2-services</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-admin-cli</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-js-parent</artifactId>
+            <version>${project.version}</version>
+            <type>pom</type>
         </dependency>
         <dependency>
             <groupId>org.freemarker</groupId>

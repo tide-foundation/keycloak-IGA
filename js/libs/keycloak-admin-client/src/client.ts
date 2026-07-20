@@ -21,6 +21,7 @@ import { defaultBaseUrl, defaultRealm } from "./utils/constants.js";
 import { DecodedToken, decodeToken } from "./utils/decode.js";
 import { TideProvider } from "./resources/tideProvider.js"; // TIDECLOAK IMPLEMENTATION
 import { TideUsersExt } from "./resources/TideUserExt.js"; // TIDECLOAK IMPLEMENTATION
+import { Iga } from "./resources/iga.js"; // TIDECLOAK IMPLEMENTATION
 
 export type RequestOptions = Omit<RequestInit, "signal">;
 
@@ -34,6 +35,12 @@ export interface ConnectionConfig {
   requestOptions?: RequestOptions;
   requestArgOptions?: Pick<RequestArgs, "catchNotFound">;
   timeout?: number;
+  /**
+   * Enable experimental APIs (e.g., v2 API).
+   * These APIs are not yet stable and may change without notice.
+   * @default false
+   */
+  enableExperimentalApis?: boolean;
 }
 
 const MIN_VALIDITY = 5; // in seconds
@@ -59,6 +66,7 @@ export class KeycloakAdminClient {
   public cache: Cache;
   public tideAdmin: TideProvider; // TIDECLOAK IMPLEMENTATION
   public tideUsersExt: TideUsersExt; // TIDECLOAK IMPLEMENTATION
+  public iga: Iga; // TIDECLOAK IMPLEMENTATION
 
   // Members
   public baseUrl: string;
@@ -67,6 +75,7 @@ export class KeycloakAdminClient {
   public accessToken?: string;
   public refreshToken?: string;
   public timeout?: number;
+  public enableExperimentalApis: boolean;
 
   #requestOptions?: RequestOptions;
   #globalRequestArgOptions?: Pick<RequestArgs, "catchNotFound">;
@@ -79,6 +88,8 @@ export class KeycloakAdminClient {
     this.baseUrl = connectionConfig?.baseUrl || defaultBaseUrl;
     this.realmName = connectionConfig?.realmName || defaultRealm;
     this.timeout = connectionConfig?.timeout;
+    this.enableExperimentalApis =
+      connectionConfig?.enableExperimentalApis ?? false;
     this.#requestOptions = connectionConfig?.requestOptions;
     this.#globalRequestArgOptions = connectionConfig?.requestArgOptions;
 
@@ -102,6 +113,7 @@ export class KeycloakAdminClient {
     this.cache = new Cache(this);
     this.tideAdmin = new TideProvider(this); // TIDECLOAK IMPLEMENTATION
     this.tideUsersExt = new TideUsersExt(this); // TIDECLOAK IMPLEMENTATION
+    this.iga = new Iga(this); // TIDECLOAK IMPLEMENTATION
   }
 
   public async auth(credentials: Credentials) {

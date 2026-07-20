@@ -17,18 +17,27 @@
 
 package org.keycloak.protocol.oid4vc;
 
+import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
+import jakarta.ws.rs.core.Response;
+
 import org.keycloak.Config;
+import org.keycloak.VCFormat;
 import org.keycloak.constants.OID4VCIConstants;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.ClientScopeModel;
+import org.keycloak.models.IssuedVerifiableCredentialModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.models.ProtocolMapperModel;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserModel;
+import org.keycloak.models.oid4vci.CredentialScopeModel;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
@@ -37,34 +46,44 @@ import org.keycloak.protocol.LoginProtocolFactory;
 import org.keycloak.protocol.oid4vc.issuance.OID4VCIssuerEndpoint;
 import org.keycloak.protocol.oid4vc.issuance.mappers.OID4VCSubjectIdMapper;
 import org.keycloak.protocol.oid4vc.issuance.mappers.OID4VCUserAttributeMapper;
+import org.keycloak.protocol.oid4vc.model.DisplayObject;
+import org.keycloak.protocol.oid4vc.model.ProofType;
+import org.keycloak.protocol.oid4vc.utils.OID4VCUtil;
 import org.keycloak.protocol.oidc.OIDCLoginProtocolFactory;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
+import org.keycloak.services.ErrorResponse;
+import org.keycloak.services.ErrorResponseException;
+import org.keycloak.util.JsonSerialization;
 
 import org.jboss.logging.Logger;
 
+import static org.keycloak.OID4VCConstants.CLAIM_NAME_SUBJECT_ID;
+import static org.keycloak.OID4VCConstants.OID4VCI_ENABLED_ATTRIBUTE_KEY;
+import static org.keycloak.VCFormat.SD_JWT_VC;
 import static org.keycloak.constants.OID4VCIConstants.OID4VC_PROTOCOL;
 import static org.keycloak.models.ClientScopeModel.INCLUDE_IN_TOKEN_SCOPE;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.CONFIGURATION_ID;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.CONTEXTS;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.CREDENTIAL_IDENTIFIER;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.CRYPTOGRAPHIC_BINDING_METHODS;
 import static org.keycloak.models.oid4vci.CredentialScopeModel.CRYPTOGRAPHIC_BINDING_METHODS_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.EXPIRY_IN_SECONDS;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.EXPIRY_IN_SECONDS_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.FORMAT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.FORMAT_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.HASH_ALGORITHM;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.HASH_ALGORITHM_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.INCLUDE_IN_METADATA;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.SD_JWT_DECOYS_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.SD_JWT_NUMBER_OF_DECOYS;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.SD_JWT_VISIBLE_CLAIMS;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.SD_JWT_VISIBLE_CLAIMS_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.TOKEN_JWS_TYPE;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.TOKEN_TYPE_DEFAULT;
-import static org.keycloak.models.oid4vci.CredentialScopeModel.TYPES;
 import static org.keycloak.models.oid4vci.CredentialScopeModel.VCT;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BINDING_REQUIRED;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BINDING_REQUIRED_PROOF_TYPES;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BUILD_CONFIG_HASH_ALGORITHM;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BUILD_CONFIG_HASH_ALGORITHM_DEFAULT;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BUILD_CONFIG_SD_JWT_VISIBLE_CLAIMS;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BUILD_CONFIG_SD_JWT_VISIBLE_CLAIMS_DEFAULT;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_BUILD_CONFIG_TOKEN_JWS_TYPE;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_CONFIGURATION_ID;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_CONTEXTS;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_CRYPTOGRAPHIC_BINDING_METHODS;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_DISPLAY;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_EXPIRY_IN_SECONDS;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_EXPIRY_IN_SECONDS_DEFAULT;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_FORMAT;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_INCLUDE_IN_METADATA;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_SD_JWT_NUMBER_OF_DECOYS;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_SD_JWT_NUMBER_OF_DECOYS_DEFAULT;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.VC_SUPPORTED_TYPES;
+import static org.keycloak.models.oid4vci.CredentialScopeModel.getDefaultTokenJwsTypeForFormat;
 
 /**
  * Factory for creating all OID4VC related endpoints and the default mappers.
@@ -75,7 +94,6 @@ public class OID4VCLoginProtocolFactory implements LoginProtocolFactory, OID4VCE
 
 	private static final Logger LOGGER = Logger.getLogger(OID4VCLoginProtocolFactory.class);
 
-	private static final String CLIENT_ROLES_MAPPER = "client-roles";
 	private static final String USERNAME_MAPPER = "username";
 	private static final String SUBJECT_ID_MAPPER = "subject-id";
 	private static final String EMAIL_MAPPER = "email";
@@ -83,16 +101,18 @@ public class OID4VCLoginProtocolFactory implements LoginProtocolFactory, OID4VCE
 	private static final String FIRST_NAME_MAPPER = "first-name";
 
 	public static final String PROTOCOL_ID = OID4VCIConstants.OID4VC_PROTOCOL;
+    public static final String CREDENTIAL_TYPE_NATURAL_PERSON = "natural_person";
+    public static final String NATURAL_PERSON_SCOPE_CONSENT_TEXT = "${naturalPersonScopeConsentText}";
 
 	private final Map<String, ProtocolMapperModel> builtins = new HashMap<>();
 
 	@Override
 	public void init(Config.Scope config) {
-		builtins.put(SUBJECT_ID_MAPPER, OID4VCSubjectIdMapper.create("subject id", "id"));
+		builtins.put(SUBJECT_ID_MAPPER, OID4VCSubjectIdMapper.create(SUBJECT_ID_MAPPER, CLAIM_NAME_SUBJECT_ID, UserModel.DID));
 		builtins.put(USERNAME_MAPPER, OID4VCUserAttributeMapper.create(USERNAME_MAPPER, "username", "username", false));
 		builtins.put(EMAIL_MAPPER, OID4VCUserAttributeMapper.create(EMAIL_MAPPER, "email", "email", false));
 		builtins.put(FIRST_NAME_MAPPER, OID4VCUserAttributeMapper.create(FIRST_NAME_MAPPER, "firstName", "firstName", false));
-		builtins.put(LAST_NAME_MAPPER, OID4VCUserAttributeMapper.create(LAST_NAME_MAPPER, "lastName", "familyName", false));
+		builtins.put(LAST_NAME_MAPPER, OID4VCUserAttributeMapper.create(LAST_NAME_MAPPER, "familyName", "lastName", false));
 	}
 
 	@Override
@@ -120,18 +140,40 @@ public class OID4VCLoginProtocolFactory implements LoginProtocolFactory, OID4VCE
     public void createDefaultClientScopes(RealmModel newRealm, boolean addScopesToExistingClients) {
         LOGGER.debugf("Create default scopes for realm %s", newRealm.getName());
 
-        ClientScopeModel naturalPersonScope = KeycloakModelUtils.getClientScopeByName(newRealm, "natural_person");
-        if (naturalPersonScope == null) {
-            LOGGER.debug("Add natural person scope");
-            naturalPersonScope = newRealm.addClientScope(String.format("%s_%s", OID4VC_PROTOCOL, "natural_person"));
-            naturalPersonScope.setDescription("OID4VCI Scope, that adds properties required for a natural person.");
-            naturalPersonScope.setProtocol(OID4VC_PROTOCOL);
-            naturalPersonScope.addProtocolMapper(builtins.get(SUBJECT_ID_MAPPER));
-            naturalPersonScope.addProtocolMapper(builtins.get(EMAIL_MAPPER));
-            naturalPersonScope.addProtocolMapper(builtins.get(FIRST_NAME_MAPPER));
-            naturalPersonScope.addProtocolMapper(builtins.get(LAST_NAME_MAPPER));
-            addClientScopeDefaults(naturalPersonScope);
-            newRealm.addDefaultClientScope(naturalPersonScope, true);
+        for (String format : VCFormat.SUPPORTED_FORMATS) {
+            String scopeName = CREDENTIAL_TYPE_NATURAL_PERSON + VCFormat.getScopeSuffix(format);
+            ClientScopeModel clientScope = KeycloakModelUtils.getClientScopeByName(newRealm, scopeName);
+            if (clientScope == null) {
+                LOGGER.debugf("Add client scope: %s", scopeName);
+                clientScope = newRealm.addClientScope(String.format("%s_%s", OID4VC_PROTOCOL, scopeName));
+                clientScope.setDescription("OID4VCI credential scope that represents a natural person in format: " + format);
+                clientScope.setDisplayOnConsentScreen(true);
+                clientScope.setConsentScreenText(NATURAL_PERSON_SCOPE_CONSENT_TEXT);
+                clientScope.setProtocol(OID4VC_PROTOCOL);
+                clientScope.addProtocolMapper(builtins.get(SUBJECT_ID_MAPPER));
+                clientScope.addProtocolMapper(builtins.get(EMAIL_MAPPER));
+                clientScope.addProtocolMapper(builtins.get(FIRST_NAME_MAPPER));
+                clientScope.addProtocolMapper(builtins.get(LAST_NAME_MAPPER));
+
+                ClientScopeRepresentation clientScopeRep = ModelToRepresentation.toRepresentation(clientScope);
+                clientScopeRep.setAttributes(new HashMap<>(Map.of(
+                        VC_BINDING_REQUIRED, "true",
+                        VC_BINDING_REQUIRED_PROOF_TYPES, ProofType.JWT + "," + ProofType.ATTESTATION
+                )));
+
+                try {
+                    DisplayObject display = new DisplayObject();
+                    display.setName("Natural person verifiable credential");
+                    display.setLocale(Locale.ENGLISH.toLanguageTag());
+                    String displayStr = JsonSerialization.writeValueAsString(List.of(display));
+                    clientScopeRep.getAttributes().put(VC_DISPLAY, displayStr);
+                } catch (IOException ioe) {
+                    LOGGER.warnf(ioe, "Failed to initialize display in credential scope '%s'", scopeName);
+                }
+
+                addClientScopeDefaults(clientScopeRep);
+                RepresentationToModel.updateClientScope(clientScopeRep, clientScope);
+            }
         }
     }
 
@@ -142,25 +184,56 @@ public class OID4VCLoginProtocolFactory implements LoginProtocolFactory, OID4VCE
 
     @Override
     public void addClientScopeDefaults(ClientScopeRepresentation clientScope) {
+        String scopeName = clientScope.getName();
+
+        if (clientScope.getAttributes() == null) {
+            clientScope.setAttributes(new HashMap<>());
+        }
+        
+        clientScope.getAttributes().computeIfAbsent(VC_FORMAT, k -> VCFormat.getFromScope(scopeName));
+        String format = clientScope.getAttributes().get(VC_FORMAT);
+
+        int idx = scopeName.lastIndexOf(VCFormat.getScopeSuffix(format));
+        String credentialType = idx > 0 ? scopeName.substring(0, idx) : scopeName;
 
         // Note, there is no sensible default for the Issuer's DID unless we generate a did:key:* from the signing key
-        // Leaving vc.issuer_did undefined results in the realm's url being used as the value for the Issuer's ID (iss), which is fine.
-        // clientScope.getAttributes().computeIfAbsent(ISSUER_DID, k -> <generate did or use the realm url>);
+        // Leaving vc.issuer_did undefined results in the realm's url being used as the value for the Issuer's ID (iss).
+        // clientScope.getAttributes().computeIfAbsent(ISSUER_DID, k -> <generate did or use the realm url>)
 
         clientScope.getAttributes().putIfAbsent(INCLUDE_IN_TOKEN_SCOPE, "true");
-        clientScope.getAttributes().putIfAbsent(INCLUDE_IN_METADATA, "true");
-        clientScope.getAttributes().computeIfAbsent(CONFIGURATION_ID, k -> clientScope.getName());
-        clientScope.getAttributes().computeIfAbsent(CREDENTIAL_IDENTIFIER, k -> clientScope.getName());
-        clientScope.getAttributes().computeIfAbsent(TYPES, k -> clientScope.getName());
-        clientScope.getAttributes().computeIfAbsent(CONTEXTS, k -> clientScope.getName());
-        clientScope.getAttributes().computeIfAbsent(VCT, k -> clientScope.getName());
-        clientScope.getAttributes().computeIfAbsent(FORMAT, k -> FORMAT_DEFAULT);
-        clientScope.getAttributes().computeIfAbsent(CRYPTOGRAPHIC_BINDING_METHODS, k -> CRYPTOGRAPHIC_BINDING_METHODS_DEFAULT);
-        clientScope.getAttributes().computeIfAbsent(SD_JWT_NUMBER_OF_DECOYS, k -> String.valueOf(SD_JWT_DECOYS_DEFAULT));
-        clientScope.getAttributes().computeIfAbsent(SD_JWT_VISIBLE_CLAIMS, k -> SD_JWT_VISIBLE_CLAIMS_DEFAULT);
-        clientScope.getAttributes().computeIfAbsent(HASH_ALGORITHM, k -> HASH_ALGORITHM_DEFAULT);
-        clientScope.getAttributes().computeIfAbsent(TOKEN_JWS_TYPE, k -> TOKEN_TYPE_DEFAULT);
-        clientScope.getAttributes().computeIfAbsent(EXPIRY_IN_SECONDS, k -> String.valueOf(EXPIRY_IN_SECONDS_DEFAULT));
+        clientScope.getAttributes().putIfAbsent(VC_INCLUDE_IN_METADATA, "true");
+        clientScope.getAttributes().putIfAbsent(VC_CONFIGURATION_ID, scopeName);
+        clientScope.getAttributes().putIfAbsent(VC_SUPPORTED_TYPES, credentialType);
+        clientScope.getAttributes().putIfAbsent(VC_CONTEXTS, credentialType);
+        clientScope.getAttributes().putIfAbsent(VCT, credentialType);
+        clientScope.getAttributes().putIfAbsent(VC_CRYPTOGRAPHIC_BINDING_METHODS, CRYPTOGRAPHIC_BINDING_METHODS_DEFAULT);
+        clientScope.getAttributes().putIfAbsent(VC_BUILD_CONFIG_HASH_ALGORITHM, VC_BUILD_CONFIG_HASH_ALGORITHM_DEFAULT);
+        clientScope.getAttributes().putIfAbsent(VC_BUILD_CONFIG_TOKEN_JWS_TYPE, getDefaultTokenJwsTypeForFormat(format));
+        clientScope.getAttributes().putIfAbsent(VC_EXPIRY_IN_SECONDS, String.valueOf(VC_EXPIRY_IN_SECONDS_DEFAULT));
+
+        if (SD_JWT_VC.equals(format)) {
+            clientScope.getAttributes().putIfAbsent(VC_SD_JWT_NUMBER_OF_DECOYS, String.valueOf(VC_SD_JWT_NUMBER_OF_DECOYS_DEFAULT));
+            clientScope.getAttributes().putIfAbsent(VC_BUILD_CONFIG_SD_JWT_VISIBLE_CLAIMS, VC_BUILD_CONFIG_SD_JWT_VISIBLE_CLAIMS_DEFAULT);
+        }
+    }
+
+    @Override
+    public void validateClientScope(KeycloakSession session, ClientScopeRepresentation clientScope) throws ErrorResponseException {
+        LoginProtocolFactory.super.validateClientScope(session, clientScope);
+
+        RealmModel realm = session.getContext().getRealm();
+        if (!realm.isVerifiableCredentialsEnabled()) {
+            throw ErrorResponse.error(
+                    "OID4VC protocol cannot be used when Verifiable Credentials is disabled for the realm",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        validateOID4VCIRefreshInterval(clientScope);
+    }
+
+    @Override
+    public boolean isValidClientScope(KeycloakSession session, ClientModel client, ClientScopeModel clientScope) {
+        return session.getContext().getRealm().isVerifiableCredentialsEnabled();
     }
 
     @Override
@@ -181,11 +254,84 @@ public class OID4VCLoginProtocolFactory implements LoginProtocolFactory, OID4VCE
         return OIDCLoginProtocolFactory.UI_ORDER - 20;
     }
 
-    // Private ---------------------------------------------------------------------------------------------------------
+    @Override
+    public void validateClientScopeAssignment(KeycloakSession session, ClientScopeModel clientScope, boolean defaultScope, RealmModel realm) {
+        if (!OID4VC_PROTOCOL.equals(clientScope.getProtocol())) {
+            return;
+        }
 
-    private void addClientScopeDefaults(ClientScopeModel clientScope) {
-        ClientScopeRepresentation clientScopeRep = ModelToRepresentation.toRepresentation(clientScope);
-        addClientScopeDefaults(clientScopeRep);
-        RepresentationToModel.updateClientScope(clientScopeRep, clientScope);
+        if (!realm.isVerifiableCredentialsEnabled()) {
+            throw new ErrorResponseException("invalid_request",
+                    "OID4VCI client scopes cannot be assigned when Verifiable Credentials is disabled for the realm",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        if (defaultScope) {
+            throw new ErrorResponseException("invalid_request",
+                    "OID4VCI client scopes cannot be assigned as Default scopes. Only Optional scope assignment is supported.",
+                    Response.Status.BAD_REQUEST);
+        }
+    }
+
+    @Override
+    public boolean allowAsClientProtocol() {
+        return false;
+    }
+
+    @Override
+    public void onConsentRevoked(KeycloakSession session, ClientModel client, UserModel user) {
+        boolean oid4vciEnabled = Boolean.parseBoolean(client.getAttributes().get(OID4VCI_ENABLED_ATTRIBUTE_KEY));
+        if (oid4vciEnabled) {
+            List<IssuedVerifiableCredentialModel> issuedCreds = OID4VCUtil.getIssuedVerifiableCredentialsByUserAndClient(session, user, client);
+            if (!issuedCreds.isEmpty()) {
+                LOGGER.tracef("Revoking %d issued verifiable credentials of user '%s' for wallet client '%s'", issuedCreds.size(), user.getUsername(), client.getClientId());
+            }
+            for (IssuedVerifiableCredentialModel issuedCred : issuedCreds) {
+                session.users().removeIssuedVerifiableCredential(issuedCred.getId());
+            }
+        }
+    }
+
+    // Private ---------------------------------------------------------------------------------------------------------
+    /**
+     * Validates that the refresh interval does not exceed the credential lifetime.
+     *
+     * @param clientScope the client scope representation to validate
+     * @throws ErrorResponseException if refresh interval > credential lifetime
+     */
+    private void validateOID4VCIRefreshInterval(ClientScopeRepresentation clientScope) throws ErrorResponseException {
+        if (clientScope.getAttributes() == null) {
+            return;
+        }
+
+        String expiryStr = clientScope.getAttributes().get(CredentialScopeModel.VC_EXPIRY_IN_SECONDS);
+        String refreshIntervalStr = clientScope.getAttributes().get(CredentialScopeModel.VC_REFRESH_INTERVAL_IN_SECONDS);
+
+        // If either is not set, use defaults
+        final int expiry;
+        final int refreshInterval;
+        try {
+            expiry = expiryStr != null ? Integer.parseInt(expiryStr) : CredentialScopeModel.VC_EXPIRY_IN_SECONDS_DEFAULT;
+            // Smart default: if refresh interval is not set, use the smaller of 7 days or the credential lifetime
+            // This ensures backward compatibility with existing tests that set short lifetimes
+            if (refreshIntervalStr != null) {
+                refreshInterval = Integer.parseInt(refreshIntervalStr);
+            } else {
+                refreshInterval = Math.min(CredentialScopeModel.VC_REFRESH_INTERVAL_IN_SECONDS_DEFAULT, expiry);
+            }
+        } catch (NumberFormatException ex) {
+            throw ErrorResponse.error("Credential lifetime and refresh interval must be valid integer values in seconds.", Response.Status.BAD_REQUEST);
+        }
+        if (expiry <= 0 || refreshInterval <= 0) {
+            throw ErrorResponse.error("Credential lifetime and refresh interval must be greater than 0 seconds.", Response.Status.BAD_REQUEST);
+        }
+
+        if (refreshInterval > expiry) {
+            throw ErrorResponse.error(
+                    String.format("Credential refresh interval (%d seconds) cannot exceed credential lifetime (%d seconds). " +
+                                    "The refresh token expires with the credential lifetime, so a longer refresh interval would be unusable.",
+                            refreshInterval, expiry),
+                    Response.Status.BAD_REQUEST);
+        }
     }
 }

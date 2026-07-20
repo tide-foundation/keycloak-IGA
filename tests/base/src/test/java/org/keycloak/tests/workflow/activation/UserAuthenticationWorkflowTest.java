@@ -26,6 +26,8 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.workflow.DisableUserStepProviderFactory;
 import org.keycloak.models.workflow.NotifyUserStepProviderFactory;
+import org.keycloak.models.workflow.events.UserAuthenticatedWorkflowEventFactory;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.InjectUser;
@@ -34,15 +36,14 @@ import org.keycloak.testframework.injection.LifeCycle;
 import org.keycloak.testframework.mail.MailServer;
 import org.keycloak.testframework.mail.annotations.InjectMailServer;
 import org.keycloak.testframework.realm.ManagedUser;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.realm.UserConfig;
-import org.keycloak.testframework.realm.UserConfigBuilder;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import static org.keycloak.models.workflow.ResourceOperationType.USER_AUTHENTICATED;
-import static org.keycloak.models.workflow.ResourceOperationType.USER_CREATED;
 import static org.keycloak.tests.workflow.util.EmailTestUtils.findEmailByRecipient;
 import static org.keycloak.tests.workflow.util.EmailTestUtils.findEmailsByRecipient;
 import static org.keycloak.tests.workflow.util.EmailTestUtils.verifyEmailContent;
@@ -68,7 +69,7 @@ public class UserAuthenticationWorkflowTest extends AbstractWorkflowTest {
     @Test
     public void testActivateWorkflowOnUserAuthentication() {
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_AUTHENTICATED.toString())
+                .onEvent(UserAuthenticatedWorkflowEventFactory.ID)
                 .concurrency().restartInProgress("true") // this setting enables restarting the workflow
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
@@ -84,7 +85,7 @@ public class UserAuthenticationWorkflowTest extends AbstractWorkflowTest {
         String username = userAlice.getUsername();
         loginPage.fillLogin(username, userAlice.getPassword());
         loginPage.submit();
-        assertTrue(driver.page().getPageSource() != null && driver.page().getPageSource().contains("Happy days"));
+        Assertions.assertTrue(oauth.parseLoginResponse().isSuccess());
 
         // test running the scheduled steps
         runOnServer.run((session -> {
@@ -143,7 +144,7 @@ public class UserAuthenticationWorkflowTest extends AbstractWorkflowTest {
     @Test
     public void testMultipleWorkflows() {
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.toString(), USER_AUTHENTICATED.toString())
+                .onEvent(UserCreatedWorkflowEventFactory.ID, UserAuthenticatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(5))
@@ -152,7 +153,7 @@ public class UserAuthenticationWorkflowTest extends AbstractWorkflowTest {
                                 .build())
                 .build()).close();
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow_2")
-                .onEvent(USER_CREATED.toString(), USER_AUTHENTICATED.toString())
+                .onEvent(UserCreatedWorkflowEventFactory.ID, UserAuthenticatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(10))
@@ -166,7 +167,7 @@ public class UserAuthenticationWorkflowTest extends AbstractWorkflowTest {
         String username = userAlice.getUsername();
         loginPage.fillLogin(username, userAlice.getPassword());
         loginPage.submit();
-        assertTrue(driver.page().getPageSource() != null && driver.page().getPageSource().contains("Happy days"));
+        Assertions.assertTrue(oauth.parseLoginResponse().isSuccess());
 
         runOnServer.run(session -> {
             RealmModel realm = session.getContext().getRealm();
@@ -210,7 +211,7 @@ public class UserAuthenticationWorkflowTest extends AbstractWorkflowTest {
     private static class DefaultUserConfig implements UserConfig {
 
         @Override
-        public UserConfigBuilder configure(UserConfigBuilder user) {
+        public UserBuilder configure(UserBuilder user) {
             user.username("alice");
             user.password("alice");
             user.name("alice", "alice");

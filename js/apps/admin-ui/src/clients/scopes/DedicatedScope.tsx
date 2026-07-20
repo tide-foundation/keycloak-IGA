@@ -7,7 +7,6 @@ import {
   PageSection,
   Switch,
 } from "@patternfly/react-core";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HelpItem } from "@keycloak/keycloak-ui-shared";
 import { useAdminClient } from "../../admin-client";
@@ -18,17 +17,14 @@ import { useAccess } from "../../context/access/Access";
 
 type DedicatedScopeProps = {
   client: ClientRepresentation;
+  onChange?: (client: ClientRepresentation) => void;
 };
 
-export const DedicatedScope = ({
-  client: initialClient,
-}: DedicatedScopeProps) => {
+export const DedicatedScope = ({ client, onChange }: DedicatedScopeProps) => {
   const { adminClient } = useAdminClient();
 
   const { t } = useTranslation();
   const { addAlert, addError } = useAlerts();
-
-  const [client, setClient] = useState<ClientRepresentation>(initialClient);
 
   const { hasAccess } = useAccess();
   const isManager = hasAccess("manage-clients") || client.access?.manage;
@@ -70,13 +66,22 @@ export const DedicatedScope = ({
     try {
       await adminClient.clients.update({ id: client.id! }, newClient);
       // TIDECLOAK IMPLEMENTATION START
-      const clientModel = await adminClient.clients.findOne({ id: client.id! })
-      if(newClient!.fullScopeAllowed === clientModel!.fullScopeAllowed) {
+      // Under IGA the update may be intercepted and turned into a pending change
+      // request, so re-read the client and compare against what we asked for.
+      // NOTE: 26.7.0 made DedicatedScope a controlled component (client + onChange);
+      // the fork's local `setClient` state is gone, so propagate via onChange.
+      const clientModel = await adminClient.clients.findOne({ id: client.id! });
+      if (newClient.fullScopeAllowed === clientModel!.fullScopeAllowed) {
         addAlert(t("clientScopeSuccess"), AlertVariant.success);
       } else {
-        addAlert(t("Change request created, pending review."), AlertVariant.success);
+        // FIXME(tide): untranslated literal used as an i18n key (pre-existing in
+        // the fork). i18next falls back to rendering the key text verbatim.
+        addAlert(
+          t("Change request created, pending review."),
+          AlertVariant.success,
+        );
       }
-      setClient(clientModel!);
+      onChange?.(clientModel!);
       // TIDECLOAK IMPLEMENTATION END
     } catch (error) {
       addError("clientScopeError", error);

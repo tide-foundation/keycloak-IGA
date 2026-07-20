@@ -20,6 +20,7 @@ import org.keycloak.representations.idm.RolesRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.idm.authorization.ResourceServerRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
+import org.keycloak.tests.suites.DatabaseTest;
 import org.keycloak.tests.utils.Assert;
 
 import org.junit.jupiter.api.Assertions;
@@ -32,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class PartialImportClientTest extends AbstractPartialImportTest {
 
     @Test
+    @DatabaseTest
     public void testAddClients() {
         setFail();
         addClients(false);
@@ -100,12 +102,14 @@ public class PartialImportClientTest extends AbstractPartialImportTest {
     }
 
     @Test
+    @DatabaseTest
     public void testAddClientsOverwrite() {
         addClients(false);
         testOverwrite();
     }
 
     @Test
+    @DatabaseTest
     public void testAddClientsOverwriteWithServiceAccountsAndAuthorization() {
         addClients(true);
         setOverwrite();
@@ -117,6 +121,7 @@ public class PartialImportClientTest extends AbstractPartialImportTest {
     }
 
     @Test
+    @DatabaseTest
     public void testAddClientsOverwriteServiceAccountsWithNoServiceAccounts() {
         addClients(true);
         setOverwrite();

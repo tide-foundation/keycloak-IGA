@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import org.keycloak.Config.Scope;
+import org.keycloak.common.util.DurationConverter;
 import org.keycloak.component.ComponentModel;
 import org.keycloak.executors.ExecutorsProvider;
 import org.keycloak.models.KeycloakSession;
@@ -19,9 +20,10 @@ import org.keycloak.provider.ProviderEventListener;
 public class DefaultWorkflowProviderFactory implements WorkflowProviderFactory<DefaultWorkflowProvider>, ProviderEventListener {
 
     static final String ID = "default";
-    private static final long DEFAULT_EXECUTOR_TASK_TIMEOUT = 1000L;
+    private static final long DEFAULT_EXECUTOR_TASK_TIMEOUT = 5000L;
 
     private WorkflowExecutor executor;
+    private WorkflowScheduleEventListener scheduleEventListener;
     private boolean blocking;
     private long taskTimeout;
 
@@ -43,13 +45,16 @@ public class DefaultWorkflowProviderFactory implements WorkflowProviderFactory<D
     @Override
     public void init(Scope config) {
         blocking = config.getBoolean("executorBlocking", false);
-        taskTimeout = config.getLong("executorTaskTimeout", DEFAULT_EXECUTOR_TASK_TIMEOUT);
+        String executorTimeoutStr = config.get("executorTaskTimeout");
+        taskTimeout = executorTimeoutStr == null ? DEFAULT_EXECUTOR_TASK_TIMEOUT : DurationConverter.parseDuration(executorTimeoutStr).toMillis();
     }
 
     @Override
     public void postInit(KeycloakSessionFactory factory) {
         this.executor = new WorkflowExecutor(getTaskExecutor(factory), blocking, taskTimeout);
+        this.scheduleEventListener = new WorkflowScheduleEventListener(factory);
         factory.register(this);
+        factory.register(scheduleEventListener);
     }
 
     @Override
@@ -79,6 +84,10 @@ public class DefaultWorkflowProviderFactory implements WorkflowProviderFactory<D
         }
     }
 
+
+    WorkflowScheduleEventListener getScheduleEventListener() {
+        return scheduleEventListener;
+    }
 
     @Override
     public void close() {

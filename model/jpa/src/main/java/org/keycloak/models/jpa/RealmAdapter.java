@@ -144,12 +144,12 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
 
     @Override
     public String getDisplayName() {
-        return getAttribute(RealmAttributes.DISPLAY_NAME);
+        return realm.getDisplayName();
     }
 
     @Override
     public void setDisplayName(String displayName) {
-        setAttribute(RealmAttributes.DISPLAY_NAME, displayName);
+        realm.setDisplayName(displayName);
     }
 
     @Override
@@ -389,6 +389,16 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
     @Override
     public void setFailureFactor(int failureFactor) {
         setAttribute("failureFactor", failureFactor);
+    }
+
+    @Override
+    public int getMaxSecondaryAuthFailures() {
+        return getAttribute("maxSecondaryAuthFailures", 0);
+    }
+
+    @Override
+    public void setMaxSecondaryAuthFailures(int maxSecondaryAuthFailures) {
+        setAttribute("maxSecondaryAuthFailures", maxSecondaryAuthFailures);
     }
 
     @Override
@@ -1034,6 +1044,12 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
         }
         policy.setRequireResidentKey(requireResidentKey);
 
+        String residentKey = getAttribute(RealmAttributes.WEBAUTHN_POLICY_RESIDENT_KEY + attributePrefix);
+        if (residentKey == null || residentKey.isEmpty()) {
+            residentKey = defaultConfig.getResidentKey();
+        }
+        policy.setResidentKey(residentKey);
+
         String userVerificationRequirement = getAttribute(RealmAttributes.WEBAUTHN_POLICY_USER_VERIFICATION_REQUIREMENT + attributePrefix);
         if (userVerificationRequirement == null || userVerificationRequirement.isEmpty()) {
             userVerificationRequirement = defaultConfig.getUserVerificationRequirement();
@@ -1070,6 +1086,12 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
                 : defaultConfig.isPasskeysEnabled();
         policy.setPasskeysEnabled(passKeysEnabled);
 
+        String mediation = getAttribute(RealmAttributes.WEBAUTHN_POLICY_MEDIATION + attributePrefix);
+        if (mediation == null || mediation.isEmpty()) {
+            mediation = defaultConfig.getMediation();
+        }
+        policy.setMediation(mediation);
+
         return policy;
     }
 
@@ -1093,6 +1115,9 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
 
         String authenticatorAttachment = policy.getAuthenticatorAttachment();
         setAttribute(RealmAttributes.WEBAUTHN_POLICY_AUTHENTICATOR_ATTACHMENT + attributePrefix, authenticatorAttachment);
+
+        String residentKey = policy.getResidentKey();
+        setAttribute(RealmAttributes.WEBAUTHN_POLICY_RESIDENT_KEY + attributePrefix, residentKey);
 
         String requireResidentKey = policy.getRequireResidentKey();
         setAttribute(RealmAttributes.WEBAUTHN_POLICY_REQUIRE_RESIDENT_KEY + attributePrefix, requireResidentKey);
@@ -1127,6 +1152,13 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
             setAttribute(RealmAttributes.WEBAUTHN_POLICY_PASSKEYS_ENABLED + attributePrefix, passkeysEnabled.toString());
         } else {
             removeAttribute(RealmAttributes.WEBAUTHN_POLICY_PASSKEYS_ENABLED + attributePrefix);
+        }
+
+        String mediation = policy.getMediation();
+        if (mediation != null && !mediation.isBlank()) {
+            setAttribute(RealmAttributes.WEBAUTHN_POLICY_MEDIATION + attributePrefix, mediation);
+        } else {
+            removeAttribute(RealmAttributes.WEBAUTHN_POLICY_MEDIATION + attributePrefix);
         }
     }
 
@@ -1309,6 +1341,16 @@ public class RealmAdapter implements StorageProviderRealmModel, JpaModel<RealmEn
     @Override
     public void setVerifiableCredentialsEnabled(boolean verifiableCredentialsEnabled) {
         setAttribute(RealmAttributes.VERIFIABLE_CREDENTIALS_ENABLED, verifiableCredentialsEnabled);
+    }
+
+    @Override
+    public void setScimApiEnabled(boolean enabled) {
+        setAttribute(RealmAttributes.SCIM_API_ENABLED, enabled);
+    }
+
+    @Override
+    public boolean isScimApiEnabled() {
+        return getAttribute(RealmAttributes.SCIM_API_ENABLED, Boolean.FALSE);
     }
 
     @Override

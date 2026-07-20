@@ -3,8 +3,11 @@ package org.keycloak.testframework.https;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -22,6 +25,9 @@ import org.keycloak.crypto.def.DefaultCryptoProvider;
 import org.apache.http.conn.ssl.TrustAllStrategy;
 import org.apache.http.ssl.SSLContextBuilder;
 
+/**
+ * Utilities for Keycloak server and clients to obtain keystore and truststores with the managed certificates
+ */
 public class ManagedCertificates {
 
     private final static Path KEYSTORES_DIR = Path.of(System.getProperty("java.io.tmpdir"));
@@ -44,7 +50,7 @@ public class ManagedCertificates {
     private final Path clientTruststorePath;
     private KeyStore clientTrustStore;
 
-    private SSLContext clientSslContext;
+    private final SSLContext clientSslContext;
 
     public ManagedCertificates(CertificatesConfigBuilder configBuilder) throws ManagedCertificatesException {
         if (!CryptoIntegration.isInitialised()) {
@@ -56,15 +62,24 @@ public class ManagedCertificates {
         tlsEnabled = configBuilder.isTlsEnabled();
         mTlsEnabled = configBuilder.isMTlsEnabled();
 
-        serverKeystorePath = resolvePath("kc-testing-server-keystore");
-        serverTruststorePath = resolvePath("kc-testing-server-truststore");
+        if (configBuilder.getServerKeystore() == null) {
+            serverKeystorePath = resolvePath("kc-testing-server-keystore");
+            serverTruststorePath = resolvePath("kc-testing-server-truststore");
+            clientKeystorePath = resolvePath("kc-testing-client-keystore");
+            clientTruststorePath = resolvePath("kc-testing-client-truststore");
 
-        clientKeystorePath = resolvePath("kc-testing-client-keystore");
-        clientTruststorePath = resolvePath("kc-testing-client-truststore");
-
-        if (!Files.exists(serverKeystorePath) || !Files.exists(serverTruststorePath) || !Files.exists(clientKeystorePath) || !Files.exists(clientTruststorePath)) {
-            createStores();
+            if (!Files.exists(serverKeystorePath) || !Files.exists(serverTruststorePath) || !Files.exists(clientKeystorePath) || !Files.exists(clientTruststorePath)) {
+                createStores();
+            } else {
+                clientKeyStore = load(clientKeystorePath);
+                clientTrustStore = load(clientTruststorePath);
+            }
         } else {
+            serverKeystorePath = checkPath(configBuilder.getServerKeystore());
+            serverTruststorePath = checkPath(configBuilder.getServerTruststore());
+            clientKeystorePath = checkPath(configBuilder.getClientKeystore());
+            clientTruststorePath = checkPath(configBuilder.getClientTruststore());
+
             clientKeyStore = load(clientKeystorePath);
             clientTrustStore = load(clientTruststorePath);
         }
@@ -72,42 +87,121 @@ public class ManagedCertificates {
         clientSslContext = tlsEnabled ? createClientSSLContext() : null;
     }
 
+    /**
+     * The path of the generated Keycloak server keystore containing the private certificate for the Keycloak server
+     *
+     * @return path to keystore
+     */
     public String getServerKeyStorePath() {
         return tlsEnabled ? serverKeystorePath.toString() : null;
     }
 
+    /**
+     * The password used for the keystore
+     *
+     * @return keystore password
+     */
     public String getServerKeyStorePassword() {
         return tlsEnabled ? STORE_PASSWORD : null;
     }
 
+    /**
+     * The path of the generated Keycloak server truststore containing public certificates for clients
+     * @return
+     */
     public String getServerTrustStorePath() {
         return mTlsEnabled ? serverTruststorePath.toString() : null;
     }
 
+    /**
+     * The password used for the truststore
+     *
+     * @return truststore password
+     */
     public String getServerTrustStorePassword() {
         return mTlsEnabled ? STORE_PASSWORD : null;
     }
 
+    /**
+     * Return the SSL context configured with the client truststore
+     *
+     * @return
+     */
     public SSLContext getClientSSLContext() {
         return clientSslContext;
     }
 
+    /**
+     * Creates a SSL context configured with passed client keystore and trustore files
+     * obtained from the classpath.
+     *
+     * @param keystore Keystore file in classpath
+     * @param truststore Truststore file in classpath
+     * @param mTlsEnabled If mutual TLS is enabled
+     * @return The SSL context
+     */
+    public SSLContext createClientSSLContext(String keystore, String truststore, boolean mTlsEnabled) {
+        Path truststorePath = checkPath(truststore);
+        KeyStore truststoreStore = load(truststorePath);
+        if (mTlsEnabled) {
+            Path keystorePath = mTlsEnabled ? checkPath(keystore) : null;
+            KeyStore keystoreStore = load(keystorePath);
+            return createClientSSLContext(keystoreStore, truststoreStore, mTlsEnabled);
+        } else {
+            return createClientSSLContext(null, truststoreStore, false);
+        }
+    }
+
+    /**
+     * Returns <code>true</code> if TLS is enabled
+     *
+     * @return <code>true</code> if TLS is enabled
+     */
     public boolean isTlsEnabled()  {
         return tlsEnabled;
     }
 
+    /**
+     * Returns <code>true</code> if mTLS is enabled
+     *
+     * @return <code>true</code> if mTLS is enabled
+     */
     public boolean isMTlsEnabled()  {
         return mTlsEnabled;
     }
 
+    public KeystoreUtil.KeystoreFormat getKeystoreFormat() {
+        return keystoreFormat;
+    }
+
+    static Path checkPath(String path) {
+        if (path == null) {
+            throw new IllegalArgumentException("The path cannot be null");
+        }
+
+        URL url = CertificatesConfigBuilder.class.getClassLoader().getResource(path);
+        if (url == null || !url.getProtocol().equalsIgnoreCase("file")) {
+            throw new IllegalArgumentException("Keystore not found in classpath: " + path);
+        }
+
+        try {
+            return Paths.get(url.toURI());
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Error loading keystore:" + path, e);
+        }
+    }
 
     private SSLContext createClientSSLContext() {
+        return createClientSSLContext(clientKeyStore, clientTrustStore, mTlsEnabled);
+    }
+
+    private SSLContext createClientSSLContext(KeyStore keystore, KeyStore truststore, boolean mTlsEnabled) {
         try {
             SSLContextBuilder sslContextBuilder = SSLContextBuilder.create()
-                    .loadTrustMaterial(clientTrustStore, TrustAllStrategy.INSTANCE);
+                    .loadTrustMaterial(truststore, TrustAllStrategy.INSTANCE);
 
             if (mTlsEnabled) {
-                sslContextBuilder.loadKeyMaterial(clientKeyStore, STORE_PASSWORD_CHARS);
+                sslContextBuilder.loadKeyMaterial(keystore, STORE_PASSWORD_CHARS);
             }
 
             return sslContextBuilder.build();

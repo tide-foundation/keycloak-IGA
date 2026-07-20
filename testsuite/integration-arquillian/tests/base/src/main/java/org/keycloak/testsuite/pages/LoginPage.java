@@ -23,7 +23,7 @@ import org.keycloak.testsuite.util.WaitUtils;
 import org.keycloak.testsuite.util.oauth.OAuthClient;
 
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebElement;
@@ -155,6 +155,10 @@ public class LoginPage extends LanguageComboboxAwarePage {
         return !driver.findElements(By.id("username")).isEmpty();
     }
 
+    public boolean isEmailInputPresent() {
+        return !driver.findElements(By.id("email")).isEmpty();
+    }
+
     public boolean isRegisterLinkPresent() {
         return !driver.findElements(By.linkText("Register")).isEmpty();
     }
@@ -244,8 +248,8 @@ public class LoginPage extends LanguageComboboxAwarePage {
 
     public void assertCurrent(String realm) {
         String name = getClass().getSimpleName();
-        Assert.assertTrue("Expected " + name + " but was " + DroneUtils.getCurrentDriver().getTitle() + " (" + DroneUtils.getCurrentDriver().getCurrentUrl() + ")",
-                isCurrent(realm));
+        Assertions.assertTrue(isCurrent(realm),
+                "Expected " + name + " but was " + DroneUtils.getCurrentDriver().getTitle() + " (" + DroneUtils.getCurrentDriver().getCurrentUrl() + ")");
     }
 
     public void clickRegister() {
@@ -277,15 +281,6 @@ public class LoginPage extends LanguageComboboxAwarePage {
 
     public boolean isRememberMeChecked() {
         return rememberMe.isSelected();
-    }
-
-    /**
-     * @deprecated Use {@link OAuthClient#openLoginForm()}
-     */
-    @Deprecated
-    public void open() {
-        oauth.openLoginForm();
-        assertCurrent();
     }
 
     /**

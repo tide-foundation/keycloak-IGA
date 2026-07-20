@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import type { Row } from "../clients/scopes/ClientScopes";
 import { getProtocolName } from "../clients/utils";
-import { useAlerts } from "@keycloak/keycloak-ui-shared";
+import { getErrorMessage, useAlerts } from "@keycloak/keycloak-ui-shared";
 import {
   AllClientScopeType,
   AllClientScopes,
@@ -25,15 +25,19 @@ import {
   ClientScope,
   ClientScopeDefaultOptionalType,
   changeScope,
+  ParameterizedScopeLabel,
+  isParameterizedScope,
   removeScope,
 } from "../components/client-scope/ClientScopeTypes";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
 import { Action, KeycloakDataTable } from "@keycloak/keycloak-ui-shared";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import helpUrls from "../help-urls";
 import { emptyFormatter } from "../util";
 import useLocaleSort, { mapByKey } from "../utils/useLocaleSort";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { ChangeTypeDropdown } from "./ChangeTypeDropdown";
 import {
   ProtocolType,
@@ -75,15 +79,18 @@ const TypeSelector = (scope: TypeSelectorProps) => {
   );
 };
 
-const ClientScopeDetailLink = ({
-  id,
-  name,
-}: ClientScopeDefaultOptionalType) => {
+const ClientScopeDetailLink = (scope: ClientScopeDefaultOptionalType) => {
   const { realm } = useRealm();
   return (
-    <Link key={id} to={toClientScope({ realm, id: id!, tab: "settings" })}>
-      {name}
-    </Link>
+    <>
+      <Link
+        key={scope.id}
+        to={toClientScope({ realm, id: scope.id!, tab: "settings" })}
+      >
+        {scope.name}
+      </Link>{" "}
+      {isParameterizedScope(scope) && <ParameterizedScopeLabel />}
+    </>
   );
 };
 
@@ -163,18 +170,37 @@ export default function ClientScopesSection() {
       const clientScopeLength = Object.keys(clientScopes).length;
       if (clientScopeLength - selectedScopes.length > 0) {
         try {
+          // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+          // change-request envelope (the agent unwraps it; `del` is typed void
+          // but resolves with the parsed body). Detect it with the established
+          // helper; pending scopes still exist, so never count them deleted.
+          let deletedCount = 0;
           for (const scope of selectedScopes) {
             try {
               await removeScope(adminClient, scope);
-            } catch (error: any) {
-              console.warn(
-                "could not remove scope",
-                error.response?.data?.errorMessage || error,
-              );
+            } catch (error) {
+              console.warn("could not remove scope", getErrorMessage(error));
             }
-            await adminClient.clientScopes.del({ id: scope.id! });
+            const result = await adminClient.clientScopes.del({
+              id: scope.id!,
+            });
+            const pending = notifyIfPendingChangeRequest(
+              result,
+              t,
+              addAlert,
+              undefined,
+              {
+                titleKey: "deletePendingChangeRequestCreated",
+                useEnvelopeMessage: true,
+              },
+            );
+            if (!pending) {
+              deletedCount++;
+            }
           }
-          addAlert(t("deletedSuccessClientScope"), AlertVariant.success);
+          if (deletedCount > 0) {
+            addAlert(t("deletedSuccessClientScope"), AlertVariant.success);
+          }
           refresh();
         } catch (error) {
           addError("deleteErrorClientScope", error);
@@ -193,6 +219,7 @@ export default function ClientScopesSection() {
         subKey="clientScopeExplain"
         helpUrl={helpUrls.clientScopesUrl}
       />
+      <IgaPageBanner entityType="client scope" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <KeycloakDataTable
           key={key}

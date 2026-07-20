@@ -36,7 +36,9 @@ let KeycloakEnvContext: any;
 export const useEnvironment = <
   T extends BaseEnvironment = BaseEnvironment,
 >() => {
-  const context = useContext<KeycloakContext<T>>(KeycloakEnvContext);
+  const context = useContext<KeycloakContext<T> | undefined>(
+    KeycloakEnvContext,
+  );
   if (!context)
     throw Error(
       "no environment provider in the hierarchy make sure to add the provider",
@@ -46,6 +48,10 @@ export const useEnvironment = <
 
 interface KeycloakContextProps<T extends BaseEnvironment> {
   environment: T;
+  // TIDECLOAK IMPLEMENTATION: 26.7.0 added this external-injection escape hatch.
+  // It is typed as TideCloak (not Keycloak) because the context contract exposes
+  // approveTideRequests, which a plain keycloak-js instance cannot satisfy.
+  keycloak?: TideCloak;
 }
 
 // Shape of the adapter JSON you're fetching for security-admin-console
@@ -60,12 +66,13 @@ type TideKeycloakConfig = {
 
 export const KeycloakProvider = <T extends BaseEnvironment>({
   environment,
+  keycloak: externalKeycloak,
   children,
 }: PropsWithChildren<KeycloakContextProps<T>>) => {
   KeycloakEnvContext = createKeycloakEnvContext<T>();
 
   const calledOnce = useRef(false);
-  const [init, setInit] = useState(false);
+  const [init, setInit] = useState(!!externalKeycloak);
   const [error, setError] = useState<unknown>();
 
   const [config, setConfig] = useState<TideKeycloakConfig | null>(null);
@@ -76,6 +83,13 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
   // -------------------------------
   useEffect(() => {
     let cancelled = false;
+
+    // TIDECLOAK IMPLEMENTATION: an externally-injected client is already
+    // configured and initialised — don't fetch (or require) the Tide config.
+    if (externalKeycloak) {
+      setLoadingConfig(false);
+      return;
+    }
 
     const loadConfig = async () => {
       try {
@@ -105,12 +119,17 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     return () => {
       cancelled = true;
     };
-  }, [environment]);
+  }, [environment, externalKeycloak]);
 
   // -------------------------------
   // 2. Create TideCloak using JSON
   // -------------------------------
   const keycloak = useMemo(() => {
+    // TIDECLOAK IMPLEMENTATION: honour 26.7.0's external-injection escape hatch
+    // first; otherwise build a TideCloak from the runtime-fetched Tide config.
+    if (externalKeycloak) {
+      return externalKeycloak;
+    }
     if (!config) return null;
 
     const originKey = `client-origin-auth-${window.location.origin}`;
@@ -128,14 +147,24 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
 
     kc.onAuthLogout = () => kc.login();
     return kc;
-  }, [config, environment]);
+  }, [config, environment, externalKeycloak]);
 
   // -------------------------------
   // 3. Initialise TideCloak
   // -------------------------------
   useEffect(() => {
+    // Skip initialization if using external keycloak (already initialized)
+    if (externalKeycloak) {
+      return;
+    }
+
+    // null until the Tide config resolves and the TideCloak is constructed
     if (!keycloak) return;
-    if (calledOnce.current) return;
+
+    // only needed in dev mode
+    if (calledOnce.current) {
+      return;
+    }
 
     const init = () =>
       keycloak.init({
@@ -151,7 +180,7 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
       .catch((err: any) => setError(err));
 
     calledOnce.current = true;
-  }, [keycloak, environment]);
+  }, [keycloak, environment, externalKeycloak]);
 
   // -------------------------------
   // Tide Methods
@@ -204,7 +233,11 @@ export const KeycloakProvider = <T extends BaseEnvironment>({
     );
   }
 
-  if (loadingConfig || !config || !keycloak || !init) {
+  // TIDECLOAK IMPLEMENTATION: `keycloak` stays null until the Tide config
+  // resolves, so !keycloak already covers the config-pending case. Gating on
+  // `config` directly would deadlock the externally-injected path, which
+  // never fetches one.
+  if (loadingConfig || !keycloak || !init) {
     return <Spinner />;
   }
 

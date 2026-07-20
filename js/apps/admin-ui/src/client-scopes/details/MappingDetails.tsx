@@ -28,6 +28,17 @@ import { useParams } from "../../utils/useParams";
 import { toClientScope } from "../routes/ClientScope";
 import { MapperParams, MapperRoute } from "../routes/Mapper";
 
+//TIDECLOAK IMPLEMENTATION
+// Tide/the ORK only attests *client* audiences. The free-text "Included Custom
+// Audience" field produces an `aud` value the ORK cannot attest, so the Tide
+// token mint fails with "token claim 'aud' does not match attested value".
+// Hide that field so admins can only pick a client audience via the dropdown.
+const AUDIENCE_MAPPER_ID = "oidc-audience-mapper";
+const UNSUPPORTED_MAPPER_PROPERTIES: Record<string, string[]> = {
+  [AUDIENCE_MAPPER_ID]: ["included.custom.audience"],
+};
+//END TIDECLOAK IMPLEMENTATION
+
 export default function MappingDetails() {
   const { adminClient } = useAdminClient();
 
@@ -222,7 +233,14 @@ export default function MappingDetails() {
               rules={{ required: t("required") }}
             />
             <DynamicComponents
-              properties={mapping?.properties || []}
+              properties={(mapping?.properties || []).filter(
+                //TIDECLOAK IMPLEMENTATION: drop Tide-unattestable mapper fields
+                (property) =>
+                  !UNSUPPORTED_MAPPER_PROPERTIES[mapping?.id ?? ""]?.includes(
+                    property.name ?? "",
+                  ),
+                //END TIDECLOAK IMPLEMENTATION
+              )}
               isNew={!isUpdating}
               stringify
             />

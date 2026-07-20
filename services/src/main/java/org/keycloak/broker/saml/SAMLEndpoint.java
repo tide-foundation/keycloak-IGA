@@ -54,6 +54,7 @@ import org.keycloak.broker.provider.BrokeredIdentityContext;
 import org.keycloak.broker.provider.IdentityBrokerException;
 import org.keycloak.broker.provider.UserAuthenticationIdentityProvider;
 import org.keycloak.common.ClientConnection;
+import org.keycloak.common.Profile;
 import org.keycloak.common.VerificationException;
 import org.keycloak.crypto.KeyUse;
 import org.keycloak.dom.saml.v2.assertion.AssertionType;
@@ -103,6 +104,7 @@ import org.keycloak.saml.common.constants.GeneralConstants;
 import org.keycloak.saml.common.constants.JBossSAMLURIConstants;
 import org.keycloak.saml.common.exceptions.ConfigurationException;
 import org.keycloak.saml.common.exceptions.ProcessingException;
+import org.keycloak.saml.common.util.DocumentUtil;
 import org.keycloak.saml.processing.core.saml.v2.common.SAMLDocumentHolder;
 import org.keycloak.saml.processing.core.saml.v2.constants.X500SAMLProfileConstants;
 import org.keycloak.saml.processing.core.saml.v2.util.ArtifactResponseUtil;
@@ -148,7 +150,6 @@ public class SAMLEndpoint {
     protected final SAMLIdentityProviderConfig config;
     protected final UserAuthenticationIdentityProvider.AuthenticationCallback callback;
     protected final SAMLIdentityProvider provider;
-
     protected final DestinationValidator destinationValidator;
     protected final KeycloakSession session;
     protected final ClientConnection clientConnection;
@@ -518,7 +519,7 @@ public class SAMLEndpoint {
             };
         }
 
-        private String getEntityId(UriInfo uriInfo, RealmModel realm) {
+        protected final String getEntityId(UriInfo uriInfo, RealmModel realm) {
             String configEntityId = config.getEntityId();
 
             if (configEntityId == null || configEntityId.isEmpty())
@@ -645,7 +646,6 @@ public class SAMLEndpoint {
                     return ErrorPage.error(session, authSession, Response.Status.BAD_REQUEST, Messages.INVALID_REQUESTER);
                 }
 
-                //Map<String, String> notes = new HashMap<>();
                 BrokeredIdentityContext identity = new BrokeredIdentityContext(principal, config);
                 identity.getContextData().put(SAML_LOGIN_RESPONSE, responseType);
                 identity.getContextData().put(SAML_ASSERTION, assertion);
@@ -658,7 +658,16 @@ public class SAMLEndpoint {
                     identity.setEmail(subjectNameID.getValue());
                 }
 
-                if (Booleans.isTrue(config.isStoreToken())) {
+                // set the token in session and model depending the brokering api version
+                if (Profile.isFeatureEnabled(Profile.Feature.IDENTITY_BROKERING_API_V2)) {
+                    final String assertionString = DocumentUtil.getNodeAsString(assertionElement);
+                    if (config.isStoreTokenInSession()) {
+                        identity.getContextData().put(UserAuthenticationIdentityProvider.FEDERATED_ACCESS_TOKEN, assertionString);
+                    }
+                    if (Booleans.isTrue(config.isStoreToken())) {
+                        identity.setToken(assertionString);
+                    }
+                } else if (Booleans.isTrue(config.isStoreToken())) {
                     identity.setToken(samlResponse);
                 }
 
@@ -721,7 +730,7 @@ public class SAMLEndpoint {
          * @param clientUrlName
          * @return see description
          */
-        private AuthenticationSessionModel samlIdpInitiatedSSO(final String clientUrlName) {
+        protected final AuthenticationSessionModel samlIdpInitiatedSSO(final String clientUrlName) {
             event.event(EventType.LOGIN);
             CacheControlUtil.noBackButtonCacheControlHeader(session);
             Optional<ClientModel> oClient = SAMLEndpoint.this.session.clients()
@@ -748,7 +757,7 @@ public class SAMLEndpoint {
         }
 
 
-        private boolean isSuccessfulSamlResponse(ResponseType responseType) {
+        protected final boolean isSuccessfulSamlResponse(ResponseType responseType) {
             return responseType != null
               && responseType.getStatus() != null
               && responseType.getStatus().getStatusCode() != null
@@ -976,20 +985,20 @@ public class SAMLEndpoint {
         }
     }
 
-    private String getX500Attribute(AssertionType assertion, X500SAMLProfileConstants attribute) {
+    protected final String getX500Attribute(AssertionType assertion, X500SAMLProfileConstants attribute) {
         return getFirstMatchingAttribute(assertion, attribute::correspondsTo);
     }
 
-    private String getAttributeByName(AssertionType assertion, String name) {
+    protected final String getAttributeByName(AssertionType assertion, String name) {
         return getFirstMatchingAttribute(assertion, attribute -> Objects.equals(attribute.getName(), name));
     }
 
-    private String getAttributeByFriendlyName(AssertionType assertion, String friendlyName) {
+    protected final String getAttributeByFriendlyName(AssertionType assertion, String friendlyName) {
         return getFirstMatchingAttribute(assertion, attribute -> Objects.equals(attribute.getFriendlyName(), friendlyName));
     }
 
-    private String getPrincipal(AssertionType assertion) {
 
+    protected final String getPrincipal(AssertionType assertion) {
         SamlPrincipalType principalType = config.getPrincipalType();
 
         if (principalType == null || principalType.equals(SamlPrincipalType.SUBJECT)) {
@@ -1003,7 +1012,7 @@ public class SAMLEndpoint {
 
     }
 
-    private String getFirstMatchingAttribute(AssertionType assertion, Predicate<AttributeType> predicate) {
+    protected final String getFirstMatchingAttribute(AssertionType assertion, Predicate<AttributeType> predicate) {
         return assertion.getAttributeStatements().stream()
                 .map(AttributeStatementType::getAttributes)
                 .flatMap(Collection::stream)
@@ -1016,7 +1025,7 @@ public class SAMLEndpoint {
                 .orElse(null);
     }
 
-    private String expectedPrincipalType() {
+    protected final String expectedPrincipalType() {
         SamlPrincipalType principalType = config.getPrincipalType();
         switch (principalType) {
             case SUBJECT:
@@ -1029,13 +1038,13 @@ public class SAMLEndpoint {
         }
     }
 
-    private NameIDType getSubjectNameID(final AssertionType assertion) {
+    protected final NameIDType getSubjectNameID(final AssertionType assertion) {
         SubjectType subject = assertion.getSubject();
         SubjectType.STSubType subType = subject.getSubType();
         return subType != null ? (NameIDType) subType.getBaseID() : null;
     }
 
-    private boolean validateInResponseToAttribute(ResponseType responseType, String expectedRequestId) {
+    protected final boolean validateInResponseToAttribute(ResponseType responseType, String expectedRequestId) {
         // If we are not expecting a request ID, don't bother
         if (expectedRequestId == null || expectedRequestId.isEmpty())
             return true;

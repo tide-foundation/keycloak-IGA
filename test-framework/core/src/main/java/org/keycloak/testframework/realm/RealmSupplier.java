@@ -18,6 +18,7 @@ import org.keycloak.testframework.injection.Supplier;
 import org.keycloak.testframework.injection.SupplierHelpers;
 import org.keycloak.testframework.injection.SupplierOrder;
 import org.keycloak.testframework.server.KeycloakServer;
+import org.keycloak.testframework.server.KeycloakUrls;
 import org.keycloak.util.JsonSerialization;
 import org.keycloak.util.Strings;
 
@@ -26,6 +27,7 @@ public class RealmSupplier implements Supplier<ManagedRealm, InjectRealm> {
     @Override
     public List<Dependency> getDependencies(RequestedInstance<ManagedRealm, InjectRealm> instanceContext) {
         return DependenciesBuilder.create(KeycloakServer.class)
+                .add(KeycloakUrls.class)
                 .add(Keycloak.class, "bootstrap-client").build();
     }
 
@@ -40,28 +42,28 @@ public class RealmSupplier implements Supplier<ManagedRealm, InjectRealm> {
         RealmRepresentation realmRepresentation;
 
         if (managed) {
-            RealmConfigBuilder realmConfigBuilder;
+            RealmBuilder realmBuilder;
             if (!Strings.isEmpty(instanceContext.getAnnotation().fromJson())) {
                 try {
                     InputStream jsonStream = instanceContext.getRegistry().getCurrentContext().getRequiredTestClass().getResourceAsStream(instanceContext.getAnnotation().fromJson());
                     if (jsonStream == null) {
                         throw new RuntimeException("Realm JSON representation not found in classpath");
                     }
-                    realmConfigBuilder = RealmConfigBuilder.update(JsonSerialization.readValue(jsonStream, RealmRepresentation.class));
+                    realmBuilder = RealmBuilder.update(JsonSerialization.readValue(jsonStream, RealmRepresentation.class));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
             } else {
-                realmConfigBuilder = RealmConfigBuilder.create();
+                realmBuilder = RealmBuilder.create();
             }
 
-            RealmConfig config = SupplierHelpers.getInstance(instanceContext.getAnnotation().config());
-            realmConfigBuilder = config.configure(realmConfigBuilder);
+            RealmConfig config = SupplierHelpers.getInstanceWithInjectedFields(instanceContext.getAnnotation().config(), instanceContext);
+            realmBuilder = config.configure(realmBuilder);
 
             RealmConfigInterceptorHelper interceptor = new RealmConfigInterceptorHelper(instanceContext.getRegistry());
-            realmConfigBuilder = interceptor.intercept(realmConfigBuilder, instanceContext);
+            realmBuilder = interceptor.intercept(realmBuilder, instanceContext);
 
-            realmRepresentation = realmConfigBuilder.build();
+            realmRepresentation = realmBuilder.build();
 
             if (realmRepresentation.getRealm() == null) {
                 realmRepresentation.setRealm(SupplierHelpers.createName(instanceContext));
@@ -104,14 +106,14 @@ public class RealmSupplier implements Supplier<ManagedRealm, InjectRealm> {
         return SupplierOrder.REALM;
     }
 
-    private static class RealmConfigInterceptorHelper extends AbstractInterceptorHelper<RealmConfigInterceptor, RealmConfigBuilder> {
+    private static class RealmConfigInterceptorHelper extends AbstractInterceptorHelper<RealmConfigInterceptor, RealmBuilder> {
 
         private RealmConfigInterceptorHelper(Registry registry) {
             super(registry, RealmConfigInterceptor.class);
         }
 
         @Override
-        public RealmConfigBuilder intercept(RealmConfigBuilder value, Supplier<?, ?> supplier, InstanceContext<?, ?> existingInstance) {
+        public RealmBuilder intercept(RealmBuilder value, Supplier<?, ?> supplier, InstanceContext<?, ?> existingInstance) {
             if (supplier instanceof RealmConfigInterceptor interceptor) {
                 value = interceptor.intercept(value, existingInstance);
             }

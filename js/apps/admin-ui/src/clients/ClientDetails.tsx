@@ -36,6 +36,7 @@ import {
   ViewHeader,
   ViewHeaderBadge,
 } from "../components/view-header/ViewHeader";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
 import {
@@ -47,9 +48,13 @@ import {
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import { useParams } from "../utils/useParams";
 import useToggle from "../utils/useToggle";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
+import { isPendingChangeRequest } from "@keycloak/keycloak-admin-client/lib/utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
+import { useIsIgaEnabled } from "../utils/useIsIgaEnabled"; // TIDECLOAK IMPLEMENTATION
 import { AdvancedTab } from "./AdvancedTab";
 import { ClientSessions } from "./ClientSessions";
 import { ClientSettings } from "./ClientSettings";
+import { SsfTab } from "./ssf/SsfTab";
 import { AuthorizationEvaluate } from "./authorization/AuthorizationEvaluate";
 import { AuthorizationExport } from "./authorization/AuthorizationExport";
 import { AuthorizationPermissions } from "./authorization/Permissions";
@@ -67,6 +72,7 @@ import {
 import { ClientParams, ClientTab, toClient } from "./routes/Client";
 import { toClientRole } from "./routes/ClientRole";
 import { ClientScopesTab, toClientScopesTab } from "./routes/ClientScopeTab";
+import { SsfClientTab, toSsfClientTab } from "./routes/ClientSsfTab";
 import { toClients } from "./routes/Clients";
 import { toCreateRole } from "./routes/NewRole";
 import { ClientScopes } from "./scopes/ClientScopes";
@@ -195,7 +201,8 @@ export default function ClientDetails() {
 
   const { t } = useTranslation();
   const { addAlert, addError } = useAlerts();
-  const { realm } = useRealm();
+  const { realm, realmRepresentation } = useRealm();
+  const igaEnabled = useIsIgaEnabled(); // TIDECLOAK IMPLEMENTATION
   const { hasAccess } = useAccess();
   const isFeatureEnabled = useIsFeatureEnabled();
 
@@ -226,6 +233,31 @@ export default function ClientDetails() {
     defaultValue: "client-secret",
   });
 
+  const ssfEnabled = useWatch({
+    control: form.control,
+    name: convertAttributeNameToForm<FormFields>("attributes.ssf.enabled"),
+  });
+
+  const ssfAllowEmitEvents = useWatch({
+    control: form.control,
+    name: convertAttributeNameToForm<FormFields>(
+      "attributes.ssf.allowEmitEvents",
+    ),
+  });
+  const showSsfEmitEventsTab = ssfAllowEmitEvents?.toString() === "true";
+
+  // Gate every SSF surface on three conditions: server feature flag,
+  // realm-level transmitter toggle, and per-client opt-in. Missing any
+  // one means SSF endpoints aren't available — surfacing the tab would
+  // crash on the first API call (the original bug from the review).
+  const isSsfFeatureEnabled = isFeatureEnabled(Feature.Ssf);
+  const isSsfRealmEnabled =
+    realmRepresentation.attributes?.["ssf.transmitterEnabled"] === "true";
+  const showSsfTab =
+    isSsfFeatureEnabled &&
+    isSsfRealmEnabled &&
+    ssfEnabled?.toString() === "true";
+
   const [client, setClient] = useState<ClientRepresentation>();
 
   const loader = async () => {
@@ -250,6 +282,7 @@ export default function ClientDetails() {
   const sessionsTab = useRoutableTab(tab("sessions"));
   const permissionsTab = useRoutableTab(tab("permissions"));
   const advancedTab = useRoutableTab(tab("advanced"));
+  const ssfTab = useRoutableTab(tab("ssf"));
   const eventsTab = useRoutableTab(tab("events"));
 
   const [activeEventsTab, setActiveEventsTab] = useState("userEvents");
@@ -265,6 +298,18 @@ export default function ClientDetails() {
   const clientScopesEvaluateTab = useRoutableTab(
     clientScopesTabRoute("evaluate"),
   );
+
+  const ssfTabRoute = (tab: SsfClientTab) =>
+    toSsfClientTab({
+      realm,
+      clientId,
+      tab,
+    });
+  const ssfReceiverTab = useRoutableTab(ssfTabRoute("receiver"));
+  const ssfStreamTab = useRoutableTab(ssfTabRoute("stream"));
+  const ssfSubjectsTab = useRoutableTab(ssfTabRoute("subjects"));
+  const ssfEventSearchTab = useRoutableTab(ssfTabRoute("event-search"));
+  const ssfEmitEventsTab = useRoutableTab(ssfTabRoute("emit-events"));
 
   const authorizationTabRoute = (tab: AuthorizationTab) =>
     toAuthorizationTab({
@@ -302,7 +347,26 @@ export default function ClientDetails() {
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.clients.del({ id: clientId });
+        // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+        // change-request envelope (the agent unwraps it; `del` is typed void
+        // but resolves with the parsed body). Detect it with the established
+        // helper and do NOT navigate away as if deleted — refresh in place.
+        const result = await adminClient.clients.del({ id: clientId });
+        if (
+          notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          )
+        ) {
+          refresh();
+          return;
+        }
         addAlert(t("clientDeletedSuccess"), AlertVariant.success);
         navigate(toClients({ realm }));
       } catch (error) {
@@ -380,7 +444,10 @@ export default function ClientDetails() {
 
       newClient.clientId = newClient.clientId?.trim();
 
-      await adminClient.clients.update({ id: clientId }, newClient);
+      const updateResult = await adminClient.clients.update(
+        { id: clientId },
+        newClient,
+      );
       setupForm(newClient);
       setClient(newClient);
 
@@ -395,10 +462,23 @@ export default function ClientDetails() {
             addError("SignSettingsError", error);
           }
         }
+      };
 
+      // TIDECLOAK IMPLEMENTATION
+      // On an IGA realm a client edit is captured (parked) rather than applied
+      // to live state. Unlike delete/create, a client UPDATE does NOT surface
+      // an HTTP 202 envelope: the adapter files the per-field CRs
+      // (UPDATE_CLIENT_*, SET_CLIENT_ATTRIBUTE, ...) via coalesceOrCreate and
+      // the PUT returns a normal success, so isPendingChangeRequest(updateResult)
+      // is false. Re-signing here would sign over stale live settings and break
+      // login ("Signed Settings were not able to be verified"). Gate on IGA
+      // being active for the realm (the definitive "parked" signal for updates);
+      // the backend re-signs at commit time. Non-IGA realms apply live and still
+      // sign.
+      const parked = igaEnabled || isPendingChangeRequest(updateResult);
+      if (!parked) {
+        void signSettings();
       }
-
-      signSettings();
       addAlert(t(messageKey), AlertVariant.success);
     } catch (error) {
       addError("clientSaveError", error);
@@ -451,6 +531,7 @@ export default function ClientDetails() {
           />
         )}
       />
+      <IgaPageBanner entityType="client" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <FormProvider {...form}>
           <RoutableTabs
@@ -705,6 +786,85 @@ export default function ClientDetails() {
             >
               <AdvancedTab save={save} client={client} />
             </Tab>
+            {client.protocol === "openid-connect" &&
+              !client.publicClient &&
+              showSsfTab && (
+                <Tab
+                  id="ssf"
+                  data-testid="ssfTab"
+                  title={<TabTitleText>{t("ssf")}</TabTitleText>}
+                  {...ssfTab}
+                >
+                  <RoutableTabs
+                    defaultLocation={ssfTabRoute("receiver")}
+                    mountOnEnter
+                    unmountOnExit
+                  >
+                    <Tab
+                      id="ssfReceiverTab"
+                      data-testid="ssfReceiverTab"
+                      title={<TabTitleText>{t("ssfTabReceiver")}</TabTitleText>}
+                      {...ssfReceiverTab}
+                    >
+                      <SsfTab
+                        save={save}
+                        client={client}
+                        activeTab="receiver"
+                      />
+                    </Tab>
+                    <Tab
+                      id="ssfStreamTab"
+                      data-testid="ssfStreamTab"
+                      title={<TabTitleText>{t("ssfTabStream")}</TabTitleText>}
+                      {...ssfStreamTab}
+                    >
+                      <SsfTab save={save} client={client} activeTab="stream" />
+                    </Tab>
+                    <Tab
+                      id="ssfSubjectsTab"
+                      data-testid="ssfSubjectsTab"
+                      title={<TabTitleText>{t("ssfTabSubjects")}</TabTitleText>}
+                      {...ssfSubjectsTab}
+                    >
+                      <SsfTab
+                        save={save}
+                        client={client}
+                        activeTab="subjects"
+                      />
+                    </Tab>
+                    <Tab
+                      id="ssfEventSearchTab"
+                      data-testid="ssfEventSearchTab"
+                      title={
+                        <TabTitleText>{t("ssfTabEventSearch")}</TabTitleText>
+                      }
+                      {...ssfEventSearchTab}
+                    >
+                      <SsfTab
+                        save={save}
+                        client={client}
+                        activeTab="event-search"
+                      />
+                    </Tab>
+                    {showSsfEmitEventsTab && (
+                      <Tab
+                        id="ssfEmitEventsTab"
+                        data-testid="ssfEmitEventsTab"
+                        title={
+                          <TabTitleText>{t("ssfTabEmitEvents")}</TabTitleText>
+                        }
+                        {...ssfEmitEventsTab}
+                      >
+                        <SsfTab
+                          save={save}
+                          client={client}
+                          activeTab="emit-events"
+                        />
+                      </Tab>
+                    )}
+                  </RoutableTabs>
+                </Tab>
+              )}
             {hasAccess("view-events") && (
               <Tab
                 data-testid="events-tab"

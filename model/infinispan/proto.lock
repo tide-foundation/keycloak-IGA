@@ -1,6 +1,6 @@
 {
   "definitions" : [ {
-    "protopath" : "generated:/:KeycloakModelSchema.proto",
+    "protopath" : "proto:/:generated:/:KeycloakModelSchema.proto",
     "def" : {
       "enums" : [ {
         "name" : "State",
@@ -396,6 +396,11 @@
           "id" : 7,
           "name" : "lastIPFailure",
           "type" : "string",
+          "optional" : true
+        }, {
+          "id" : 8,
+          "name" : "numSecondaryAuthFailures",
+          "type" : "int32",
           "optional" : true
         } ]
       }, {
@@ -938,6 +943,35 @@
           "optional" : true
         } ]
       }, {
+        "name" : "WorkflowScheduleClusterEvent",
+        "type_id" : 65621,
+        "fields" : [ {
+          "id" : 1,
+          "name" : "realmId",
+          "type" : "string",
+          "optional" : true
+        }, {
+          "id" : 2,
+          "name" : "workflowId",
+          "type" : "string",
+          "optional" : true
+        }, {
+          "id" : 3,
+          "name" : "removed",
+          "type" : "bool",
+          "optional" : true
+        }, {
+          "id" : 4,
+          "name" : "intervalSecs",
+          "type" : "int32",
+          "optional" : true
+        }, {
+          "id" : 5,
+          "name" : "lastScheduleRun",
+          "type" : "int32",
+          "optional" : true
+        } ]
+      }, {
         "name" : "InRealmPredicate",
         "type_id" : 65573,
         "fields" : [ {
@@ -1070,6 +1104,15 @@
         }, {
           "id" : 7,
           "name" : "serverId",
+          "type" : "string",
+          "optional" : true
+        } ]
+      }, {
+        "name" : "UserVerifiableCredentialsUpdatedEvent",
+        "type_id" : 65622,
+        "fields" : [ {
+          "id" : 1,
+          "name" : "id",
           "type" : "string",
           "optional" : true
         } ]

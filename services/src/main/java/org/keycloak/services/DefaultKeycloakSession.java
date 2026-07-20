@@ -47,6 +47,7 @@ import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.models.KeycloakTransactionManager;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RealmProvider;
+import org.keycloak.models.RevokedTokenProvider;
 import org.keycloak.models.RoleProvider;
 import org.keycloak.models.SingleUseObjectProvider;
 import org.keycloak.models.ThemeManager;
@@ -166,7 +167,6 @@ public abstract class DefaultKeycloakSession implements KeycloakSession {
         return getDatastoreProvider().users();
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public <T extends Provider> T getProvider(Class<T> clazz) {
         List<String> key = List.of(clazz.getName());
@@ -174,6 +174,7 @@ public abstract class DefaultKeycloakSession implements KeycloakSession {
     }
 
     private <T extends Provider> T getOrCreateProvider(List<String> key, Supplier<ProviderFactory<T>> supplier) {
+        @SuppressWarnings("unchecked")
         T provider = (T) providers.get(key);
         // KEYCLOAK-11890 - Avoid using HashMap.computeIfAbsent() to implement logic in outer if() block below,
         // since per JDK-8071667 the remapping function should not modify the map during computation. While
@@ -188,7 +189,6 @@ public abstract class DefaultKeycloakSession implements KeycloakSession {
         return provider;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public <T extends Provider> T getProvider(Class<T> clazz, String id) {
         List<String> key = List.of(clazz.getName(), id);
@@ -207,11 +207,10 @@ public abstract class DefaultKeycloakSession implements KeycloakSession {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T extends Provider> T getComponentProvider(Class<T> clazz, String componentId, Function<KeycloakSessionFactory, ComponentModel> modelGetter) {
         List<String> key = List.of("component", clazz.getName(), componentId);
         final RealmModel realm = getContext().getRealm();
-        return getOrCreateProvider(key, () -> factory.getProviderFactory(clazz, Optional.ofNullable(realm.getId()).orElse(null), componentId, modelGetter));
+        return getOrCreateProvider(key, () -> factory.getProviderFactory(clazz, Optional.ofNullable(realm).map(RealmModel::getId).orElse(null), componentId, modelGetter));
     }
 
     @Override
@@ -297,6 +296,11 @@ public abstract class DefaultKeycloakSession implements KeycloakSession {
     @Override
     public SingleUseObjectProvider singleUseObjects() {
         return getDatastoreProvider().singleUseObjects();
+    }
+
+    @Override
+    public RevokedTokenProvider revokedTokens() {
+        return getDatastoreProvider().revokedTokens();
     }
 
     @Override

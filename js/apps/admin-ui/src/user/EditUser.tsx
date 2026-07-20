@@ -33,6 +33,7 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
@@ -44,11 +45,14 @@ import { UserAttributes } from "./UserAttributes";
 import { UserConsents } from "./UserConsents";
 import { UserCredentials } from "./UserCredentials";
 import { BruteForced, UserForm } from "./UserForm";
+import { ExportLoginDiagnosticsModal } from "./ExportLoginDiagnosticsModal";
 import { UserGroups } from "./UserGroups";
 import { UserIdentityProviderLinks } from "./UserIdentityProviderLinks";
 import { UserRoleMapping } from "./UserRoleMapping";
 import { UserSessions } from "./UserSessions";
 import { UserEvents } from "../events/UserEvents";
+import { UserVerifiableCredentials } from "./UserVerifiableCredentials";
+import { UserWorkflows } from "./UserWorkflows";
 import {
   UIUserRepresentation,
   UserFormFields,
@@ -59,6 +63,8 @@ import {
 import { UserParams, UserTab, toUser } from "./routes/User";
 import { toUsers } from "./routes/Users";
 import { isLightweightUser } from "./utils";
+import { extractUserProfileErrorMessages } from "./utils/user-profile";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 
 import "./user-section.css";
 import { AdminEvents } from "../events/AdminEvents";
@@ -89,13 +95,16 @@ export default function EditUser() {
     useState<UserProfileMetadata>();
   const [refreshCount, setRefreshCount] = useState(0);
   const refresh = () => setRefreshCount((count) => count + 1);
+  const [exportDiagnosticsOpen, setExportDiagnosticsOpen] = useState(false);
   const lightweightUser = isLightweightUser(user?.id);
   const [upConfig, setUpConfig] = useState<UserProfileConfig>();
 
   const [realmHasOrganizations, setRealmHasOrganizations] = useState(false);
   const isFeatureEnabled = useIsFeatureEnabled();
   const showOrganizations =
-    isFeatureEnabled(Feature.Organizations) && realm?.organizationsEnabled;
+    isFeatureEnabled(Feature.Organizations) && realm.organizationsEnabled;
+  const showVerifiableCredentials =
+    isFeatureEnabled(Feature.OpenId4VCI) && realm.verifiableCredentialsEnabled;
 
   const toTab = (tab: UserTab) =>
     toUser({
@@ -118,6 +127,10 @@ export default function EditUser() {
   );
   const sessionsTab = useRoutableTab(toTab("sessions"));
   const eventsTab = useRoutableTab(toTab("events"));
+  const workflowsTab = useRoutableTab(toTab("workflows"));
+  const verifiableCredentialsTab = useRoutableTab(
+    toTab("verifiable-credentials"),
+  );
 
   useFetch(
     async () =>
@@ -140,7 +153,7 @@ export default function EditUser() {
       upConfig,
       organizations,
     ]) => {
-      if (!userData || !realm || !attackDetection) {
+      if (!userData || !attackDetection) {
         throw new Error(t("notFound"));
       }
 
@@ -193,20 +206,27 @@ export default function EditUser() {
             (field, params) => {
               if (field.startsWith("attributes.")) {
                 const attributeName = field.substring("attributes.".length);
-                (data.unmanagedAttributes as KeyValueType[]).forEach(
-                  (attr, index) => {
-                    if (attr.key === attributeName) {
-                      unmanagedAttributeErrors[index] = params;
-                      someUnmanagedAttributeError = true;
-                    }
-                  },
-                );
+                const unmanagedAttrs =
+                  data.unmanagedAttributes as KeyValueType[];
+                let isUnmanagedAttribute = false;
+                unmanagedAttrs.forEach((attr, index) => {
+                  if (attr.key === attributeName) {
+                    unmanagedAttributeErrors[index] = params;
+                    someUnmanagedAttributeError = true;
+                    isUnmanagedAttribute = true;
+                  }
+                });
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in forEach above
+                if (!isUnmanagedAttribute) {
+                  form.setError(field, params);
+                }
               } else {
                 form.setError(field, params);
               }
             },
             ((key, param) => t(key as string, param as any)) as TFunction,
           );
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in callback above
           if (someUnmanagedAttributeError) {
             form.setError(
               "unmanagedAttributes",
@@ -219,7 +239,8 @@ export default function EditUser() {
             param,
           ) => t(key as string, param as any)) as TFunction);
         }
-        addError("userNotSaved", "");
+        const errorMessage = extractUserProfileErrorMessages(error, t);
+        addError("userNotSaved", errorMessage);
       } else {
         addError("userCreateError", error);
       }
@@ -248,7 +269,28 @@ export default function EditUser() {
         if (lightweightUser) {
           await adminClient.users.logout({ id: user!.id! });
         } else {
-          await adminClient.users.del({ id: user!.id! });
+          // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+          // change-request envelope (the agent unwraps it; `del` is typed void
+          // but resolves with the parsed body). Detect it with the established
+          // `notifyIfPendingChangeRequest` helper and do NOT report a deletion.
+          const result = await adminClient.users.del({ id: user!.id! });
+          if (
+            notifyIfPendingChangeRequest(
+              result,
+              t,
+              addAlert,
+              { realm: realmName, navigate },
+              {
+                titleKey: "deletePendingChangeRequestCreated",
+                useEnvelopeMessage: true,
+              },
+            )
+          ) {
+            // Entity still exists pending approval — stay on this page and
+            // refresh from server rather than navigating away as if deleted.
+            refresh();
+            return;
+          }
         }
         addAlert(t("userDeletedSuccess"), AlertVariant.success);
         navigate(toUsers({ realm: realmName }));
@@ -288,6 +330,13 @@ export default function EditUser() {
       <ImpersonateConfirm />
       <DeleteConfirm />
       <DisableConfirm />
+      {exportDiagnosticsOpen && (
+        <ExportLoginDiagnosticsModal
+          userId={user.id!}
+          username={user.username!}
+          onClose={() => setExportDiagnosticsOpen(false)}
+        />
+      )}
       <ViewHeader
         titleKey={user.username!}
         className="kc-username-view-header"
@@ -319,6 +368,12 @@ export default function EditUser() {
             {t("impersonate")}
           </DropdownItem>,
           <DropdownItem
+            key="export-login-diagnostics"
+            onClick={() => setExportDiagnosticsOpen(true)}
+          >
+            {t("exportLoginDiagnostics")}
+          </DropdownItem>,
+          <DropdownItem
             key="delete"
             isDisabled={!user.access?.manage}
             onClick={() => toggleDeleteDialog()}
@@ -339,6 +394,7 @@ export default function EditUser() {
         isEnabled={user.enabled}
       />
 
+      <IgaPageBanner entityType="user" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <UserProfileProvider>
           <FormProvider {...form}>
@@ -381,6 +437,17 @@ export default function EditUser() {
               >
                 <UserCredentials user={user} setUser={setUser} />
               </Tab>
+              {showVerifiableCredentials && (
+                <Tab
+                  data-testid="verifiable-credentials-tab"
+                  title={
+                    <TabTitleText>{t("verifiableCredentials")}</TabTitleText>
+                  }
+                  {...verifiableCredentialsTab}
+                >
+                  <UserVerifiableCredentials user={user} />
+                </Tab>
+              )}
               <Tab
                 data-testid="role-mapping-tab"
                 isHidden={!user.access?.view}
@@ -453,6 +520,15 @@ export default function EditUser() {
                       <AdminEvents resourcePath={`users/${user.id}*`} />
                     </Tab>
                   </Tabs>
+                </Tab>
+              )}
+              {isFeatureEnabled(Feature.Workflows) && (
+                <Tab
+                  data-testid="workflows-tab"
+                  title={<TabTitleText>{t("workflows")}</TabTitleText>}
+                  {...workflowsTab}
+                >
+                  <UserWorkflows user={user.id} />
                 </Tab>
               )}
             </RoutableTabs>

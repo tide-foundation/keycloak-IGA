@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.keycloak</groupId>
         <artifactId>keycloak-rest-parent</artifactId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
     </parent>
 
     <artifactId>keycloak-admin-v2-parent</artifactId>
@@ -14,8 +14,8 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>rest</module>
         <module>api</module>
+        <module>services</module>
         <module>tests</module>
     </modules>
 </project>

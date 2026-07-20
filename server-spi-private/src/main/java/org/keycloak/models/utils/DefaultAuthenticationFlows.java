@@ -465,6 +465,7 @@ public class DefaultAuthenticationFlows {
     }
 
     public static void clientAuthFlow(RealmModel realm) {
+
         AuthenticationFlowModel clients = new AuthenticationFlowModel();
         clients.setAlias(CLIENT_AUTHENTICATION_FLOW);
         clients.setDescription("Base authentication for clients");
@@ -473,6 +474,18 @@ public class DefaultAuthenticationFlows {
         clients.setBuiltIn(true);
         clients = realm.addAuthenticationFlow(clients);
         realm.setClientAuthenticationFlow(clients);
+
+        // Attestation-Based Client Authentication is a stronger authentication method
+        //
+        if (Profile.isFeatureEnabled(Feature.CLIENT_AUTH_ABCA)) {
+            AuthenticationExecutionModel execution = new AuthenticationExecutionModel();
+            execution.setParentFlow(clients.getId());
+            execution.setRequirement(AuthenticationExecutionModel.Requirement.ALTERNATIVE);
+            execution.setAuthenticator("attestation-based");
+            execution.setPriority(5);
+            execution.setAuthenticatorFlow(false);
+            realm.addAuthenticatorExecution(execution);
+        }
 
         AuthenticationExecutionModel execution = new AuthenticationExecutionModel();
         execution.setParentFlow(clients.getId());
@@ -825,6 +838,11 @@ public class DefaultAuthenticationFlows {
         if (!Profile.isFeatureEnabled(Feature.ORGANIZATION)) {
             return;
         }
+
+        if (isOrganizationAuthenticatorPresent(realm, flow.getId())) {
+            return;
+        }
+
         if (!Config.getAdminRealm().equals(realm.getName())) {
             // do not add the org flows to the master realm for now.
             AuthenticationFlowModel organizations = new AuthenticationFlowModel();
@@ -872,5 +890,18 @@ public class DefaultAuthenticationFlows {
             execution.setAuthenticatorFlow(false);
             realm.addAuthenticatorExecution(execution);
         }
+    }
+
+    private static boolean isOrganizationAuthenticatorPresent(RealmModel realm, String flowId) {
+        return flowId != null && realm.getAuthenticationExecutionsStream(flowId)
+                .anyMatch((e) -> isOrganizationAuthenticatorPresent(realm, e));
+    }
+
+    private static boolean isOrganizationAuthenticatorPresent(RealmModel realm, AuthenticationExecutionModel execution) {
+        if ("organization".equals(execution.getAuthenticator())) {
+            return true;
+        }
+
+        return isOrganizationAuthenticatorPresent(realm, execution.getFlowId());
     }
 }

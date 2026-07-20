@@ -413,10 +413,6 @@ public class LogoutEndpoint {
                 userSession = session.sessions().getUserSession(realm, userSessionIdFromIdToken);
 
                 if (userSession == null) {
-                    userSession = session.sessions().getOfflineUserSession(realm, userSessionIdFromIdToken);
-                }
-
-                if (userSession == null) {
                     event.event(EventType.LOGOUT);
                     event.error(Errors.SESSION_EXPIRED);
                     KeycloakContext context = session.getContext();
@@ -500,7 +496,7 @@ public class LogoutEndpoint {
         }
 
         try {
-            session.clientPolicy().triggerOnEvent(new LogoutRequestContext(form));
+            session.clientPolicy().triggerOnEvent(new LogoutRequestContext(client, form));
             refreshToken = form.getFirst(OAuth2Constants.REFRESH_TOKEN);
         } catch (ClientPolicyException cpe) {
             event.detail(Details.REASON, Details.CLIENT_POLICY_ERROR);
@@ -717,7 +713,7 @@ public class LogoutEndpoint {
 
     private ClientModel authorizeClient() {
         ClientModel client = AuthorizeClientUtil.authorizeClient(session, event, cors).getClient();
-        cors.allowedOrigins(session, client);
+        cors.checkAllowedOrigins(session, client);
 
         if (client.isBearerOnly()) {
             throw new CorsErrorResponseException(cors, Errors.INVALID_CLIENT, "Bearer-only not allowed", Response.Status.BAD_REQUEST);

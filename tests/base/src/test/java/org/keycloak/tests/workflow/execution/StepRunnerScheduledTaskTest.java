@@ -32,6 +32,7 @@ import org.keycloak.models.UserProvider;
 import org.keycloak.models.workflow.DisableUserStepProviderFactory;
 import org.keycloak.models.workflow.SetUserAttributeStepProviderFactory;
 import org.keycloak.models.workflow.WorkflowStepRunnerSuccessEvent;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
 import org.keycloak.provider.ProviderEventListener;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
@@ -39,14 +40,11 @@ import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.storage.UserStoragePrivateUtil;
 import org.keycloak.testframework.annotations.InjectAdminClient;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsScheduledTaskServerConfig;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-
-import static org.keycloak.models.workflow.ResourceOperationType.USER_CREATED;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,7 +54,6 @@ public class StepRunnerScheduledTaskTest extends AbstractWorkflowTest {
     @InjectAdminClient(mode = InjectAdminClient.Mode.BOOTSTRAP, realmRef = DEFAULT_REALM_NAME)
     Keycloak adminClient;
 
-    @Disabled
     @Test
     public void testStepRunnerScheduledTask() {
         for (int i = 0; i < 2; i++) {
@@ -75,7 +72,7 @@ public class StepRunnerScheduledTaskTest extends AbstractWorkflowTest {
         RealmResource realm = adminClient.realm(realmName);
 
         realm.workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(SetUserAttributeStepProviderFactory.ID)
                                 .after(Duration.ofDays(5))
@@ -86,7 +83,7 @@ public class StepRunnerScheduledTaskTest extends AbstractWorkflowTest {
                                 .build()
                 ).build()).close();
 
-        realm.users().create(UserConfigBuilder.create()
+        realm.users().create(UserBuilder.create()
                 .username("alice")
                 .email("alice@keycloak.org")
                 .name("alice", "wonderland")

@@ -5,7 +5,7 @@
     <parent>
         <artifactId>integration-arquillian-servers-auth-server</artifactId>
         <groupId>org.keycloak.testsuite</groupId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -235,6 +235,14 @@
                                 <artifactItem>
                                     <groupId>org.keycloak.testsuite</groupId>
                                     <artifactId>integration-arquillian-testsuite-providers-deployment</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>jar</type>
+                                    <overWrite>false</overWrite>
+                                    <outputDirectory>${auth.server.home}/providers</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.keycloak.testframework</groupId>
+                                    <artifactId>keycloak-test-framework-remote-providers</artifactId>
                                     <version>${project.version}</version>
                                     <type>jar</type>
                                     <overWrite>false</overWrite>

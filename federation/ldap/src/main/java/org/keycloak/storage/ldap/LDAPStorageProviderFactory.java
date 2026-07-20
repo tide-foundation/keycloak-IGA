@@ -17,6 +17,7 @@
 
 package org.keycloak.storage.ldap;
 
+import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -223,6 +224,10 @@ public class LDAPStorageProviderFactory implements UserStorageProviderFactory<LD
                 .type(ProviderConfigProperty.BOOLEAN_TYPE)
                 .defaultValue("false")
                 .add()
+                .property().name(LDAPConstants.ENABLE_LDAP_PASSWORD_POLICY)
+                .type(ProviderConfigProperty.BOOLEAN_TYPE)
+                .defaultValue("false")
+                .add()
                 .build();
     }
 
@@ -274,6 +279,24 @@ public class LDAPStorageProviderFactory implements UserStorageProviderFactory<LD
                 Long.parseLong(readTimeout);
             } catch (NumberFormatException nfe) {
                 throw new ComponentValidationException("ldapErrorReadTimeoutNotNumber");
+            }
+        }
+
+        String connectionUrl = cfg.getConnectionUrl();
+        if (connectionUrl != null) {
+            if (connectionUrl.contains(",")) {
+                throw new ComponentValidationException("ldapErrorConnectionUrlContainsComma");
+            }
+            for (String url : LDAPConstants.toLdapUrls(connectionUrl)) {
+                try {
+                    URI uri = URI.create(url);
+                    String scheme = uri.getScheme();
+                    if (scheme == null || !(scheme.equalsIgnoreCase("ldap") || scheme.equalsIgnoreCase("ldaps"))) {
+                        throw new ComponentValidationException("ldapErrorInvalidConnectionUrlScheme");
+                    }
+                } catch (IllegalArgumentException e) {
+                    throw new ComponentValidationException("ldapErrorInvalidConnectionUrl");
+                }
             }
         }
 

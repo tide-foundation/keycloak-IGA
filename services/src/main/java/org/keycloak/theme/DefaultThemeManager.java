@@ -75,7 +75,11 @@ public class DefaultThemeManager implements ThemeManager {
             if (theme == null) {
                 String defaultThemeName = session.getProvider(ThemeSelectorProvider.class).getDefaultThemeName(type);
                 theme = loadTheme(defaultThemeName, type, realm);
-                log.errorv("Failed to find {0} theme {1}, using built-in themes", type, name);
+                if (theme == null) {
+                    log.warnv("Failed to find {0} theme {1}, as it might be unavailable because a required feature is disabled", type, name);
+                } else {
+                    log.errorv("Failed to find {0} theme {1}, using built-in themes", type, name);
+                }
             } else {
                 theme = factory.addCachedTheme(name, type, theme);
             }
@@ -209,6 +213,11 @@ public class DefaultThemeManager implements ThemeManager {
         }
 
         @Override
+        public boolean isAbstract() throws IOException {
+            return themes.get(0).isAbstract();
+        }
+
+        @Override
         public URL getTemplate(String name) throws IOException {
             for (Theme t : themes) {
                 URL template = t.getTemplate(name);
@@ -225,6 +234,25 @@ public class DefaultThemeManager implements ThemeManager {
             }
 
             return null;
+        }
+
+        @Override
+        public boolean hasResource(String path) throws IOException {
+            for (Theme t : themes) {
+                if (t.hasResource(path)) {
+                    return true;
+                }
+            }
+
+            for (ThemeResourceProvider t : themeResourceProviders) {
+                try (InputStream resource = t.getResourceAsStream(path)) {
+                    if (resource != null) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         @Override
@@ -303,6 +331,8 @@ public class DefaultThemeManager implements ThemeManager {
         }
 
         protected void addlocaleTranslations(Locale locale, Properties m) throws IOException {
+            Locale currentLocale = Locale.forLanguageTag(resolveChineseLocale(locale.toLanguageTag()));
+
             for (String l : getProperties().getProperty("locales", "").split(",")) {
                 l = l.trim();
                 String key = "locale_" + l;
@@ -310,17 +340,10 @@ public class DefaultThemeManager implements ThemeManager {
                 if (label != null) {
                     continue;
                 }
-                String rl = l;
-                // This is mapping old locale codes to the new locale codes for Simplified and Traditional Chinese.
-                // Once the existing locales have been moved, this code can be removed.
-                if (l.equals("zh-CN")) {
-                    rl = "zh-Hans";
-                } else if (l.equals("zh-TW")) {
-                    rl = "zh-Hant";
-                }
+                String rl = resolveChineseLocale(l);
                 Locale loc = Locale.forLanguageTag(rl);
                 label = capitalize(loc.getDisplayName(locale), locale);
-                if (!Objects.equals(loc, locale)) {
+                if (!Objects.equals(loc, currentLocale)) {
                     label += " (" + capitalize(loc.getDisplayName(loc), loc) + ")";
                 }
                 m.put(key, label);
@@ -376,6 +399,17 @@ public class DefaultThemeManager implements ThemeManager {
             for (final String propertyName : properties.stringPropertyNames()) {
                 properties.setProperty(propertyName, StringPropertyReplacer.replaceProperties(properties.getProperty(propertyName), SystemEnvProperties.UNFILTERED::getProperty));
             }
+        }
+
+        private String resolveChineseLocale(String locale) {
+            // This is mapping old locale codes to the new locale codes for Simplified and Traditional Chinese.
+            // Once the existing locales have been moved, this code can be removed.
+            if (locale.equals("zh-CN")) {
+                return "zh-Hans";
+            } else if (locale.equals("zh-TW")) {
+                return "zh-Hant";
+            }
+            return locale;
         }
     }
 

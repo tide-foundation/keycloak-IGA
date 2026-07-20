@@ -21,7 +21,7 @@
     <parent>
         <artifactId>keycloak-test-framework-parent</artifactId>
         <groupId>org.keycloak.testframework</groupId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -41,6 +41,12 @@
             </dependency>
             <dependency>
                 <groupId>org.keycloak.testframework</groupId>
+                <artifactId>keycloak-test-framework-builders</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.keycloak.testframework</groupId>
                 <artifactId>keycloak-test-framework-junit5-config</artifactId>
                 <version>${project.version}</version>
                 <scope>test</scope>
@@ -54,6 +60,12 @@
             <dependency>
                 <groupId>org.keycloak.testframework</groupId>
                 <artifactId>keycloak-test-framework-oauth</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.keycloak.testframework</groupId>
+                <artifactId>keycloak-test-framework-test-containers</artifactId>
                 <version>${project.version}</version>
                 <scope>test</scope>
             </dependency>
@@ -102,6 +114,12 @@
             <dependency>
                 <groupId>org.keycloak.testframework</groupId>
                 <artifactId>keycloak-test-framework-email-server</artifactId>
+                <version>${project.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.keycloak.testframework</groupId>
+                <artifactId>keycloak-test-framework-infinispan-server</artifactId>
                 <version>${project.version}</version>
                 <scope>test</scope>
             </dependency>

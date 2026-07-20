@@ -316,6 +316,17 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
         return Collections.unmodifiableMap(this);
     }
 
+    @Override
+    public boolean isDefaultAttribute(String name) {
+        if (UserProfileUtil.isRootAttribute(name)) {
+            return true;
+        }
+
+        AttributeMetadata metadata = getMetadata(name);
+
+        return metadata != null && metadata.isDefault();
+    }
+
     private AttributeContext createAttributeContext(Entry<String, List<String>> attribute, AttributeMetadata metadata) {
         return new AttributeContext(context, session, attribute, user, metadata, this);
     }
@@ -510,7 +521,13 @@ public class DefaultAttributes extends HashMap<String, List<String>> implements 
     }
 
     protected boolean isIncludeAttributeIfNotProvided(AttributeMetadata metadata) {
-        return !metadata.canEdit(createAttributeContext(metadata));
+        if (!metadata.canEdit(createAttributeContext(metadata))) {
+            return true;
+        }
+        if (context.equals(UserProfileContext.USER_API)) {
+            return isReadOnlyInternalAttribute(metadata.getName());
+        }
+        return false;
     }
 
     /**

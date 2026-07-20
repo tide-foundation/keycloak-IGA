@@ -1,8 +1,14 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { createTestBed } from "../support/testbed.ts";
+import adminClient from "../utils/AdminClient.js";
 import { goToClientScopes } from "../utils/sidebar.ts";
-import { clickSaveButton, selectItem } from "../utils/form.ts";
+import {
+  clickSaveButton,
+  selectItem,
+  switchToggle,
+  assertSaveButtonIsDisabled,
+} from "../utils/form.ts";
 import { clickTableRowItem, clickTableToolbarItem } from "../utils/table.ts";
 import { login } from "../utils/login.ts";
 import { toClientScopes } from "../../src/client-scopes/routes/ClientScopes.tsx";
@@ -25,7 +31,7 @@ async function createClientScope(
 async function createClientScopeAndSelectProtocolAndFormat(
   page: Page,
   testBed: Awaited<ReturnType<typeof createTestBed>>,
-  format?: "SD-JWT VC (dc+sd-jwt)" | "JWT VC (jwt_vc)",
+  format?: "SD-JWT VC (dc+sd-jwt)" | "JWT VC (jwt_vc_json)",
 ) {
   await createClientScope(page, testBed);
 
@@ -64,9 +70,14 @@ const OID4VCI_FIELDS = {
   CREDENTIAL_IDENTIFIER: "attributes.vc🍺credential_identifier",
   ISSUER_DID: "attributes.vc🍺issuer_did",
   EXPIRY_IN_SECONDS: "attributes.vc🍺expiry_in_seconds",
+  REFRESH_INTERVAL_IN_SECONDS: "attributes.vc🍺refresh_interval_in_seconds",
+  BINDING_METHODS: "attributes.vc🍺cryptographic_binding_methods_supported",
+  BINDING_SUPPORTED_PROOF_TYPES: "attributes.vc🍺binding_required_proof_types",
   FORMAT: "#kc-vc-format",
   TOKEN_JWS_TYPE: "attributes.vc🍺credential_build_config🍺token_jws_type",
   SIGNING_KEY_ID: "#kc-signing-key-id",
+  SIGNING_ALGORITHM: "#kc-credential-signing-alg",
+  HASH_ALGORITHM: "#kc-hash-algorithm",
   DISPLAY: "attributes.vc🍺display",
   SUPPORTED_CREDENTIAL_TYPES: "attributes.vc🍺supported_credential_types",
   VERIFIABLE_CREDENTIAL_TYPE: "attributes.vc🍺verifiable_credential_type",
@@ -79,7 +90,14 @@ const TEST_VALUES = {
   CREDENTIAL_CONFIG: "test-cred-config-123",
   CREDENTIAL_ID: "test-cred-identifier",
   ISSUER_DID: "did:key:test123",
-  EXPIRY_SECONDS: "86400",
+  // Raw seconds entered into the input (unit stays at "seconds" when filling directly)
+  EXPIRY_SECONDS: "86400", // 1 day in seconds
+  REFRESH_INTERVAL_SECONDS: "43200", // 12 hours in seconds
+  // Expected display values after reload: TimeSelector picks the largest fitting unit
+  EXPIRY_SECONDS_DISPLAY: "1", // 86400 s → displayed as 1 day
+  REFRESH_INTERVAL_SECONDS_DISPLAY: "12", // 43200 s → displayed as 12 hours
+  SIGNING_ALG: "ES256",
+  HASH_ALGORITHM: "sha-384",
   TOKEN_JWS_TYPE: "dc+sd-jwt",
   VISIBLE_CLAIMS: "id,iat,nbf,exp,jti,given_name",
   DISPLAY:
@@ -87,12 +105,48 @@ const TEST_VALUES = {
   SUPPORTED_CREDENTIAL_TYPES: "VerifiableCredential,UniversityDegreeCredential",
   VERIFIABLE_CREDENTIAL_TYPE: "TestCredentialType",
 } as const;
+const TOKEN_JWS_TYPE_WARNING_PREFIX =
+  "The configured Token JWS Type does not match the recommended value for the selected credential format.";
+
+// Helper function to fill TimeSelector fields (enters value in seconds - the base unit)
+async function fillTimeSelectorValue(
+  page: Page,
+  testId: string,
+  value: string,
+) {
+  const input = page.getByTestId(testId);
+  await input.waitFor({ state: "visible" });
+  await input.evaluate((el: HTMLElement) => {
+    const split = el.closest(".pf-v5-l-split");
+    const toggle = split?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Select a time unit"]',
+    );
+    toggle?.click();
+  });
+  await page.getByRole("option", { name: "Seconds" }).click();
+  await input.fill(value);
+}
+
+// Helper function to verify TimeSelector value
+async function expectTimeSelectorValue(
+  page: Page,
+  testId: string,
+  expectedValue: string,
+) {
+  // The TimeSelector's data-testid is placed directly on the <input type="number"> element
+  const input = page.getByTestId(testId);
+  await input.waitFor({ state: "visible" });
+
+  await expect(input).toHaveValue(expectedValue);
+}
 
 test.describe("OID4VCI Client Scope Functionality", () => {
   test("should display OID4VCI fields when protocol is selected", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScope(page, testBed);
 
     await expect(page.locator("#kc-protocol")).toBeVisible();
@@ -122,20 +176,29 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     await expect(
       page.getByTestId(OID4VCI_FIELDS.EXPIRY_IN_SECONDS),
     ).toBeVisible();
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.REFRESH_INTERVAL_IN_SECONDS),
+    ).toBeVisible();
     await expect(page.locator(OID4VCI_FIELDS.FORMAT)).toBeVisible();
     await expect(page.getByTestId(OID4VCI_FIELDS.TOKEN_JWS_TYPE)).toBeVisible();
+    await expect(page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM)).toBeVisible();
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toBeVisible();
     await expect(page.getByTestId(OID4VCI_FIELDS.DISPLAY)).toBeVisible();
   });
 
   test("should save and persist OID4VCI field values", async ({ page }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     const testClientScopeName = `oid4vci-test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     await createClientScopeAndSelectProtocolAndFormat(
       page,
       testBed,
-      "JWT VC (jwt_vc)",
+      "JWT VC (jwt_vc_json)",
     );
+
+    await page.getByTestId("name").fill(testClientScopeName);
 
     await page
       .getByTestId(OID4VCI_FIELDS.CREDENTIAL_CONFIGURATION_ID)
@@ -146,20 +209,36 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     await page
       .getByTestId(OID4VCI_FIELDS.ISSUER_DID)
       .fill(TEST_VALUES.ISSUER_DID);
-    await page
-      .getByTestId(OID4VCI_FIELDS.EXPIRY_IN_SECONDS)
-      .fill(TEST_VALUES.EXPIRY_SECONDS);
+    await fillTimeSelectorValue(
+      page,
+      OID4VCI_FIELDS.EXPIRY_IN_SECONDS,
+      TEST_VALUES.EXPIRY_SECONDS,
+    );
+    await fillTimeSelectorValue(
+      page,
+      OID4VCI_FIELDS.REFRESH_INTERVAL_IN_SECONDS,
+      TEST_VALUES.REFRESH_INTERVAL_SECONDS,
+    );
 
     await page
       .getByTestId(OID4VCI_FIELDS.TOKEN_JWS_TYPE)
       .fill(TEST_VALUES.TOKEN_JWS_TYPE);
+    await selectItem(
+      page,
+      OID4VCI_FIELDS.SIGNING_ALGORITHM,
+      TEST_VALUES.SIGNING_ALG,
+    );
+
+    await selectItem(
+      page,
+      OID4VCI_FIELDS.HASH_ALGORITHM,
+      TEST_VALUES.HASH_ALGORITHM,
+    );
 
     await page.getByTestId(OID4VCI_FIELDS.DISPLAY).fill(TEST_VALUES.DISPLAY);
     await page
       .getByTestId(OID4VCI_FIELDS.SUPPORTED_CREDENTIAL_TYPES)
       .fill(TEST_VALUES.SUPPORTED_CREDENTIAL_TYPES);
-
-    await page.getByTestId("name").fill(testClientScopeName);
 
     await clickSaveButton(page);
     await expect(page.getByText("Client scope created")).toBeVisible();
@@ -175,11 +254,24 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     await expect(page.getByTestId(OID4VCI_FIELDS.ISSUER_DID)).toHaveValue(
       TEST_VALUES.ISSUER_DID,
     );
-    await expect(
-      page.getByTestId(OID4VCI_FIELDS.EXPIRY_IN_SECONDS),
-    ).toHaveValue(TEST_VALUES.EXPIRY_SECONDS);
+    await expectTimeSelectorValue(
+      page,
+      OID4VCI_FIELDS.EXPIRY_IN_SECONDS,
+      TEST_VALUES.EXPIRY_SECONDS_DISPLAY,
+    );
+    await expectTimeSelectorValue(
+      page,
+      OID4VCI_FIELDS.REFRESH_INTERVAL_IN_SECONDS,
+      TEST_VALUES.REFRESH_INTERVAL_SECONDS_DISPLAY,
+    );
     await expect(page.locator("#kc-vc-format")).toContainText(
-      "JWT VC (jwt_vc)",
+      "JWT VC (jwt_vc_json)",
+    );
+    await expect(page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM)).toContainText(
+      TEST_VALUES.SIGNING_ALG,
+    );
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toContainText(
+      TEST_VALUES.HASH_ALGORITHM,
     );
     await expect(page.getByTestId(OID4VCI_FIELDS.DISPLAY)).toHaveValue(
       TEST_VALUES.DISPLAY,
@@ -195,7 +287,9 @@ test.describe("OID4VCI Client Scope Functionality", () => {
   test("should show OID4VCI protocol when global feature is enabled", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScope(page, testBed);
 
     await expect(page.locator("#kc-protocol")).toBeVisible();
@@ -237,13 +331,17 @@ test.describe("OID4VCI Client Scope Functionality", () => {
       page.getByTestId(OID4VCI_FIELDS.EXPIRY_IN_SECONDS),
     ).toBeHidden();
     await expect(page.locator(OID4VCI_FIELDS.FORMAT)).toBeHidden();
+    await expect(page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM)).toBeHidden();
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toBeHidden();
     await expect(page.getByTestId(OID4VCI_FIELDS.DISPLAY)).toBeHidden();
   });
 
   test("should handle OID4VCI protocol selection correctly", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScope(page, testBed);
 
     await expect(page.locator("#kc-protocol")).toBeVisible();
@@ -277,7 +375,9 @@ test.describe("OID4VCI Client Scope Functionality", () => {
   test("should only show supported format options (dc+sd-jwt and jwt_vc)", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScopeAndSelectProtocolAndFormat(page, testBed);
 
     await page.locator("#kc-vc-format").click();
@@ -286,7 +386,7 @@ test.describe("OID4VCI Client Scope Functionality", () => {
       page.getByRole("option", { name: "SD-JWT VC (dc+sd-jwt)" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("option", { name: "JWT VC (jwt_vc)" }),
+      page.getByRole("option", { name: "JWT VC (jwt_vc_json)" }),
     ).toBeVisible();
 
     await expect(
@@ -297,7 +397,9 @@ test.describe("OID4VCI Client Scope Functionality", () => {
   test("should show format-specific fields for SD-JWT format", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScopeAndSelectProtocolAndFormat(
       page,
       testBed,
@@ -318,11 +420,13 @@ test.describe("OID4VCI Client Scope Functionality", () => {
   test("should show format-specific fields for JWT VC format", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScopeAndSelectProtocolAndFormat(
       page,
       testBed,
-      "JWT VC (jwt_vc)",
+      "JWT VC (jwt_vc_json)",
     );
 
     await expect(page.getByTestId(OID4VCI_FIELDS.DISPLAY)).toBeVisible();
@@ -339,7 +443,9 @@ test.describe("OID4VCI Client Scope Functionality", () => {
   test("should save and persist new OID4VCI field values for SD-JWT format", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     const testClientScopeName = `oid4vci-sdjwt-test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     await createClientScopeAndSelectProtocolAndFormat(
@@ -354,6 +460,13 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     await page
       .getByTestId(OID4VCI_FIELDS.CREDENTIAL_IDENTIFIER)
       .fill(TEST_VALUES.CREDENTIAL_ID);
+
+    await selectItem(
+      page,
+      OID4VCI_FIELDS.SIGNING_ALGORITHM,
+      TEST_VALUES.SIGNING_ALG,
+    );
+
     await page.getByTestId(OID4VCI_FIELDS.DISPLAY).fill(TEST_VALUES.DISPLAY);
     await page
       .getByTestId(OID4VCI_FIELDS.SUPPORTED_CREDENTIAL_TYPES)
@@ -381,6 +494,9 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     await expect(
       page.getByTestId(OID4VCI_FIELDS.VERIFIABLE_CREDENTIAL_TYPE),
     ).toHaveValue(TEST_VALUES.VERIFIABLE_CREDENTIAL_TYPE);
+    await expect(page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM)).toContainText(
+      TEST_VALUES.SIGNING_ALG,
+    );
     await expect(page.getByTestId(OID4VCI_FIELDS.VISIBLE_CLAIMS)).toHaveValue(
       TEST_VALUES.VISIBLE_CLAIMS,
     );
@@ -389,10 +505,43 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     );
   });
 
+  test("should omit optional OID4VCI fields when left blank", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    const testClientScopeName = `oid4vci-blank-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page.getByTestId("name").fill(testClientScopeName);
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+
+    await navigateBackAndVerifyClientScope(page, testBed, testClientScopeName);
+
+    await expect(page.getByTestId(OID4VCI_FIELDS.ISSUER_DID)).toHaveValue("");
+    await expect(page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM)).toContainText(
+      "Use default algorithm",
+    );
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toContainText(
+      "sha-256",
+    );
+    await expect(page.getByTestId(OID4VCI_FIELDS.DISPLAY)).toHaveValue("");
+  });
+
   test("should conditionally show/hide fields when format changes", async ({
     page,
   }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScopeAndSelectProtocolAndFormat(
       page,
       testBed,
@@ -403,7 +552,7 @@ test.describe("OID4VCI Client Scope Functionality", () => {
       page.getByTestId(OID4VCI_FIELDS.VERIFIABLE_CREDENTIAL_TYPE),
     ).toBeVisible();
 
-    await selectItem(page, "#kc-vc-format", "JWT VC (jwt_vc)");
+    await selectItem(page, "#kc-vc-format", "JWT VC (jwt_vc_json)");
 
     await page.waitForLoadState("domcontentloaded");
 
@@ -420,7 +569,7 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     ).toBeVisible();
     await expect(page.getByTestId(OID4VCI_FIELDS.VISIBLE_CLAIMS)).toBeVisible();
 
-    await selectItem(page, "#kc-vc-format", "JWT VC (jwt_vc)");
+    await selectItem(page, "#kc-vc-format", "JWT VC (jwt_vc_json)");
 
     await page.waitForLoadState("domcontentloaded");
 
@@ -440,11 +589,13 @@ test.describe("OID4VCI Client Scope Functionality", () => {
   });
 
   test("should show token_jws_type for all formats", async ({ page }) => {
-    await using testBed = await createTestBed();
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
     await createClientScopeAndSelectProtocolAndFormat(
       page,
       testBed,
-      "JWT VC (jwt_vc)",
+      "JWT VC (jwt_vc_json)",
     );
 
     await expect(page.getByTestId(OID4VCI_FIELDS.TOKEN_JWS_TYPE)).toBeVisible();
@@ -453,5 +604,422 @@ test.describe("OID4VCI Client Scope Functionality", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(page.getByTestId(OID4VCI_FIELDS.TOKEN_JWS_TYPE)).toBeVisible();
+  });
+
+  test("should show warning for mismatched token_jws_type based on selected format", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "JWT VC (jwt_vc_json)",
+    );
+
+    const tokenJwsType = page.getByTestId(OID4VCI_FIELDS.TOKEN_JWS_TYPE);
+    await tokenJwsType.fill("dc+sd-jwt");
+
+    await expect(page.getByText(TOKEN_JWS_TYPE_WARNING_PREFIX)).toBeVisible();
+    await expect(page.getByText("Recommended value: vc+jwt.")).toBeVisible();
+
+    await tokenJwsType.fill("vc+jwt");
+    await expect(page.getByText(TOKEN_JWS_TYPE_WARNING_PREFIX)).toHaveCount(0);
+
+    await selectItem(page, "#kc-vc-format", "SD-JWT VC (dc+sd-jwt)");
+    await page.waitForLoadState("domcontentloaded");
+
+    await tokenJwsType.fill("vc+jwt");
+    await expect(page.getByText(TOKEN_JWS_TYPE_WARNING_PREFIX)).toBeVisible();
+    await expect(page.getByText("Recommended value: dc+sd-jwt.")).toBeVisible();
+
+    await tokenJwsType.fill("dc+sd-jwt");
+    await expect(page.getByText(TOKEN_JWS_TYPE_WARNING_PREFIX)).toHaveCount(0);
+  });
+
+  test("should not show token_jws_type warning when the value is empty", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    const tokenJwsType = page.getByTestId(OID4VCI_FIELDS.TOKEN_JWS_TYPE);
+    await tokenJwsType.fill("");
+    await expect(page.getByText(TOKEN_JWS_TYPE_WARNING_PREFIX)).toHaveCount(0);
+
+    await selectItem(page, "#kc-vc-format", "JWT VC (jwt_vc_json)");
+    await page.waitForLoadState("domcontentloaded");
+
+    await tokenJwsType.fill("");
+    await expect(page.getByText(TOKEN_JWS_TYPE_WARNING_PREFIX)).toHaveCount(0);
+  });
+
+  test("should display signing algorithm dropdown with available algorithms", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await expect(page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM)).toBeVisible();
+
+    await page.locator(OID4VCI_FIELDS.SIGNING_ALGORITHM).click();
+
+    await expect(page.getByRole("option", { name: "RS256" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "ES256" })).toBeVisible();
+  });
+
+  test("should display hash algorithm dropdown with available algorithms", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toBeVisible();
+
+    await page.locator(OID4VCI_FIELDS.HASH_ALGORITHM).click();
+
+    await expect(page.getByRole("option", { name: "SHA-256" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "SHA-384" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "SHA-512" })).toBeVisible();
+  });
+
+  test("should save and persist hash algorithm value", async ({ page }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    const testClientScopeName = `oid4vci-hash-alg-test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page
+      .getByTestId(OID4VCI_FIELDS.CREDENTIAL_CONFIGURATION_ID)
+      .fill(TEST_VALUES.CREDENTIAL_CONFIG);
+    await page.getByTestId("name").fill(testClientScopeName);
+
+    await selectItem(
+      page,
+      OID4VCI_FIELDS.HASH_ALGORITHM,
+      TEST_VALUES.HASH_ALGORITHM,
+    );
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+
+    await navigateBackAndVerifyClientScope(page, testBed, testClientScopeName);
+
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toContainText(
+      TEST_VALUES.HASH_ALGORITHM,
+    );
+  });
+
+  test("should require binding methods and proof types when binding is enabled", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    const testClientScopeName = `oid4vci-binding-required-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "JWT VC (jwt_vc_json)",
+    );
+
+    await page
+      .getByTestId(OID4VCI_FIELDS.CREDENTIAL_CONFIGURATION_ID)
+      .fill(TEST_VALUES.CREDENTIAL_CONFIG);
+    await page.getByTestId("name").fill(testClientScopeName);
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await assertSaveButtonIsDisabled(page);
+
+    await page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS).fill("jwk");
+    await assertSaveButtonIsDisabled(page);
+
+    await page
+      .getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES)
+      .fill("jwt");
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+
+    await navigateBackAndVerifyClientScope(page, testBed, testClientScopeName);
+
+    await expect(
+      page.getByTestId("attributes.vc.binding_required"),
+    ).toBeChecked();
+    await expect(page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS)).toHaveValue(
+      "jwk",
+    );
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES),
+    ).toHaveValue("jwt");
+  });
+
+  test("should default to sha-256 when hash algorithm is not set", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    const testClientScopeName = `oid4vci-hash-default-test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page
+      .getByTestId(OID4VCI_FIELDS.CREDENTIAL_CONFIGURATION_ID)
+      .fill(TEST_VALUES.CREDENTIAL_CONFIG);
+    await page.getByTestId("name").fill(testClientScopeName);
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+
+    await navigateBackAndVerifyClientScope(page, testBed, testClientScopeName);
+
+    await expect(page.locator(OID4VCI_FIELDS.HASH_ALGORITHM)).toContainText(
+      "sha-256",
+    );
+  });
+
+  test("should reject unsupported cryptographic binding methods", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page.getByTestId("name").fill(`oid4vci-bad-binding-${Date.now()}`);
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS).fill("cose_key");
+    await page
+      .getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES)
+      .fill("jwt");
+
+    await assertSaveButtonIsDisabled(page);
+
+    await expect(page.getByText("Unsupported binding method(s)")).toBeVisible();
+
+    await page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS).fill("jwk");
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+  });
+
+  test("should reject unsupported proof types", async ({ page }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page.getByTestId("name").fill(`oid4vci-bad-proof-${Date.now()}`);
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS).fill("jwk");
+    await page
+      .getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES)
+      .fill("foo");
+
+    await assertSaveButtonIsDisabled(page);
+
+    await expect(page.getByText("Unsupported proof type(s)")).toBeVisible();
+
+    await page
+      .getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES)
+      .fill("jwt,attestation");
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+  });
+
+  test("should reject mixed valid and invalid proof types", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page.getByTestId("name").fill(`oid4vci-mixed-proof-${Date.now()}`);
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS).fill("jwk");
+    await page
+      .getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES)
+      .fill("jwt,unknown_type");
+
+    await assertSaveButtonIsDisabled(page);
+    await expect(page.getByText("Unsupported proof type(s)")).toBeVisible();
+  });
+
+  test("should accept valid binding methods and proof types", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    const testClientScopeName = `oid4vci-valid-binding-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await page.getByTestId("name").fill(testClientScopeName);
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS).fill("jwk");
+    await page
+      .getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES)
+      .fill("jwt,attestation");
+
+    await clickSaveButton(page);
+    await expect(page.getByText("Client scope created")).toBeVisible();
+
+    await navigateBackAndVerifyClientScope(page, testBed, testClientScopeName);
+
+    await expect(
+      page.getByTestId("attributes.vc.binding_required"),
+    ).toBeChecked();
+    await expect(page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS)).toHaveValue(
+      "jwk",
+    );
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES),
+    ).toHaveValue("jwt,attestation");
+  });
+
+  test("should hide binding fields when binding toggle is off", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed({
+      verifiableCredentialsEnabled: true,
+    });
+    await createClientScopeAndSelectProtocolAndFormat(
+      page,
+      testBed,
+      "SD-JWT VC (dc+sd-jwt)",
+    );
+
+    await expect(page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS)).toBeHidden();
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES),
+    ).toBeHidden();
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES),
+    ).toBeVisible();
+
+    await switchToggle(
+      page,
+      page.getByTestId("attributes.vc.binding_required"),
+    );
+
+    await expect(page.getByTestId(OID4VCI_FIELDS.BINDING_METHODS)).toBeHidden();
+    await expect(
+      page.getByTestId(OID4VCI_FIELDS.BINDING_SUPPORTED_PROOF_TYPES),
+    ).toBeHidden();
+  });
+
+  test("should not offer OID4VCI protocol when verifiable credentials are disabled for the realm", async ({
+    page,
+  }) => {
+    await using testBed = await createTestBed();
+
+    await adminClient.updateRealm(testBed.realm, {
+      verifiableCredentialsEnabled: false,
+    });
+
+    try {
+      await createClientScope(page, testBed);
+
+      await expect(page.locator("#kc-protocol")).toBeVisible();
+      await page.locator("#kc-protocol").click();
+
+      await expect(
+        page.getByRole("option", {
+          name: "OpenID for Verifiable Credentials",
+        }),
+      ).toHaveCount(0);
+    } finally {
+      // Re-enable verifiable credentials so other tests see the default behavior
+      await adminClient.updateRealm(testBed.realm, {
+        verifiableCredentialsEnabled: true,
+      });
+    }
   });
 });

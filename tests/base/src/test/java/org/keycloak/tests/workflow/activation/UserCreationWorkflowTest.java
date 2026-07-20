@@ -3,14 +3,14 @@ package org.keycloak.tests.workflow.activation;
 import jakarta.ws.rs.core.Response;
 
 import org.keycloak.admin.client.resource.UserResource;
-import org.keycloak.models.workflow.ResourceOperationType;
 import org.keycloak.models.workflow.SetUserAttributeStepProviderFactory;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.userprofile.config.UPConfig;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
@@ -35,7 +35,7 @@ public class UserCreationWorkflowTest extends AbstractWorkflowTest {
 
         // create the workflow that triggers on user creation
         WorkflowRepresentation workflow = WorkflowRepresentation.withName("myworkflow")
-                .onEvent(ResourceOperationType.USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(SetUserAttributeStepProviderFactory.ID)
@@ -46,7 +46,7 @@ public class UserCreationWorkflowTest extends AbstractWorkflowTest {
 
         // create a test user to trigger the workflow
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("generic-user").email("generic-user@example.com").build())) {
             userId = ApiUtil.getCreatedId(response);
         }

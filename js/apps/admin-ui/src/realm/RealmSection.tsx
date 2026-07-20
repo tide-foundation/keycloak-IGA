@@ -1,5 +1,9 @@
 import { NetworkError } from "@keycloak/keycloak-admin-client";
-import { KeycloakDataTable, useAlerts } from "@keycloak/keycloak-ui-shared";
+import {
+  KeycloakDataTable,
+  useAlerts,
+  useEnvironment,
+} from "@keycloak/keycloak-ui-shared";
 import {
   AlertVariant,
   Badge,
@@ -24,7 +28,9 @@ import { fetchAdminUI } from "../context/auth/admin-ui-endpoint";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { useRecentRealms } from "../context/RecentRealms";
 import { useWhoAmI } from "../context/whoami/WhoAmI";
-import { translationFormatter } from "../utils/translationFormatter";
+import type { Environment } from "../environment-types";
+import { resolveDisplayName } from "../util";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import NewRealmForm from "./add/NewRealmForm";
 import { toRealm } from "./RealmRoutes";
 import { toDashboard } from "../dashboard/routes/Dashboard";
@@ -120,6 +126,7 @@ export default function RealmSection() {
   const navigate = useNavigate();
   const { whoAmI } = useWhoAmI();
   const { realm } = useRealm();
+  const { environment } = useEnvironment<Environment>();
   const { adminClient } = useAdminClient();
   const { addAlert, addError } = useAlerts();
 
@@ -154,19 +161,49 @@ export default function RealmSection() {
     continueButtonLabel: "delete",
     onConfirm: async () => {
       try {
-        if (selected.filter(({ name }) => name === "master").length > 0) {
+        if (selected.some(({ name }) => name === environment.masterRealm)) {
           addAlert(t("cantDeleteMasterRealm"), AlertVariant.warning);
         }
-        const filtered = selected.filter(({ name }) => name !== "master");
-        if (filtered.length === 0) return;
-        await Promise.all(
-          filtered.map(({ name: realmName }) =>
-            adminClient.realms.del({ realm: realmName }),
-          ),
+        const filtered = selected.filter(
+          ({ name }) => name !== environment.masterRealm,
         );
-        addAlert(t("deletedSuccessRealmSetting"));
-        if (selected.filter(({ name }) => name === realm).length > 0) {
-          navigate(toRealm({ realm: "master" }));
+        if (filtered.length === 0) return;
+        // TIDECLOAK IMPLEMENTATION
+        // A governed realm delete is intercepted as a DELETE_REALM change
+        // request (HTTP 202 + envelope body); the agent layer resolves `del`
+        // with that body. Detect it per realm so a pending deletion is
+        // reported as a change request (not a completed delete) and never
+        // triggers the bounce-to-master navigation for the current realm.
+        // NOTE: 26.7.0 sources the master realm name from the environment
+        // rather than hardcoding "master" — use environment.masterRealm.
+        let deletedCount = 0;
+        let currentRealmPending = false;
+        for (const { name: targetRealm } of filtered) {
+          const result = await adminClient.realms.del({ realm: targetRealm });
+          const pending = notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm: targetRealm, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          );
+          if (pending) {
+            if (targetRealm === realm) currentRealmPending = true;
+          } else {
+            deletedCount++;
+          }
+        }
+        if (deletedCount > 0) {
+          addAlert(t("deletedSuccessRealmSetting"));
+        }
+        if (
+          !currentRealmPending &&
+          selected.some(({ name }) => name === realm)
+        ) {
+          navigate(toRealm({ realm: environment.masterRealm }));
         }
         refresh();
         setSelected([]);
@@ -250,7 +287,8 @@ export default function RealmSection() {
             {
               name: "displayName",
               transforms: [cellWidth(80)],
-              cellFormatters: [translationFormatter(t)],
+              cellRenderer: ({ displayName }) =>
+                resolveDisplayName(t, displayName, "—"),
             },
           ]}
         />

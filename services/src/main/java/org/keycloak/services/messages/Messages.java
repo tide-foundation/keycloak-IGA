@@ -39,6 +39,8 @@ public class Messages {
 
     public static final String ORG_NOT_FOUND = "orgNotFoundMessage";
 
+    public static final String ORG_DISABLED = "orgDisabledMessage";
+
     public static final String ORG_MEMBER_ALREADY = "orgMemberAlready";
 
     public static final String INVALID_ORG_INVITE = "invalidOrgInviteMessage";
@@ -94,6 +96,8 @@ public class Messages {
     public static final String RECAPTCHA_NOT_CONFIGURED = "recaptchaNotConfigured";
 
     public static final String EMAIL_EXISTS = "emailExistsMessage";
+
+    public static final String DID_EXISTS = "didExistsMessage";
     public static final String EMAIL_VERIFICATION_PENDING = "emailVerificationPending";
 
     public static final String FEDERATED_IDENTITY_EXISTS = "federatedIdentityExistsMessage";
@@ -140,6 +144,8 @@ public class Messages {
 
     public static final String ACCOUNT_UPDATED = "accountUpdatedMessage";
 
+    public static final String ACCOUNT_UPDATED_TITLE = "accountUpdatedTitle";
+
     public static final String ACCOUNT_PASSWORD_UPDATED = "accountPasswordUpdatedMessage";
 
     public static final String NO_ACCESS = "noAccessMessage";
@@ -176,6 +182,8 @@ public class Messages {
     public static final String NO_RELAY_STATE_IN_RESPONSE = "noRelayStateInResponseMessage";
 
     public static final String IDENTITY_PROVIDER_ALREADY_LINKED = "identityProviderAlreadyLinkedMessage";
+
+    public static final String IDENTITY_PROVIDER_ALREADY_LINKED_TO_CURRENT_USER = "identityProviderAlreadyLinkedToCurrentUserMessage";
 
     public static final String INSUFFICIENT_PERMISSION = "insufficientPermissionMessage";
 
@@ -232,6 +240,8 @@ public class Messages {
     public static final String CONFIRM_EMAIL_ADDRESS_VERIFICATION_HEADER = "confirmEmailAddressVerificationHeader";
 
     public static final String CONFIRM_EXECUTION_OF_ACTIONS = "confirmExecutionOfActions";
+
+    public static final String CONFIRM_CLAIM_CREDENTIAL = "credentialOfferTitle";
 
     public static final String STALE_CODE = "staleCodeMessage";
 

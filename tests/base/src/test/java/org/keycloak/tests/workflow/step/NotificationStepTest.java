@@ -30,6 +30,8 @@ import org.keycloak.models.UserModel;
 import org.keycloak.models.workflow.DeleteUserStepProviderFactory;
 import org.keycloak.models.workflow.DisableUserStepProviderFactory;
 import org.keycloak.models.workflow.NotifyUserStepProviderFactory;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
+import org.keycloak.representations.workflows.StepExecutionStatus;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.InjectAdminClient;
@@ -37,7 +39,7 @@ import org.keycloak.testframework.annotations.InjectKeycloakUrls;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
 import org.keycloak.testframework.mail.MailServer;
 import org.keycloak.testframework.mail.annotations.InjectMailServer;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.server.KeycloakUrls;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.utils.MailUtils;
@@ -46,13 +48,13 @@ import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
 
 import org.junit.jupiter.api.Test;
 
-import static org.keycloak.models.workflow.ResourceOperationType.USER_CREATED;
 import static org.keycloak.tests.workflow.util.EmailTestUtils.findEmailByRecipient;
 import static org.keycloak.tests.workflow.util.EmailTestUtils.findEmailByRecipientContaining;
 import static org.keycloak.tests.workflow.util.EmailTestUtils.verifyEmailContent;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -78,7 +80,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
     public void testNotifyUserStepSendsEmailWithDefaultDisableMessage() {
         // Create workflow: disable at 10 days, notify 3 days before (at day 7)
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(7))
@@ -89,7 +91,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
                                 .build()
                 ).build()).close();
 
-        managedRealm.admin().users().create(UserConfigBuilder.create().username("testuser").email("test@example.com").name("John", "").build()).close();
+        managedRealm.admin().users().create(UserBuilder.create().username("testuser").email("test@example.com").name("John", "").build()).close();
 
         // Simulate user being 7 days old (eligible for notify step)
         runScheduledSteps(Duration.ofDays(7));
@@ -106,7 +108,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
     public void testNotifyUserStepSendsEmailWithDefaultDeleteMessage() {
         // Create workflow: delete at 30 days, notify 15 days before (at day 15)
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(15))
@@ -117,7 +119,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
                                 .build()
                 ).build()).close();
 
-        managedRealm.admin().users().create(UserConfigBuilder.create().username("testuser2").email("test2@example.com").name("Jane", "").build()).close();
+        managedRealm.admin().users().create(UserBuilder.create().username("testuser2").email("test2@example.com").name("Jane", "").build()).close();
 
         // Simulate user being 15 days old
         runScheduledSteps(Duration.ofDays(15));
@@ -133,7 +135,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
     @Test
     public void testNotifyUserStepSkipsUsersWithoutEmailButLogsWarning() {
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(5))
@@ -144,7 +146,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
                 ).build()).close();
 
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create().username("testuser4").name("NoEmail", "").build())) {
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create().username("testuser4").name("NoEmail", "").build())) {
             userId = ApiUtil.getCreatedId(response);
         }
 
@@ -152,8 +154,11 @@ public class NotificationStepTest extends AbstractWorkflowTest {
         List<WorkflowRepresentation> scheduledWorkflows = managedRealm.admin().workflows().getScheduledWorkflows(userId);
         assertThat(scheduledWorkflows, hasSize(1));
         List<WorkflowStepRepresentation> steps = scheduledWorkflows.get(0).getSteps();
-        assertThat(steps, hasSize(1));
-        assertEquals(DisableUserStepProviderFactory.ID, steps.get(0).getUses());
+        assertThat(steps, hasSize(2));
+        assertThat(steps.get(0).getExecutionStatus(), is(StepExecutionStatus.COMPLETED));
+        assertThat(steps.get(1).getExecutionStatus(), is(StepExecutionStatus.PENDING));
+        // pending step should the disable step
+        assertEquals(DisableUserStepProviderFactory.ID, steps.get(1).getUses());
 
         // Should NOT send email to user without email address
         MimeMessage testUserMessage = findEmailByRecipientContaining(mailServer, "testuser4");
@@ -164,7 +169,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
     public void testCompleteUserLifecycleWithMultipleNotifications() {
         // Create workflow: just disable at 30 days with one notification before
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .after(Duration.ofDays(15))
@@ -175,7 +180,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
                                 .build()
                 ).build()).close();
 
-        managedRealm.admin().users().create(UserConfigBuilder.create().username("testuser5").email("testuser5@example.com").name("TestUser5", "").build()).close();
+        managedRealm.admin().users().create(UserBuilder.create().username("testuser5").email("testuser5@example.com").name("TestUser5", "").build()).close();
 
         // Day 15: First notification - this should run the notify step and schedule the disable step
         runScheduledSteps(Duration.ofDays(15));
@@ -213,7 +218,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
     public void testNotifyUserStepWithCustomMessageOverride() throws IOException {
         // Create workflow: disable at 7 days, notify 2 days before (at day 5) with custom message
         managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
                                 .withConfig("message", "<p>Dear ${user.firstName} ${user.lastName}, </p>\n" +
@@ -234,7 +239,7 @@ public class NotificationStepTest extends AbstractWorkflowTest {
 
         try {
             managedRealm.admin().users().create(
-                    UserConfigBuilder.create()
+                    UserBuilder.create()
                             .username("testuser3")
                             .email("test3@example.com")
                             .name("Bob", "Doe")
@@ -254,5 +259,34 @@ public class NotificationStepTest extends AbstractWorkflowTest {
         } finally {
             mailServer.runCleanup();
         }
+    }
+
+    @Test
+    public void testNotifyUserStepWithSendToConfiguration() throws Exception {
+        // Create workflow: notify immediately with send_to
+        managedRealm.admin().workflows().create(WorkflowRepresentation.withName("myworkflow")
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
+                .withSteps(
+                        WorkflowStepRepresentation.create().of(NotifyUserStepProviderFactory.ID)
+                                .withConfig("to", "admin@example.com")
+                                .withConfig("reason", "manual-review")
+                                .build(),
+                        WorkflowStepRepresentation.create().of(DisableUserStepProviderFactory.ID)
+                                .after(Duration.ofDays(7))
+                                .build()
+                ).build()).close();
+
+        managedRealm.admin().users().create(UserBuilder.create().username("userXYZ").email("user@example.com").name("User", "XYZ").build()).close();
+
+        // Verify email was sent to admin@example.com
+        MimeMessage message = mailServer.getLastReceivedMessage();
+        assertNotNull(message, "Email should be sent");
+
+        assertEquals("admin@example.com", message.getRecipients(jakarta.mail.Message.RecipientType.TO)[0].toString());
+
+        // Use helper to verify content - note that we pass admin email as recipient check
+        verifyEmailContent(message, "admin@example.com", "Disable", "User", "7", "manual-review");
+
+        mailServer.runCleanup();
     }
 }

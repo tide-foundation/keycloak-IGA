@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,7 +37,6 @@ import org.keycloak.authorization.store.PolicyStore;
 import org.keycloak.authorization.store.ResourceStore;
 import org.keycloak.models.AdminRoles;
 import org.keycloak.models.ClientModel;
-import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleContainerModel;
@@ -155,7 +155,7 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
         if (AdminRoles.ALL_ROLES.contains(role.getName())) {
             if (root.admin().hasRole(role)) return true;
 
-            ClientModel adminClient = getRealmManagementClient();
+            ClientModel adminClient = root.getRealmManagementClient();
             // is this an admin role in 'realm-management' client of the realm we are managing?
             if (adminClient.equals(role.getContainer())) {
                 // if this is realm admin role, then check to see if admin has similar permissions
@@ -182,6 +182,8 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
                 } else if (role.getName().equals(AdminRoles.QUERY_USERS)) {
                     return true;
                 } else if (role.getName().equals(AdminRoles.QUERY_GROUPS)) {
+                    return true;
+                } else if (role.getName().equals(AdminRoles.QUERY_ORGANIZATIONS)) {
                     return true;
                 } else if (role.getName().equals(AdminRoles.MANAGE_AUTHORIZATION)) {
                     ResourceServer resourceServer = getResourceServer(role);
@@ -241,6 +243,18 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
                     }
                 } else if (role.getName().equals(AdminRoles.VIEW_REALM)) {
                     if (!root.realm().canViewRealm()) {
+                        return adminConflictMessage(role);
+                    } else {
+                        return true;
+                    }
+                } else if (role.getName().equals(AdminRoles.MANAGE_ORGANIZATIONS)) {
+                    if (!root.orgs().canManage()) {
+                        return adminConflictMessage(role);
+                    } else {
+                        return true;
+                    }
+                } else if (role.getName().equals(AdminRoles.VIEW_ORGANIZATIONS)) {
+                    if (!root.orgs().canView()) {
                         return adminConflictMessage(role);
                     } else {
                         return true;
@@ -348,9 +362,9 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
         if (canView(container)) {
             return true;
         } else if (container instanceof RealmModel) {
-            return root.realm().canViewRealm() || root.hasOneAdminRole(AdminRoles.ALL_QUERY_ROLES);
+            return root.realm().canViewRealm() || root.hasOneAdminRole(AdminRoles.MANAGE_IDENTITY_PROVIDERS);
         } else {
-            return root.clients().canList((ClientModel)container);
+            return root.clients().canView((ClientModel)container);
         }
     }
 
@@ -471,7 +485,7 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
     @Override
     public boolean canManage(RoleModel role) {
         if (role.getContainer() instanceof RealmModel) {
-            return root.realm().canManageRealm();
+            return root.realm().canManageRealm() && !isRealmAdminRole(role);
         } else if (role.getContainer() instanceof ClientModel) {
             ClientModel client = (ClientModel)role.getContainer();
             return root.clients().canConfigure(client);
@@ -669,13 +683,7 @@ class RolePermissions implements RolePermissionEvaluator, RolePermissionManageme
         }
         return resourceServer;
     }
-
-    protected ClientModel getRealmManagementClient() {
-        if (realm.getName().equals(Config.getAdminRealm())) {
-            return realm.getClientByClientId(Config.getAdminRealm() + "-realm");
-        } else {
-            return realm.getClientByClientId(Constants.REALM_MANAGEMENT_CLIENT_ID);
-        }
+    private boolean isRealmAdminRole(RoleModel role) {
+        return role.getContainer() instanceof RealmModel && List.of(AdminRoles.ADMIN, AdminRoles.CREATE_REALM).contains(role.getName());
     }
-
 }

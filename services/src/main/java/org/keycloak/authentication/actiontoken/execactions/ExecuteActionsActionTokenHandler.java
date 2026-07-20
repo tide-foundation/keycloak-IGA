@@ -119,7 +119,21 @@ public class ExecuteActionsActionTokenHandler extends AbstractActionTokenHandler
 
         UserModel user = tokenContext.getAuthenticationSession().getAuthenticatedUser();
         // verify user email as we know it is valid as this entry point would never have gotten here.
-        user.setEmailVerified(true);
+        //
+        // Tide invite-path exception: the link-tide-account-action required action runs the
+        // Tide invite/enrolment ceremony, which recomputes the pre-link "Unit A" user_identity
+        // attestation (RealmAttestationExporter.userIdentity includes email_verified). That Unit A
+        // signature was made at user-create time with email_verified=false, so flipping it true
+        // here would change the recomputed bytes and break byte-equality, causing the ORK to reject
+        // the attestation (ATTESTATION_INVALID / "Attested unit signature validation failed").
+        // For the link-tide flow we therefore leave email_verified untouched so the create-time
+        // Unit A signature stays byte-valid for the ceremony. All other execute-actions flows
+        // (e.g. real email verification) keep flipping it true as before.
+        boolean isLinkTideAccountAction = token.getRequiredActions() != null
+                && token.getRequiredActions().contains("link-tide-account-action");
+        if (!isLinkTideAccountAction) {
+            user.setEmailVerified(true);
+        }
 
         String nextAction = AuthenticationManager.nextRequiredAction(tokenContext.getSession(), authSession, tokenContext.getRequest(), tokenContext.getEvent());
         return AuthenticationManager.redirectToRequiredActions(tokenContext.getSession(), tokenContext.getRealm(), authSession, tokenContext.getUriInfo(), nextAction);

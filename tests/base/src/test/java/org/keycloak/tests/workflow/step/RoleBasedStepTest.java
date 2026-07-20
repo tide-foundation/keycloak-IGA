@@ -13,18 +13,19 @@ import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.models.workflow.GrantRoleStepProvider;
 import org.keycloak.models.workflow.GrantRoleStepProviderFactory;
-import org.keycloak.models.workflow.ResourceOperationType;
 import org.keycloak.models.workflow.RevokeRoleStepProvider;
 import org.keycloak.models.workflow.RevokeRoleStepProviderFactory;
+import org.keycloak.models.workflow.events.UserCreatedWorkflowEventFactory;
+import org.keycloak.models.workflow.events.UserRoleRevokedWorkflowEventFactory;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.ClientConfigBuilder;
-import org.keycloak.testframework.realm.RoleConfigBuilder;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.ClientBuilder;
+import org.keycloak.testframework.realm.RoleBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
@@ -32,8 +33,6 @@ import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import static org.keycloak.models.workflow.ResourceOperationType.USER_CREATED;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -50,12 +49,12 @@ public class RoleBasedStepTest extends AbstractWorkflowTest {
     public void setupRoles() {
         RealmResource admin = managedRealm.admin();
         RolesResource realmRoles = admin.roles();
-        List.of("a", "b", "c").forEach(name -> realmRoles.create(RoleConfigBuilder.create().name("realm-role-" + name).build()));
+        List.of("a", "b", "c").forEach(name -> realmRoles.create(RoleBuilder.create().name("realm-role-" + name).build()));
         ClientsResource clients = admin.clients();
-        clients.create(ClientConfigBuilder.create().clientId("myclient").build()).close();
+        clients.create(ClientBuilder.create().clientId("myclient").build()).close();
         ClientRepresentation client = clients.findByClientId("myclient").get(0);
         RolesResource clientRoles = clients.get(client.getId()).roles();
-        List.of("a", "b", "c").forEach(name -> clientRoles.create(RoleConfigBuilder.create().name("client-role-" + name).build()));
+        List.of("a", "b", "c").forEach(name -> clientRoles.create(RoleBuilder.create().name("client-role-" + name).build()));
     }
 
     @Test
@@ -65,7 +64,7 @@ public class RoleBasedStepTest extends AbstractWorkflowTest {
         List<String> expectedRoles = Stream.concat(expectedRealmRoles.stream(), expectedClientRoles.stream()).toList();
 
         create(WorkflowRepresentation.withName("grant-roles")
-                .onEvent(USER_CREATED.name())
+                .onEvent(UserCreatedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(GrantRoleStepProviderFactory.ID)
@@ -73,7 +72,7 @@ public class RoleBasedStepTest extends AbstractWorkflowTest {
                                 .build()
                 ).build());
 
-        UserResource user = getUserResource(UserConfigBuilder.create().username("myuser").build());
+        UserResource user = getUserResource(UserBuilder.create().username("myuser").build());
 
         Awaitility.await()
                 .timeout(Duration.ofSeconds(30))
@@ -90,13 +89,13 @@ public class RoleBasedStepTest extends AbstractWorkflowTest {
 
     @Test
     public void testRevokeRole() {
-        UserResource user = getUserResource(UserConfigBuilder.create()
+        UserResource user = getUserResource(UserBuilder.create()
                 .username("myuser")
                 .build());
         grantRole(user, "realm-role-a", "realm-role-b", "realm-role-c", "myclient/client-role-a", "myclient/client-role-c");
 
         create(WorkflowRepresentation.withName("revoke-roles")
-                .onEvent(ResourceOperationType.USER_ROLE_REVOKED.name())
+                .onEvent(UserRoleRevokedWorkflowEventFactory.ID)
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(RevokeRoleStepProviderFactory.ID)

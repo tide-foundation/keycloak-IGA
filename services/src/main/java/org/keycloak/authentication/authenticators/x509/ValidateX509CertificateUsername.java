@@ -75,12 +75,12 @@ public class ValidateX509CertificateUsername extends AbstractX509ClientCertifica
         try {
             CertificateValidator.CertificateValidatorBuilder builder = certificateValidationParameters(context.getSession(), config);
             CertificateValidator validator = builder.build(certs);
-            validator.checkRevocationStatus()
-                    .validateTrust()
+            validator.validateTrust()
+                    .validateTimestamps()
                     .validateKeyUsage()
                     .validateExtendedKeyUsage()
-                    .validateTimestamps()
-                    .validatePolicy();
+                    .validatePolicy()
+                    .checkRevocationStatus();
         } catch(Exception e) {
             logger.error(e.getMessage(), e);
             // TODO use specific locale to load error messages
@@ -121,7 +121,7 @@ public class ValidateX509CertificateUsername extends AbstractX509ClientCertifica
         }
         if (user == null) {
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
-            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "Invalid user credentials");
+            Response challengeResponse = errorResponse(Response.Status.BAD_REQUEST.getStatusCode(), "invalid_grant", "Invalid user credentials");
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }

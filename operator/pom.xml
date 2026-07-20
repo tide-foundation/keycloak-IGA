@@ -7,7 +7,7 @@
     <parent>
         <artifactId>keycloak-parent</artifactId>
         <groupId>org.keycloak</groupId>
-        <version>26.5.5</version>
+        <version>26.7.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -22,6 +22,8 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.container-image.group>keycloak</quarkus.container-image.group>
         <quarkus.docker.build-args.KEYCLOAK_VERSION>${project.version}</quarkus.docker.build-args.KEYCLOAK_VERSION>
+        <quarkus.operator-sdk.generate-with-watched-namespaces>JOSDK_WATCH_CURRENT</quarkus.operator-sdk.generate-with-watched-namespaces>
+        <kustomize.namespace>keycloak</kustomize.namespace>
     </properties>
 
     <dependencyManagement>
@@ -46,6 +48,10 @@
         </dependency>
 
         <!-- Fabric8 -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>crd-generator-api-v2</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.fabric8</groupId>
             <artifactId>generator-annotations</artifactId>
@@ -111,6 +117,24 @@
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-admin-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.keycloak</groupId>
+                    <artifactId>keycloak-client-common-synced</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.logging</groupId>
+            <artifactId>commons-logging-jboss-logging</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-admin-v2-api</artifactId>
+        </dependency>
 
         <!-- Test -->
         <dependency>
@@ -130,17 +154,17 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5</artifactId>
+            <artifactId>quarkus-junit</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5-mockito</artifactId>
+            <artifactId>quarkus-junit-mockito</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5-component</artifactId>
+            <artifactId>quarkus-junit-component</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -178,14 +202,49 @@
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
                 <version>${quarkus.build.version}</version>
+                <extensions>true</extensions>
             </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${version.enforcer.plugin}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-duplicate-classes</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <!-- ensure that runtime isn't pulling in older common / core classes via
+                                     the admin client -->
+                                <banDuplicateClasses>
+                                    <findAllDuplicates>false</findAllDuplicates>
+                                    <ignoreWhenIdentical>true</ignoreWhenIdentical>
+                                    <ignoredScopes>test</ignoredScopes>
+                                    <ignoreClasses>
+                                        <ignoreClass>module-info</ignoreClass>
+                                    </ignoreClasses>
+                                </banDuplicateClasses>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>extra-enforcer-rules</artifactId>
+                        <version>${extra.enforcer.rules.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <plugin>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
-                <version>${quarkus.build.version}</version>
+                <extensions>true</extensions>
                 <executions>
                     <execution>
                     <goals>
@@ -200,21 +259,54 @@
                 </executions>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>list-crds</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <pathconvert pathsep="${line.separator}  - " property="crds">
+                                    <map from="${project.basedir}/target/kubernetes/" to=""/>
+                                    <sort>
+                                        <fileset dir="${project.basedir}/target/kubernetes">
+                                            <include name="*k8s.keycloak.org-v1.yml"/>
+                                        </fileset>
+                                    </sort>
+                                </pathconvert>
+                            </target>
+                            <exportAntProperties>true</exportAntProperties>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            
+            <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
                 <executions>
                     <execution>
                         <id>copy-resources</id>
-                        <phase>validate</phase>
+                        <phase>package</phase>
                         <goals>
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
                             <outputDirectory>${basedir}/target</outputDirectory>
                             <resources>
-                            <resource>
-                                <directory>src/main/kubernetes</directory>
-                                <filtering>true</filtering>
-                            </resource>
+                                <resource>
+                                    <directory>src/main</directory>
+                                    <filtering>true</filtering>
+                                    <excludes>
+                                        <exclude>kubernetes/kubernetes.yml</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>kubernetes/**</include>
+                                    </includes>
+                             </resource>
                             </resources>
                         </configuration>
                     </execution>
@@ -255,6 +347,17 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <arg>-proc:full</arg> <!-- adding sundrio to annotationProcessorPaths doesn't play well with Fabric8 -->
+                    </compilerArgs>
+                </configuration>
             </plugin>
 
             <plugin>
@@ -325,6 +428,13 @@
             <id>operator-prod</id>
             <properties>
                 <quarkus.profile>rhbk</quarkus.profile>
+            </properties>
+        </profile>
+        <profile>
+            <id>cluster-wide</id>
+            <properties>
+                <kustomize.namespace>keycloak-operator</kustomize.namespace>
+                <quarkus.operator-sdk.generate-with-watched-namespaces>JOSDK_ALL_NAMESPACES</quarkus.operator-sdk.generate-with-watched-namespaces>
             </properties>
         </profile>
     </profiles>

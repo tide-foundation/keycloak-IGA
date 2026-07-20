@@ -18,20 +18,26 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import { useConfirmDialog } from "../components/confirm-dialog/ConfirmDialog";
-import type { KeyValueType } from "../components/key-value-form/key-value-convert";
+import type { RealmLoAMappingType } from "../components/realm-loa-mapping/RealmLoAMapping";
 import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useAccess } from "../context/access/Access";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { toDashboard } from "../dashboard/routes/Dashboard";
-import type { Environment } from "../environment";
+import type { Environment } from "../environment-types";
 import helpUrls from "../help-urls";
-import { convertFormValuesToObject, convertToFormValues } from "../util";
+import {
+  convertFormValuesToObject,
+  convertToFormValues,
+  resolveDisplayName,
+} from "../util";
 import { getAuthorizationHeaders } from "../utils/getAuthorizationHeaders";
 import { joinPath } from "../utils/joinPath";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
 import useLocale from "../utils/useLocale";
 import { RealmSettingsEmailTab } from "./EmailTab";
@@ -99,7 +105,28 @@ const RealmSettingsHeader = ({
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.realms.del({ realm: realmName });
+        // TIDECLOAK IMPLEMENTATION
+        // When IGA is enabled, deleting a realm is intercepted as a
+        // DELETE_REALM change request (HTTP 202 + envelope body) instead of
+        // being applied. The agent layer resolves `del` with that body. Detect
+        // it with the shared helper, surface the change-request notice, and
+        // stay on the realm (it still exists) rather than reporting a
+        // successful deletion and bouncing to the master realm.
+        const result = await adminClient.realms.del({ realm: realmName });
+        const pending = notifyIfPendingChangeRequest(
+          result,
+          t,
+          addAlert,
+          { realm: realmName, navigate },
+          {
+            titleKey: "deletePendingChangeRequestCreated",
+            useEnvelopeMessage: true,
+          },
+        );
+        if (pending) {
+          refresh();
+          return;
+        }
         addAlert(t("deletedSuccessRealmSetting"), AlertVariant.success);
         navigate(toDashboard({ realm: environment.masterRealm }));
         refresh();
@@ -123,6 +150,7 @@ const RealmSettingsHeader = ({
       />
       <ViewHeader
         titleKey={realmName}
+        noTranslate
         subKey="realmSettingsExplain"
         helpUrl={helpUrls.realmSettingsUrl}
         divider={false}
@@ -201,10 +229,10 @@ export const RealmSettingsTabs = () => {
           combinedLocales.map(async (locale) => {
             try {
               const response =
-                await adminClient.realms.getRealmLocalizationTexts({
+                (await adminClient.realms.getRealmLocalizationTexts({
                   realm: realmName,
                   selectedLocale: locale,
-                });
+                })) as Record<string, string> | undefined;
 
               if (response) {
                 setTableData([response]);
@@ -227,11 +255,20 @@ export const RealmSettingsTabs = () => {
       r.attributes?.["acr.loa.map"] &&
       typeof r.attributes["acr.loa.map"] !== "string"
     ) {
+      if (isFeatureEnabled(Feature.StepUpAuthenticationSaml)) {
+        r.attributes["acr.uri.map"] = JSON.stringify(
+          Object.fromEntries(
+            (r.attributes["acr.loa.map"] as RealmLoAMappingType[])
+              .filter(({ acr, uri }) => acr !== "" && uri && uri !== "")
+              .map(({ acr, uri }) => [acr, uri]),
+          ),
+        );
+      }
       r.attributes["acr.loa.map"] = JSON.stringify(
         Object.fromEntries(
-          (r.attributes["acr.loa.map"] as KeyValueType[])
-            .filter(({ key }) => key !== "")
-            .map(({ key, value }) => [key, value]),
+          (r.attributes["acr.loa.map"] as RealmLoAMappingType[])
+            .filter(({ acr }) => acr !== "")
+            .map(({ acr, loa }) => [acr, loa]),
         ),
       );
     }
@@ -259,12 +296,29 @@ export const RealmSettingsTabs = () => {
         },
       );
       if (!response.ok) throw new Error(response.statusText);
-      addAlert(t("realmSaveSuccess"), AlertVariant.success);
+      // TIDECLOAK IMPLEMENTATION
+      // When IGA is enabled, saving a realm attribute is intercepted as a
+      // SET_REALM_ATTRIBUTE change request (HTTP 202 + envelope body) instead
+      // of being applied. 202 is `response.ok`, so surface the change-request
+      // toast rather than the normal success message.
+      let pendingBody: unknown;
+      try {
+        pendingBody = await response.clone().json();
+      } catch {
+        pendingBody = undefined;
+      }
+      const pending = notifyIfPendingChangeRequest(pendingBody, t, addAlert, {
+        realm: realmName,
+        navigate,
+      });
+      if (!pending) {
+        addAlert(t("realmSaveSuccess"), AlertVariant.success);
+      }
     } catch (error) {
       addError("realmSaveError", error);
     }
 
-    const isRealmRenamed = realmName !== (r.realm || realm?.realm);
+    const isRealmRenamed = realmName !== (r.realm || realm.realm);
     if (isRealmRenamed) {
       navigate(toRealmSettings({ realm: r.realm!, tab: "general" }));
     }
@@ -314,12 +368,13 @@ export const RealmSettingsTabs = () => {
           <RealmSettingsHeader
             value={field.value}
             onChange={field.onChange}
-            realmName={realmName}
+            realmName={resolveDisplayName(t, realm.displayName, realmName)}
             refresh={refreshHeader}
             save={() => save(getValues())}
           />
         )}
       />
+      <IgaPageBanner entityType="realm" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <RoutableTabs
           isBox
@@ -336,7 +391,11 @@ export const RealmSettingsTabs = () => {
             {...generalTab}
           >
             {/* TIDECLOAK IMPLEMENTATION */}
-            <RealmSettingsGeneralTab realm={realm!} save={save} refresh={refresh} />
+            <RealmSettingsGeneralTab
+              realm={realm!}
+              save={save}
+              refresh={refresh}
+            />
           </Tab>
           <Tab
             title={<TabTitleText>{t("login")}</TabTitleText>}

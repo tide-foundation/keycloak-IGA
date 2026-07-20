@@ -30,15 +30,17 @@ import org.keycloak.models.KeycloakContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.services.util.DPoPUtil;
-import org.keycloak.util.TokenUtil;
+
+import org.jboss.logging.Logger;
+
+import static org.keycloak.util.TokenUtil.TOKEN_TYPE_BEARER;
+import static org.keycloak.util.TokenUtil.TOKEN_TYPE_DPOP;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
  * @author <a href="mailto:sthorger@redhat.com">Stian Thorgersen</a>
  */
 public class AppAuthManager extends AuthenticationManager {
-
-    public static final String BEARER = "Bearer";
 
     @Override
     public AuthResult authenticateIdentityCookie(KeycloakSession session, RealmModel realm) {
@@ -70,14 +72,15 @@ public class AppAuthManager extends AuthenticationManager {
         String typeString = authHeader.substring(0, indexOfSpace);
         String tokenString = authHeader.substring(indexOfSpace + 1);
 
-        boolean isBearerHeader = typeString.equalsIgnoreCase(BEARER);
+        // Auth schemes are case insensitive per RFC9110-11.1
+        // Checked by fapi2-security-profile-final-access-token-type-header-case-sensitivity
+        boolean isBearerHeader = typeString.equalsIgnoreCase(TOKEN_TYPE_BEARER);
         if (!Profile.isFeatureEnabled(Profile.Feature.DPOP)) {
             if (!isBearerHeader) {
                 return null;
             }
         } else {
-            // "Bearer" is case-insensitive for historical reasons. "DPoP" is case-sensitive to follow the spec.
-            if (!isBearerHeader && !typeString.equals(TokenUtil.TOKEN_TYPE_DPOP)) {
+            if (!isBearerHeader && !typeString.equalsIgnoreCase(TOKEN_TYPE_DPOP)) {
                 return null;
             }
         }
@@ -102,7 +105,7 @@ public class AppAuthManager extends AuthenticationManager {
             return null;
         }
         if (authHeaders.size() != 1) {
-            throw new NotAuthorizedException(BEARER);
+            throw new NotAuthorizedException(TOKEN_TYPE_BEARER);
         }
         String authHeader = headers.getRequestHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         return extractTokenStringFromAuthHeader(authHeader);
@@ -122,12 +125,14 @@ public class AppAuthManager extends AuthenticationManager {
         }
         AuthHeader parsedHeader = extractTokenStringFromAuthHeader(authHeader);
         if (parsedHeader == null ){
-            throw new NotAuthorizedException(BEARER);
+            throw new NotAuthorizedException(TOKEN_TYPE_BEARER);
         }
         return parsedHeader.getToken();
     }
 
     public static class BearerTokenAuthenticator {
+        private static final Logger logger = Logger.getLogger(BearerTokenAuthenticator.class);
+        
         private KeycloakSession session;
         private RealmModel realm;
         private UriInfo uriInfo;
@@ -192,7 +197,10 @@ public class AppAuthManager extends AuthenticationManager {
             // audience can be null
 
             return verifyIdentityToken(session, realm, uriInfo, connection, true, true, audience, false, tokenString, headers,
-                    verifier -> DPoPUtil.withDPoPVerifier(verifier, realm, new DPoPUtil.Validator(session).request(request).uriInfo(session.getContext().getUri()).accessToken(tokenString)));
+                    verifier -> {
+                        DPoPUtil.withDPoPVerifier(verifier, realm, new DPoPUtil.Validator(session).request(request).uriInfo(session.getContext().getUri()).accessToken(tokenString));
+                        verifier.withChecks(GrantTypeEndpointRestrictionValidator.check(session));
+                    });
         }
     }
 

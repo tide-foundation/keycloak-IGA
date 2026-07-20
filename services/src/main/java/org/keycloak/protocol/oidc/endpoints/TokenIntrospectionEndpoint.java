@@ -20,11 +20,13 @@ import java.util.List;
 
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 
+import org.keycloak.OAuthErrorException;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.events.Details;
 import org.keycloak.events.Errors;
@@ -37,6 +39,7 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.protocol.oidc.AccessTokenIntrospectionProviderFactory;
 import org.keycloak.protocol.oidc.TokenIntrospectionProvider;
 import org.keycloak.protocol.oidc.utils.AuthorizeClientUtil;
+import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 import org.keycloak.services.ErrorResponseException;
 import org.keycloak.services.clientpolicy.ClientPolicyException;
 import org.keycloak.services.clientpolicy.context.TokenIntrospectContext;
@@ -99,11 +102,13 @@ public class TokenIntrospectionEndpoint {
         TokenIntrospectionProvider provider = this.session.getProvider(TokenIntrospectionProvider.class, tokenTypeHint);
 
         if (provider == null) {
-            throw throwErrorResponseException(Errors.INVALID_REQUEST, "Unsupported token type [" + tokenTypeHint + "].", Status.BAD_REQUEST);
+            event.detail(Details.TOKEN_TYPE, tokenTypeHint);
+            event.error(Errors.INVALID_REQUEST);
+            throw throwErrorResponseException(Errors.INVALID_REQUEST, "Unsupported token type.", Status.BAD_REQUEST);
         }
 
         try {
-            session.clientPolicy().triggerOnEvent(new TokenIntrospectContext(formParams));
+            session.clientPolicy().triggerOnEvent(new TokenIntrospectContext(session.getContext().getClient(), formParams));
             token = formParams.getFirst(PARAM_TOKEN);
         } catch (ClientPolicyException cpe) {
             event.detail(Details.REASON, Details.CLIENT_POLICY_ERROR);
@@ -134,9 +139,21 @@ public class TokenIntrospectionEndpoint {
 
         } catch (ErrorResponseException ere) {
             throw ere;
+        } catch (WebApplicationException wae) {
+            throw convertClientAuthenticationException(wae);
         } catch (Exception e) {
             throw throwErrorResponseException(Errors.INVALID_REQUEST, "Authentication failed.", Status.UNAUTHORIZED);
         }
+    }
+
+    private WebApplicationException convertClientAuthenticationException(WebApplicationException wae) {
+        Response response = wae.getResponse();
+        if (response != null && response.getStatus() == Status.UNAUTHORIZED.getStatusCode()
+                && response.getEntity() instanceof OAuth2ErrorRepresentation error
+                && OAuthErrorException.UNAUTHORIZED_CLIENT.equals(error.getError())) {
+            return throwErrorResponseException(OAuthErrorException.INVALID_CLIENT, "Client authentication failed.", Status.UNAUTHORIZED);
+        }
+        return wae;
     }
 
     private void checkSsl() {

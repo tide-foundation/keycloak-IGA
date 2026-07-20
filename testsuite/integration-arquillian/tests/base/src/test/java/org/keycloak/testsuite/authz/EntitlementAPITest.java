@@ -63,25 +63,26 @@ import org.keycloak.representations.idm.authorization.AuthorizationRequest;
 import org.keycloak.representations.idm.authorization.AuthorizationRequest.Metadata;
 import org.keycloak.representations.idm.authorization.AuthorizationResponse;
 import org.keycloak.representations.idm.authorization.DecisionStrategy;
-import org.keycloak.representations.idm.authorization.JSPolicyRepresentation;
 import org.keycloak.representations.idm.authorization.Permission;
 import org.keycloak.representations.idm.authorization.PermissionRequest;
 import org.keycloak.representations.idm.authorization.PermissionResponse;
 import org.keycloak.representations.idm.authorization.PermissionTicketRepresentation;
+import org.keycloak.representations.idm.authorization.PolicyRepresentation;
 import org.keycloak.representations.idm.authorization.ResourcePermissionRepresentation;
 import org.keycloak.representations.idm.authorization.ResourceRepresentation;
 import org.keycloak.representations.idm.authorization.ResourceServerRepresentation;
 import org.keycloak.representations.idm.authorization.ScopePermissionRepresentation;
 import org.keycloak.representations.idm.authorization.ScopeRepresentation;
 import org.keycloak.representations.idm.authorization.UserPolicyRepresentation;
+import org.keycloak.testframework.events.EventAssertion;
+import org.keycloak.testframework.realm.ClientBuilder;
+import org.keycloak.testframework.realm.RealmBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testsuite.AssertEvents;
 import org.keycloak.testsuite.admin.ApiUtil;
 import org.keycloak.testsuite.client.resources.TestApplicationResourceUrls;
-import org.keycloak.testsuite.util.ClientBuilder;
-import org.keycloak.testsuite.util.RealmBuilder;
-import org.keycloak.testsuite.util.RoleBuilder;
-import org.keycloak.testsuite.util.RolesBuilder;
-import org.keycloak.testsuite.util.UserBuilder;
+import org.keycloak.testsuite.events.TestEventsListenerProviderFactory;
+import org.keycloak.testsuite.util.ProtocolMapperUtil;
 import org.keycloak.util.JsonSerialization;
 
 import org.apache.http.client.HttpClient;
@@ -90,7 +91,6 @@ import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.hamcrest.Matchers;
 import org.jboss.arquillian.container.test.api.ContainerController;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -101,12 +101,12 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * @author <a href="mailto:psilva@redhat.com">Pedro Igor</a>
@@ -136,39 +136,39 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     @Override
     public void addTestRealms(List<RealmRepresentation> testRealms) {
         testRealms.add(RealmBuilder.create().name("authz-test")
-                .roles(RolesBuilder.create().realmRole(RoleBuilder.create().name("uma_authorization").build()))
-                .user(UserBuilder.create().username("marta").password("password").addRoles("uma_authorization"))
-                .user(UserBuilder.create().username("kolo").password("password"))
-                .user(UserBuilder.create().username("offlineuser").password("password").addRoles("offline_access"))
-                .client(ClientBuilder.create().clientId(RESOURCE_SERVER_TEST)
+                .realmRoles("uma_authorization")
+                .users(UserBuilder.create().username("marta").password("password").realmRoles("uma_authorization"))
+                .users(UserBuilder.create().username("kolo").password("password"))
+                .users(UserBuilder.create().username("offlineuser").password("password").realmRoles("offline_access"))
+                .clients(ClientBuilder.create().clientId(RESOURCE_SERVER_TEST)
                         .secret("secret")
                         .authorizationServicesEnabled(true)
                         .redirectUris("http://localhost/resource-server-test")
                         .defaultRoles("uma_protection")
-                        .directAccessGrants())
-                .client(ClientBuilder.create().clientId(PAIRWISE_RESOURCE_SERVER_TEST)
+                        .directAccessGrantsEnabled())
+                .clients(ClientBuilder.create().clientId(PAIRWISE_RESOURCE_SERVER_TEST)
                         .secret("secret")
                         .authorizationServicesEnabled(true)
                         .redirectUris("http://localhost/resource-server-test")
                         .defaultRoles("uma_protection")
-                        .pairwise(TestApplicationResourceUrls.pairwiseSectorIdentifierUri())
-                        .directAccessGrants())
-                .client(ClientBuilder.create().clientId(TEST_CLIENT)
+                        .protocolMappers(ProtocolMapperUtil.createPairwiseMapper(TestApplicationResourceUrls.pairwiseSectorIdentifierUri(), null))
+                        .directAccessGrantsEnabled())
+                .clients(ClientBuilder.create().clientId(TEST_CLIENT)
                         .secret("secret")
                         .authorizationServicesEnabled(true)
                         .redirectUris("http://localhost/test-client")
-                        .directAccessGrants())
-                .client(ClientBuilder.create().clientId(PAIRWISE_TEST_CLIENT)
+                        .directAccessGrantsEnabled())
+                .clients(ClientBuilder.create().clientId(PAIRWISE_TEST_CLIENT)
                         .secret("secret")
                         .authorizationServicesEnabled(true)
                         .redirectUris("http://localhost/test-client")
-                        .pairwise(TestApplicationResourceUrls.pairwiseSectorIdentifierUri())
-                        .directAccessGrants())
-                .client(ClientBuilder.create().clientId(PUBLIC_TEST_CLIENT)
+                        .protocolMappers(ProtocolMapperUtil.createPairwiseMapper(TestApplicationResourceUrls.pairwiseSectorIdentifierUri(), null))
+                        .directAccessGrantsEnabled())
+                .clients(ClientBuilder.create().clientId(PUBLIC_TEST_CLIENT)
                         .secret("secret")
                         .redirectUris("http://localhost:8180/auth/realms/master/app/auth/*", "https://localhost:8543/auth/realms/master/app/auth/*")
                         .publicClient())
-                .testEventListener()
+                .eventsListeners(TestEventsListenerProviderFactory.PROVIDER_ID)
                 .build());
 
         configureSectorIdentifierRedirectUris();
@@ -242,7 +242,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     @Test
     public void testInvalidRequestWithClaimsFromPublicClient() throws IOException {
         oauth.realm("authz-test");
-        oauth.clientId(PUBLIC_TEST_CLIENT);
+        oauth.client(PUBLIC_TEST_CLIENT);
 
         oauth.doLogin("marta", "password");
 
@@ -269,7 +269,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     @Test
     public void testRequestWithoutClaimsFromPublicClient() {
         oauth.realm("authz-test");
-        oauth.clientId(PUBLIC_TEST_CLIENT);
+        oauth.client(PUBLIC_TEST_CLIENT);
 
         oauth.doLogin("marta", "password");
 
@@ -423,11 +423,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testResolveResourcesWithSameUri() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         ResourceRepresentation resource = new ResourceRepresentation();
         resource.setName("Resource A");
@@ -524,14 +520,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlements() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName("Only Owner Policy");
-        policy.setType("script-scripts/only-owner-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createOnlyOwnerPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Marta Resource");
@@ -663,13 +652,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlementsInvalidResource() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         ResourceRepresentation resource = new ResourceRepresentation();
 
@@ -704,12 +687,11 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         }
 
 
-        events.expect(EventType.PERMISSION_TOKEN_ERROR).realm(getRealm().toRepresentation().getId()).client(RESOURCE_SERVER_TEST)
-                .session((String) null)
+        EventAssertion.assertError(events.poll()).type(EventType.PERMISSION_TOKEN_ERROR).clientId(RESOURCE_SERVER_TEST)
+                .sessionId(null)
                 .error("invalid_request")
-                .detail("reason", "Resource with id [Sensortest] does not exist.")
-                .user(at.getSubject())
-                .assertEvent();
+                .details("reason", "Resource with id [Sensortest] does not exist.")
+                .userId(at.getSubject());
     }
 
     @Test
@@ -717,12 +699,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
 
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         ResourceRepresentation resource = new ResourceRepresentation();
 
@@ -772,13 +749,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlementsForScope() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         Set<String> resourceIds = new HashSet<>();
         ResourceRepresentation resource = new ResourceRepresentation();
@@ -871,13 +842,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlementsForScopeWithDeny() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         authorization.scopes().create(new ScopeRepresentation("sensors:view")).close();
 
@@ -911,13 +876,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlementsForResourceWithResourcePermission() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         ResourceRepresentation resource = new ResourceRepresentation();
 
@@ -993,13 +952,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlementsForResourceWithScopePermission() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         ResourceRepresentation resourceWithoutType = new ResourceRepresentation();
 
@@ -1084,20 +1037,8 @@ public class EntitlementAPITest extends AbstractAuthzTest {
             resource = response.readEntity(ResourceRepresentation.class);
         }
 
-        JSPolicyRepresentation grantPolicy = new JSPolicyRepresentation();
-
-        grantPolicy.setName(KeycloakModelUtils.generateId());
-        grantPolicy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(grantPolicy).close();
-
-        JSPolicyRepresentation denyPolicy = new JSPolicyRepresentation();
-
-        denyPolicy.setName(KeycloakModelUtils.generateId());
-        denyPolicy.setType("script-scripts/always-deny-policy.js");
-
-        authorization.policies().js().create(denyPolicy).close();
-
+        PolicyRepresentation grantPolicy = createAlwaysGrantPolicy(authorization);
+        PolicyRepresentation denyPolicy = createAlwaysDenyPolicy(authorization);
         ResourcePermissionRepresentation resourcePermission = new ResourcePermissionRepresentation();
 
         resourcePermission.setName(KeycloakModelUtils.generateId());
@@ -1219,13 +1160,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testObtainAllEntitlementsForResourceType() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         for (int i = 0; i < 10; i++) {
             ResourceRepresentation resource = new ResourceRepresentation();
@@ -1452,9 +1387,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testOverridePermission() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-        JSPolicyRepresentation onlyOwnerPolicy = createOnlyOwnerPolicy();
-
-        authorization.policies().js().create(onlyOwnerPolicy).close();
+        PolicyRepresentation onlyOwnerPolicy = createOnlyOwnerPolicy(authorization);
 
         ResourceRepresentation typedResource = new ResourceRepresentation();
 
@@ -1653,10 +1586,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testOverrideParentScopePermission() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-        JSPolicyRepresentation onlyOwnerPolicy = createOnlyOwnerPolicy();
-
-        authorization.policies().js().create(onlyOwnerPolicy).close();
-
+        PolicyRepresentation onlyOwnerPolicy = createOnlyOwnerPolicy(authorization);
         ResourceRepresentation typedResource = new ResourceRepresentation();
 
         typedResource.setType("resource");
@@ -1831,30 +1761,17 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         }
     }
 
-    @NotNull
-    private JSPolicyRepresentation createOnlyOwnerPolicy() {
-        JSPolicyRepresentation onlyOwnerPolicy = new JSPolicyRepresentation();
-
-        onlyOwnerPolicy.setName(KeycloakModelUtils.generateId());
-        onlyOwnerPolicy.setType("script-scripts/only-owner-policy.js");
-
-        return onlyOwnerPolicy;
-    }
-
     @Test
     public void testPermissionsWithResourceAttributes() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-        JSPolicyRepresentation onlyPublicResourcesPolicy = new JSPolicyRepresentation();
+        PolicyRepresentation onlyPublicResourcesPolicy = new PolicyRepresentation();
 
         onlyPublicResourcesPolicy.setName(KeycloakModelUtils.generateId());
-        onlyPublicResourcesPolicy.setType("script-scripts/resource-visibility-attribute-policy.js");
+        onlyPublicResourcesPolicy.setType("resource-visibility-attribute-policy");
 
-        authorization.policies().js().create(onlyPublicResourcesPolicy).close();
-
-        JSPolicyRepresentation onlyOwnerPolicy = createOnlyOwnerPolicy();
-
-        authorization.policies().js().create(onlyOwnerPolicy).close();
+        authorization.policies().create(onlyPublicResourcesPolicy).close();
+        PolicyRepresentation onlyOwnerPolicy = createOnlyOwnerPolicy(authorization);
 
         ResourceRepresentation typedResource = new ResourceRepresentation();
 
@@ -2010,14 +1927,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testOfflineRequestingPartyToken() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Sensors");
@@ -2078,14 +1988,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         client.getProtocolMappers().createMapper(customClaimMapper);
 
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Sensors");
@@ -2103,7 +2006,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         authorization.permissions().resource().create(permission).close();
 
         oauth.realm("authz-test");
-        oauth.clientId(PUBLIC_TEST_CLIENT);
+        oauth.client(PUBLIC_TEST_CLIENT);
         oauth.doLogin("marta", "password");
 
         // Token request
@@ -2152,14 +2055,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         client.getProtocolMappers().createMapper(customClaimMapper);
 
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Sensors");
@@ -2178,7 +2074,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
 
         oauth.realm("authz-test");
         oauth.scope(OAuth2Constants.OFFLINE_ACCESS);
-        oauth.clientId(PUBLIC_TEST_CLIENT);
+        oauth.client(PUBLIC_TEST_CLIENT);
         oauth.doLogin("offlineuser", "password");
 
         // Token request
@@ -2225,7 +2121,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     @Test
     public void testTokenExpirationRenewalWhenIssuingTokens() {
         oauth.realm("authz-test");
-        oauth.clientId(PUBLIC_TEST_CLIENT);
+        oauth.client(PUBLIC_TEST_CLIENT);
         oauth.doLogin("marta", "password");
         String code = oauth.parseLoginResponse().getCode();
         org.keycloak.testsuite.util.oauth.AccessTokenResponse accessTokenResponse = oauth.doAccessTokenRequest(code);
@@ -2241,10 +2137,10 @@ public class EntitlementAPITest extends AbstractAuthzTest {
                 AccessToken accessTokenToken = toAccessToken(authorizationResponse.getToken());
                 assertEquals(refreshToken.getExp() - refreshToken.getIat(), 1800);
                 assertEquals(accessTokenToken.getExp() - accessTokenToken.getIat(), 300);
-                setTimeOffset(i);
+                timeOffSet.set(i);
             }
         } finally {
-            resetTimeOffset();
+            timeOffSet.set(0);
         }
     }
 
@@ -2252,14 +2148,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testUsingExpiredToken() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Sensors");
@@ -2308,14 +2197,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Sensors");
@@ -2356,14 +2238,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testDenyScopeNotManagedByScopePolicy() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName(KeycloakModelUtils.generateId());
@@ -2410,24 +2285,17 @@ public class EntitlementAPITest extends AbstractAuthzTest {
 
     @Test
     public void testPermissionsAcrossResourceServers() throws Exception {
-        String rsAId;
-        try (Response response = getRealm().clients().create(ClientBuilder.create().clientId("rs-a").secret("secret").serviceAccount().authorizationServicesEnabled(true).build())) {
-            rsAId = ApiUtil.getCreatedId(response);
-        }
+        ClientRepresentation rsA = ClientBuilder.create().clientId("rs-a").secret("secret").serviceAccountsEnabled().authorizationServicesEnabled(true).build();
+        getRealm().clients().create(rsA).close();
         String rsBId;
-        try (Response response = getRealm().clients().create(ClientBuilder.create().clientId("rs-b").secret("secret").serviceAccount().authorizationServicesEnabled(true).build())) {
+        try (Response response = getRealm().clients().create(ClientBuilder.create().clientId("rs-b").secret("secret").serviceAccountsEnabled().authorizationServicesEnabled(true).build())) {
             rsBId = ApiUtil.getCreatedId(response);
         }
         ClientResource rsB = getRealm().clients().get(rsBId);
 
-        rsB.authorization().resources().create(new ResourceRepresentation("Resource A"));
+        rsB.authorization().resources().create(new ResourceRepresentation("Resource A")).close();
 
-        JSPolicyRepresentation grantPolicy = new JSPolicyRepresentation();
-
-        grantPolicy.setName("Grant Policy");
-        grantPolicy.setType("script-scripts/default-policy.js");
-
-        rsB.authorization().policies().js().create(grantPolicy);
+        PolicyRepresentation grantPolicy = createAlwaysGrantPolicy(rsB.authorization());
 
         ResourcePermissionRepresentation permission = new ResourcePermissionRepresentation();
 
@@ -2435,7 +2303,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         permission.addResource("Resource A");
         permission.addPolicy(grantPolicy.getName());
 
-        rsB.authorization().permissions().resource().create(permission);
+        rsB.authorization().permissions().resource().create(permission).close();
 
         AuthzClient authzClient = getAuthzClient(AUTHZ_CLIENT_CONFIG);
         Configuration config = authzClient.getConfiguration();
@@ -2444,7 +2312,6 @@ public class EntitlementAPITest extends AbstractAuthzTest {
 
         authzClient = AuthzClient.create(config);
         AccessTokenResponse accessTokenResponse = authzClient.obtainAccessToken();
-        AccessToken accessToken = toAccessToken(accessTokenResponse.getToken());
 
         config.setResource("rs-b");
 
@@ -2464,14 +2331,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testClientToClientPermissionRequest() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("Sensors");
@@ -2520,13 +2380,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
     public void testPermissionOrder() throws Exception {
         ClientResource client = getClient(getRealm(), RESOURCE_SERVER_TEST);
         AuthorizationResource authorization = client.authorization();
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName(KeycloakModelUtils.generateId());
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
-
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
         ResourceRepresentation resource = new ResourceRepresentation();
 
         resource.setName("my_resource");
@@ -2802,12 +2656,7 @@ public class EntitlementAPITest extends AbstractAuthzTest {
         ClientResource client = getClient(getRealm(), clientId);
         AuthorizationResource authorization = client.authorization();
 
-        JSPolicyRepresentation policy = new JSPolicyRepresentation();
-
-        policy.setName("Default Policy");
-        policy.setType("script-scripts/default-policy.js");
-
-        authorization.policies().js().create(policy).close();
+        PolicyRepresentation policy = createAlwaysGrantPolicy(authorization);
 
         for (int i = 1; i <= 20; i++) {
             ResourceRepresentation resource = new ResourceRepresentation("Resource " + i);

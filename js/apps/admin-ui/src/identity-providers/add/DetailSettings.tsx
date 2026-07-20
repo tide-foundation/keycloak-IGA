@@ -1,3 +1,5 @@
+// TIDECLOAK IMPLEMENTATION - detect 202 pending-approval offboarding responses
+import { isPendingChangeRequest } from "@keycloak/keycloak-admin-client/lib/utils/pendingChangeRequest";
 import type IdentityProviderMapperRepresentation from "@keycloak/keycloak-admin-client/lib/defs/identityProviderMapperRepresentation";
 import IdentityProviderRepresentation, {
   IdentityProviderType,
@@ -31,7 +33,7 @@ import {
   GridItem,
   ClipboardCopy,
   FileUpload,
-  DropEvent
+  DropEvent,
 } from "@patternfly/react-core";
 import { useMemo, useState, useEffect } from "react";
 import {
@@ -61,6 +63,7 @@ import { useServerInfo } from "../../context/server-info/ServerInfoProvider";
 import { toUpperCase } from "../../util";
 import useIsFeatureEnabled, { Feature } from "../../utils/useIsFeatureEnabled";
 import { useParams } from "../../utils/useParams";
+import { useIsIgaEnabled } from "../../utils/useIsIgaEnabled"; // TIDECLOAK IMPLEMENTATION
 import { toIdentityProviderAddMapper } from "../routes/AddMapper";
 import { toIdentityProviderEditMapper } from "../routes/EditMapper";
 import {
@@ -69,6 +72,7 @@ import {
   toIdentityProvider,
 } from "../routes/IdentityProvider";
 import { toIdentityProviders } from "../routes/IdentityProviders";
+import { toRealmSettings } from "../../realm-settings/routes/RealmSettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { DescriptorSettings } from "./DescriptorSettings";
 import { DiscoverySettings } from "./DiscoverySettings";
@@ -81,13 +85,18 @@ import { ReqAuthnConstraints } from "./ReqAuthnConstraintsSettings";
 import { SamlGeneralSettings } from "./SamlGeneralSettings";
 import { SpiffeSettings } from "./SpiffeSettings";
 import { toKeyProvider } from "../../realm-settings/routes/KeyProvider";
-import { createTideComponent, findTideComponent } from "../utils/SignSettingsUtil";
+import {
+  createTideComponent,
+  findTideComponent,
+} from "../utils/SignSettingsUtil";
 import { AdminEvents } from "../../events/AdminEvents";
 import { UserProfileClaimsSettings } from "./OAuth2UserProfileClaimsSettings";
 import { KubernetesSettings } from "./KubernetesSettings";
 import { JWTAuthorizationGrantAssertionSettings } from "./JWTAuthorizationGrantAssertionSettings";
 import JWTAuthorizationGrantSettings from "./JWTAuthorizationGrantSettings";
 import { DefaultSwitchControl } from "../../components/SwitchControl";
+import { GroupResourceContext } from "../../context/group-resource/GroupResourceContext";
+import DefaultTrustSettings from "./DefaultTrustSettings";
 
 type HeaderProps = {
   onChange: (value: boolean) => void;
@@ -105,7 +114,13 @@ type IdPWithMapperAttributes = IdentityProviderMapperRepresentation & {
   mapperId: string;
 };
 
-const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDialog }: HeaderProps) => {
+const Header = ({
+  onChange,
+  value,
+  save,
+  toggleDeleteDialog,
+  toggleOffboardingDialog,
+}: HeaderProps) => {
   const { adminClient } = useAdminClient();
 
   const { t } = useTranslation();
@@ -160,7 +175,9 @@ const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDi
         fromUrl: metadataDescriptorUrl,
       });
       if (result.signingCertificate) {
-        setValue(`config.signingCertificate`, result.signingCertificate);
+        setValue(`config.signingCertificate`, result.signingCertificate, {
+          shouldDirty: true,
+        });
         addAlert(t("importKeysSuccess"), AlertVariant.success);
       } else {
         addError("importKeysError", t("importKeysErrorNoSigningCertificate"));
@@ -231,11 +248,16 @@ const Header = ({ onChange, value, save, toggleDeleteDialog, toggleOffboardingDi
                   </DropdownItem>,
                 ]
               : []),
-          ...(provider?.alias === "tide" && toggleOffboardingDialog ? [
-            <DropdownItem key="offboard" onClick={() => toggleOffboardingDialog()}>
-              {t("offboard", "Offboard")}
-            </DropdownItem>,
-          ] : []),
+          ...(provider?.alias === "tide" && toggleOffboardingDialog
+            ? [
+                <DropdownItem
+                  key="offboard"
+                  onClick={() => toggleOffboardingDialog()}
+                >
+                  {t("offboard", "Offboard")}
+                </DropdownItem>,
+              ]
+            : []),
           <Divider key="separator" />,
           <DropdownItem key="delete" onClick={() => toggleDeleteDialog()}>
             {t("delete")}
@@ -284,7 +306,15 @@ export default function DetailSettings() {
   const { alias, providerId } = useParams<IdentityProviderParams>();
   const isFeatureEnabled = useIsFeatureEnabled();
   const form = useForm<IdentityProviderRepresentation>();
-  const { handleSubmit, getValues, reset, setValue } = form;
+  // Upstream 26.7.0's destructure is a superset of the fork's; Tide's
+  // handleReset still uses `reset`, and `isDirty` gates the save buttons.
+  const {
+    handleSubmit,
+    getValues,
+    reset,
+    control,
+    formState: { isDirty },
+  } = form;
   const [provider, setProvider] = useState<IdentityProviderRepresentation>();
   const [selectedMapper, setSelectedMapper] =
     useState<IdPWithMapperAttributes>();
@@ -295,7 +325,8 @@ export default function DetailSettings() {
   const [logo, setLogo] = useState<File | null>(null);
   const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState<string>("");
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string>("");
-  const [imageDeleteRequested, setImageDeleteRequested] = useState<boolean>(false);
+  const [imageDeleteRequested, setImageDeleteRequested] =
+    useState<boolean>(false);
   /** TIDECLOAK IMPLEMENTATION END */
 
   const providerInfo = useMemo(() => {
@@ -318,6 +349,7 @@ export default function DetailSettings() {
   const { addAlert, addError } = useAlerts();
   const navigate = useNavigate();
   const { realm, realmRepresentation } = useRealm();
+  const igaEnabled = useIsIgaEnabled(); // TIDECLOAK IMPLEMENTATION
   const [key, setKey] = useState(0);
   const refresh = () => setKey(key + 1);
   const { hasAccess } = useAccess();
@@ -435,6 +467,114 @@ export default function DetailSettings() {
     return Array.isArray(value) ? value[0] : value;
   }
 
+  /** TIDECLOAK IMPLEMENTATION START */
+  const currentHost = window.location.origin;
+
+  const backgroundUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/BACKGROUND_IMAGE`;
+  const logoUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/LOGO`;
+
+  const handleFileChange =
+    (type: "background" | "logo") => (event: DropEvent, file: File) => {
+      if (type === "background") {
+        setBackgroundImage(file);
+        setBackgroundPreviewUrl(URL.createObjectURL(file));
+      } else if (type === "logo") {
+        setLogo(file);
+        setLogoPreviewUrl(URL.createObjectURL(file));
+      }
+      setImageDeleteRequested(false);
+    };
+
+  const handleClear = (type: "background" | "logo") => {
+    if (type === "background") {
+      setBackgroundImage(null);
+      setBackgroundPreviewUrl("");
+    } else if (type === "logo") {
+      setLogo(null);
+      setLogoPreviewUrl("");
+    }
+    setImageDeleteRequested(true);
+  };
+
+  async function fetchImage(type: string) {
+    try {
+      const response = await adminClient.tideAdmin.getImageName({ type });
+
+      if (response === null && response === "") {
+        return;
+      }
+      // Create a new File object from the Blob
+      const file = new File([], response!, { type });
+      return file;
+    } catch (error) {
+      console.error("Failed to fetch image: ", error);
+      return null;
+    }
+  }
+  const initializeImages = async () => {
+    const backgroundImageFile = await fetchImage("BACKGROUND_IMAGE");
+    const logoImageFile = await fetchImage("LOGO");
+
+    if (
+      backgroundImageFile?.size !== undefined &&
+      backgroundImageFile.name !== ""
+    ) {
+      setBackgroundImage(backgroundImageFile);
+      setBackgroundPreviewUrl(backgroundUrl);
+    }
+
+    if (logoImageFile?.size !== undefined && logoImageFile.name !== "") {
+      setLogo(logoImageFile);
+      setLogoPreviewUrl(logoUrl);
+    }
+    setImageDeleteRequested(false);
+  };
+
+  useEffect(() => {
+    void initializeImages();
+  }, []);
+
+  const hasValue = (value: string) =>
+    value !== undefined && value !== null && value !== "" ? true : false;
+  const handleImageUpdate = async (image: File | null, type: string) => {
+    try {
+      if (image === null && imageDeleteRequested === true) {
+        // delete image on server
+        await adminClient.tideAdmin.deleteImage({ type });
+      } else if (image !== null && image.size > 0) {
+        const formData = new FormData();
+        formData.append("fileData", image);
+        formData.append("fileName", image.name);
+        formData.append("fileType", type);
+        await adminClient.tideAdmin.uploadImage(formData);
+      }
+    } catch (error) {
+      addError("Error upload image", error);
+    }
+  };
+
+  const handleReset = async () => {
+    reset();
+    if (providerId === "tide") {
+      await adminClient.identityProviders.update(
+        { alias },
+        {
+          ...provider,
+          config: { ...provider?.config, pendingUpdateSettings: false },
+          alias,
+          providerId,
+        },
+      );
+      await initializeImages();
+      setImageDeleteRequested(false);
+      refresh();
+    }
+  };
+
+  function getSingleValue(value: string | string[]): string {
+    return Array.isArray(value) ? value[0] : value;
+  }
+
   useFetch(
     () => adminClient.identityProviders.findOne({ alias }),
     (fetchedProvider) => {
@@ -479,17 +619,18 @@ export default function DetailSettings() {
 
   const save = async (savedProvider?: IdentityProviderRepresentation) => {
     try {
-      // Check if settings needs to be re-signed
-      const { LogoURL, ImageURL, backupOn, CustomAdminUIDomain } = provider!.config!;
+      // TIDECLOAK IMPLEMENTATION: check if settings need to be re-signed
+      const { LogoURL, ImageURL, backupOn, CustomAdminUIDomain } =
+        provider!.config!;
       const settingsUnchanged =
         form.getValues("config.LogoURL") === LogoURL &&
         form.getValues("config.ImageURL") === ImageURL &&
         form.getValues("config.backupOn") === backupOn &&
         form.getValues("config.CustomAdminUIDomain") === CustomAdminUIDomain;
 
-
       // always get current form values for tide idp
-      const p = providerId === "tide" ? getValues() : savedProvider || getValues();
+      const p =
+        providerId === "tide" ? getValues() : savedProvider || getValues();
       const origAuthnContextClassRefs = p.config?.authnContextClassRefs;
       if (p.config?.authnContextClassRefs)
         p.config.authnContextClassRefs = JSON.stringify(
@@ -501,12 +642,13 @@ export default function DetailSettings() {
           p.config.authnContextDeclRefs,
         );
 
-      await adminClient.identityProviders.update(
-        { alias },
+      // NOTE: 26.7.0 resolves the alias as `provider?.alias || alias`.
+      const idpUpdateResult = await adminClient.identityProviders.update(
+        { alias: provider?.alias || alias },
         {
           ...p,
           config: { ...provider?.config, ...p.config },
-          alias,
+          alias: provider?.alias || alias,
           providerId,
         },
       );
@@ -523,14 +665,23 @@ export default function DetailSettings() {
 
         if (tideComponent) {
           const vvkId = getSingleValue(tideComponent!.config!.vvkId);
-          const resignSettingsRequired = hasValue(vvkId) && !settingsUnchanged
+          // TIDECLOAK IMPLEMENTATION
+          // On an IGA realm the IdP update is parked (captured as a change
+          // request) instead of applied to live state. Skip re-signing over
+          // the stale live settings when parked; the backend re-signs at
+          // commit time. Signing now would invalidate the signed settings and
+          // break login. Gate on IGA being active (the definitive parked signal
+          // for updates, which need not surface a 202) as well as the envelope.
+          const parked = igaEnabled || isPendingChangeRequest(idpUpdateResult);
+          const resignSettingsRequired =
+            hasValue(vvkId) && !settingsUnchanged && !parked;
           if (resignSettingsRequired) {
             await adminClient.tideAdmin.signIdpSettings();
           }
         }
 
-        handleImageUpdate(logo, "LOGO");
-        handleImageUpdate(backgroundImage, "BACKGROUND_IMAGE")
+        void handleImageUpdate(logo, "LOGO");
+        void handleImageUpdate(backgroundImage, "BACKGROUND_IMAGE");
         setImageDeleteRequested(false);
       }
       /** TIDECLOAK IMPLEMENTATION end */
@@ -539,7 +690,7 @@ export default function DetailSettings() {
       /** TIDECLOAK IMPLEMENTATION start */
       const data = new FormData();
       data.append("isRagnarokEnabled", form.getValues("config.backupOn"));
-      await adminClient.tideAdmin.toggleRagnarok(data)
+      await adminClient.tideAdmin.toggleRagnarok(data);
       /** TIDECLOAK IMPLEMENTATION end */
     } catch (error) {
       addError("updateErrorIdentityProvider", error);
@@ -593,19 +744,59 @@ export default function DetailSettings() {
     },
   });
 
+  // TIDECLOAK IMPLEMENTATION — pre-flight offboarding checklist.
+  // SMTP is considered configured only when smtpServer exists and has keys.
+  // This drives WARN (missing) vs INFO (configured) guidance on the offboard
+  // dialog; it is advisory only and never blocks offboarding.
+  const smtpConfigured =
+    !!realmRepresentation?.smtpServer &&
+    Object.keys(realmRepresentation.smtpServer).length > 0;
+
   const [toggleOffboardingDialog, OffboardingConfirm] = useOffboardingDialog({
     titleKey: "offboardProvider",
     messageKey: "offboardProviderConfirmation",
     confirmationText: "CONFIRM OFFBOARDING",
+    smtpConfigured,
+    onConfigureEmail: () => navigate(toRealmSettings({ realm, tab: "email" })),
     onConfirm: async () => {
       try {
-        const message  = await adminClient.tideAdmin.offboardProvider();
+        // TIDECLOAK IMPLEMENTATION
+        // Ragnarok offboarding is now a governed change request (like
+        // DISABLE_IGA). The trigger-offboarding endpoint no longer offboards
+        // synchronously — it answers with HTTP 202 + the standard
+        // IgaPendingApprovalException body
+        //   { status:"PENDING", changeRequestId, entityType:"REALM",
+        //     actionType:"OFFBOARD_REALM", message }
+        // which the admin-client agent's 202 interceptor unwraps into a parsed
+        // PendingChangeRequest object before it reaches us. When that happens
+        // the realm is NOT offboarded yet (the OFFBOARD_REALM CR must be
+        // approved first), so we must surface a pending-approval info alert and
+        // NOT navigate away to the IdP list as if it had been offboarded.
+        const result = await adminClient.tideAdmin.offboardProvider();
+
+        if (isPendingChangeRequest(result)) {
+          addAlert(
+            t("offboardingPendingApprovalTitle"),
+            AlertVariant.info,
+            result.message || t("offboardingPendingApprovalMessage"),
+          );
+          // Do NOT navigate away — the realm is still onboarded until the
+          // OFFBOARD_REALM change request is approved. Stay on the page and
+          // refresh so the view reflects current (still-onboarded) state.
+          refresh();
+          return;
+        }
+
+        // Legacy / synchronous success path (no pending CR): treat as before.
+        const message = result as unknown as string;
         addAlert(
-          t("offboardingSuccessful", message || "Provider offboarded successfully"),
-          AlertVariant.success
+          t(
+            "offboardingSuccessful",
+            message || "Provider offboarded successfully",
+          ),
+          AlertVariant.success,
         );
         navigate(toIdentityProviders({ realm }));
-
       } catch (error) {
         addError("offboardingError", error);
       }
@@ -629,11 +820,15 @@ export default function DetailSettings() {
   const isJWTAuthorizationGrant = provider.providerId!.includes(
     "jwt-authorization-grant",
   );
+  const isDefaultTrust = provider.providerId === "default-trust";
   const isSocial = !isOIDC && !isSAML && !isOAuth2;
   const isJWTAuthorizationGrantSupported =
     (isOAuth2 || isOIDC) &&
-    !!provider?.types?.includes(IdentityProviderType.JWT_AUTHORIZATION_GRANT) &&
+    !!provider.types?.includes(IdentityProviderType.JWT_AUTHORIZATION_GRANT) &&
     isFeatureEnabled(Feature.JWTAuthorizationGrant);
+  const groupResource = provider.organizationId
+    ? adminClient.organizations.groups(provider.organizationId)
+    : adminClient.groups;
 
   const loader = async () => {
     const [loaderMappers, loaderMapperTypes] = await Promise.all([
@@ -665,7 +860,11 @@ export default function DetailSettings() {
       const tideComponent = await findTideComponent(adminClient, realm);
 
       if (!tideComponent) {
-        const newComponent = await createTideComponent(adminClient, realm, serverInfo);
+        const newComponent = await createTideComponent(
+          adminClient,
+          realm,
+          serverInfo,
+        );
         const id = getSingleValue(newComponent!.id!);
         navigateToKeyProvider(id);
       } else {
@@ -679,14 +878,15 @@ export default function DetailSettings() {
 
   const navigateToKeyProvider = (id: string) => {
     const path = toKeyProvider({ realm, id, providerType: "tide-vendor-key" });
-    path.pathname += "/license"
+    path.pathname += "/license";
     navigate(path);
   };
 
   const sections = [
     {
       title: t("generalSettings"),
-      isHidden: isSPIFFE || isKubernetes || isJWTAuthorizationGrant,
+      isHidden:
+        isSPIFFE || isKubernetes || isJWTAuthorizationGrant || isDefaultTrust,
       panel: (
         <FormAccess
           role="manage-identity-providers"
@@ -697,7 +897,11 @@ export default function DetailSettings() {
           {(isOIDC || isOAuth2) && <OIDCGeneralSettings />}
           {isSAML && <SamlGeneralSettings isAliasReadonly />}
           {providerInfo && (
-            <DynamicComponents stringify properties={providerInfo.properties} isTideProvider={providerId === "tide"} />
+            <DynamicComponents
+              stringify
+              properties={providerInfo.properties}
+              isTideProvider={providerId === "tide"}
+            />
           )}
           <FormGroup
             label={t("License")}
@@ -714,7 +918,8 @@ export default function DetailSettings() {
               onClick={async (e) => {
                 e.preventDefault(); // Prevent the default anchor behavior
                 await handleManageLicenseClick();
-              }}            >
+              }}
+            >
               Manage License
             </Button>
           </FormGroup>
@@ -722,12 +927,24 @@ export default function DetailSettings() {
           {providerId === "tide" && (
             <>
               <div style={{ paddingTop: "5rem" }}>
-                <h1 className="pf-v5-c-title pf-m-xl">Image Upload for Keycloak Hosting</h1>
-                <p className="pf-v5-c-content ">Optionally upload images to Keycloak for hosting. This is used by default if not updated above.</p>
+                <h1 className="pf-v5-c-title pf-m-xl">
+                  Image Upload for Keycloak Hosting
+                </h1>
+                <p className="pf-v5-c-content ">
+                  Optionally upload images to Keycloak for hosting. This is used
+                  by default if not updated above.
+                </p>
               </div>
               <FormGroup
                 label={t("Upload Background Image")}
-                labelIcon={<HelpItem helpText={"Upload an image for Keycloak to host for you. Remember to provide the URL on Vendor sign up. IMPORTANT: this image does not get backed up"} fieldLabelId={"UploadBackgroundImage"} />}
+                labelIcon={
+                  <HelpItem
+                    helpText={
+                      "Upload an image for Keycloak to host for you. Remember to provide the URL on Vendor sign up. IMPORTANT: this image does not get backed up"
+                    }
+                    fieldLabelId={"UploadBackgroundImage"}
+                  />
+                }
                 fieldId="background-image-upload"
               >
                 <Grid hasGutter>
@@ -739,16 +956,20 @@ export default function DetailSettings() {
                       id="background-image-upload"
                       value={backgroundImage || undefined}
                       filename={backgroundImage?.name || ""}
-                      onFileInputChange={handleFileChange('background')}
+                      onFileInputChange={handleFileChange("background")}
                       isRequired
-                      onClearClick={() => handleClear('background')}
+                      onClearClick={() => handleClear("background")}
                     />
                   </GridItem>
                   {backgroundPreviewUrl !== "" && (
                     <GridItem span={12}>
                       <Gallery hasGutter>
                         <GalleryItem>
-                          <img src={backgroundPreviewUrl} alt="Background Image Preview" style={{ maxWidth: "200px", marginTop: "10px" }} />
+                          <img
+                            src={backgroundPreviewUrl}
+                            alt="Background Image Preview"
+                            style={{ maxWidth: "200px", marginTop: "10px" }}
+                          />
                         </GalleryItem>
                       </Gallery>
                     </GridItem>
@@ -757,7 +978,14 @@ export default function DetailSettings() {
               </FormGroup>
               <FormGroup
                 label={t("Upload Logo Image")}
-                labelIcon={<HelpItem helpText={"Upload an image for Keycloak to host for you. Remember to provide the URL on Vendor sign up. IMPORTANT: this image does not get backed up"} fieldLabelId={"UploadLogoImage"} />}
+                labelIcon={
+                  <HelpItem
+                    helpText={
+                      "Upload an image for Keycloak to host for you. Remember to provide the URL on Vendor sign up. IMPORTANT: this image does not get backed up"
+                    }
+                    fieldLabelId={"UploadLogoImage"}
+                  />
+                }
                 fieldId="logo-upload"
               >
                 <Grid hasGutter>
@@ -769,17 +997,20 @@ export default function DetailSettings() {
                       id="logo-upload"
                       value={logo || undefined}
                       filename={logo?.name || ""}
-                      onFileInputChange={handleFileChange('logo')}
+                      onFileInputChange={handleFileChange("logo")}
                       isRequired
-                      onClearClick={() => handleClear('logo')}
-
+                      onClearClick={() => handleClear("logo")}
                     />
                   </GridItem>
                   {logoPreviewUrl !== "" && (
                     <GridItem span={12}>
                       <Gallery hasGutter>
                         <GalleryItem>
-                          <img src={logoPreviewUrl} alt="Logo Preview" style={{ maxWidth: "200px", marginTop: "10px" }} />
+                          <img
+                            src={logoPreviewUrl}
+                            alt="Logo Preview"
+                            style={{ maxWidth: "200px", marginTop: "10px" }}
+                          />
                         </GalleryItem>
                       </Gallery>
                     </GridItem>
@@ -858,7 +1089,12 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           <SpiffeSettings />
-          <FixedButtonsGroup name="idp-details" isSubmit reset={reset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </Form>
       ),
     },
@@ -872,7 +1108,12 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           <JWTAuthorizationGrantSettings />
-          <FixedButtonsGroup name="idp-details" isSubmit reset={reset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </Form>
       ),
     },
@@ -886,7 +1127,31 @@ export default function DetailSettings() {
           onSubmit={handleSubmit(save)}
         >
           <KubernetesSettings />
-          <FixedButtonsGroup name="idp-details" isSubmit reset={reset} />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
+        </Form>
+      ),
+    },
+    {
+      title: t("generalSettings"),
+      isHidden: !isDefaultTrust,
+      panel: (
+        <Form
+          isHorizontal
+          className="pf-v5-u-py-lg"
+          onSubmit={handleSubmit(save)}
+        >
+          <DefaultTrustSettings />
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={reset}
+            isDisabled={!isDirty}
+          />
         </Form>
       ),
     },
@@ -910,7 +1175,8 @@ export default function DetailSettings() {
     },
     {
       title: t("advancedSettings"),
-      isHidden: isSPIFFE || isKubernetes || isJWTAuthorizationGrant,
+      isHidden:
+        isSPIFFE || isKubernetes || isJWTAuthorizationGrant || isDefaultTrust,
       panel: (
         <FormAccess
           role="manage-identity-providers"
@@ -923,7 +1189,14 @@ export default function DetailSettings() {
             isOAuth2={isOAuth2!}
           />
 
-          <FixedButtonsGroup name="idp-details" isSubmit reset={handleReset} />
+          {/* TIDECLOAK IMPLEMENTATION: reset={handleReset} (clears the Tide IdP's
+              pendingUpdateSettings flag), plus upstream's isDirty gating. */}
+          <FixedButtonsGroup
+            name="idp-details"
+            isSubmit
+            reset={handleReset}
+            isDisabled={!isDirty}
+          />
         </FormAccess>
       ),
     },
@@ -944,7 +1217,9 @@ export default function DetailSettings() {
             onChange={field.onChange}
             save={save}
             toggleDeleteDialog={toggleDeleteDialog}
-            toggleOffboardingDialog={alias === "tide" ? toggleOffboardingDialog : undefined}
+            toggleOffboardingDialog={
+              alias === "tide" ? toggleOffboardingDialog : undefined
+            }
           />
         )}
       />
@@ -964,81 +1239,88 @@ export default function DetailSettings() {
           </Tab>
           <Tab
             id="mappers"
-            isHidden={isSPIFFE || isKubernetes || isJWTAuthorizationGrant}
+            isHidden={
+              isSPIFFE ||
+              isKubernetes ||
+              isJWTAuthorizationGrant ||
+              isDefaultTrust
+            }
             data-testid="mappers-tab"
             title={<TabTitleText>{t("mappers")}</TabTitleText>}
             {...mappersTab}
           >
-            <KeycloakDataTable
-              emptyState={
-                <ListEmptyState
-                  message={t("noMappers")}
-                  instructions={t("noMappersInstructions")}
-                  primaryActionText={t("addMapper")}
-                  onPrimaryAction={() =>
-                    navigate(
-                      toIdentityProviderAddMapper({
-                        realm,
-                        alias: alias!,
-                        providerId: provider.providerId!,
-                        tab: "mappers",
-                      }),
-                    )
-                  }
-                />
-              }
-              loader={loader}
-              key={key}
-              ariaLabelKey="mappersList"
-              searchPlaceholderKey="searchForMapper"
-              toolbarItem={
-                <ToolbarItem>
-                  <Button
-                    id="add-mapper-button"
-                    component={(props) => (
-                      <Link
-                        {...props}
-                        to={toIdentityProviderAddMapper({
+            <GroupResourceContext value={groupResource}>
+              <KeycloakDataTable
+                emptyState={
+                  <ListEmptyState
+                    message={t("noMappers")}
+                    instructions={t("noMappersInstructions")}
+                    primaryActionText={t("addMapper")}
+                    onPrimaryAction={() =>
+                      navigate(
+                        toIdentityProviderAddMapper({
                           realm,
                           alias: alias!,
                           providerId: provider.providerId!,
                           tab: "mappers",
-                        })}
-                      />
-                    )}
-                    data-testid="addMapper"
-                  >
-                    {t("addMapper")}
-                  </Button>
-                </ToolbarItem>
-              }
-              columns={[
-                {
-                  name: "name",
-                  displayKey: "name",
-                  cellRenderer: (row) => (
-                    <MapperLink {...row} provider={provider} />
-                  ),
-                },
-                {
-                  name: "category",
-                  displayKey: "category",
-                },
-                {
-                  name: "type",
-                  displayKey: "type",
-                },
-              ]}
-              actions={[
-                {
-                  title: t("delete"),
-                  onRowClick: (mapper) => {
-                    setSelectedMapper(mapper);
-                    toggleDeleteMapperDialog();
+                        }),
+                      )
+                    }
+                  />
+                }
+                loader={loader}
+                key={key}
+                ariaLabelKey="mappersList"
+                searchPlaceholderKey="searchForMapper"
+                toolbarItem={
+                  <ToolbarItem>
+                    <Button
+                      id="add-mapper-button"
+                      component={(props) => (
+                        <Link
+                          {...props}
+                          to={toIdentityProviderAddMapper({
+                            realm,
+                            alias: alias!,
+                            providerId: provider.providerId!,
+                            tab: "mappers",
+                          })}
+                        />
+                      )}
+                      data-testid="addMapper"
+                    >
+                      {t("addMapper")}
+                    </Button>
+                  </ToolbarItem>
+                }
+                columns={[
+                  {
+                    name: "name",
+                    displayKey: "name",
+                    cellRenderer: (row) => (
+                      <MapperLink {...row} provider={provider} />
+                    ),
                   },
-                } as Action<IdPWithMapperAttributes>,
-              ]}
-            />
+                  {
+                    name: "category",
+                    displayKey: "category",
+                  },
+                  {
+                    name: "type",
+                    displayKey: "type",
+                  },
+                ]}
+                actions={[
+                  {
+                    title: t("delete"),
+                    onRowClick: (mapper) => {
+                      setSelectedMapper(mapper);
+                      toggleDeleteMapperDialog();
+                    },
+                  } as Action<IdPWithMapperAttributes>,
+                ]}
+              />
+            </GroupResourceContext>
           </Tab>
           {isFeatureEnabled(Feature.AdminFineGrainedAuthz) && (
             <Tab
@@ -1050,7 +1332,7 @@ export default function DetailSettings() {
               <PermissionsTab id={alias} type="identityProviders" />
             </Tab>
           )}
-          {realmRepresentation?.adminEventsEnabled &&
+          {realmRepresentation.adminEventsEnabled &&
             hasAccess("view-events") && (
               <Tab
                 data-testid="admin-events-tab"

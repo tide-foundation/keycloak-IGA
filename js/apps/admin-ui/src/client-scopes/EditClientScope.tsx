@@ -33,10 +33,12 @@ import {
   RoutableTabs,
   useRoutableTab,
 } from "../components/routable-tabs/RoutableTabs";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
 import { convertFormValuesToObject } from "../util";
 import { useParams } from "../utils/useParams";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { MapperList } from "./details/MapperList";
 import { ScopeForm } from "./details/ScopeForm";
 import { ClientScopeParams, toClientScope } from "./routes/ClientScope";
@@ -134,7 +136,26 @@ export default function EditClientScope() {
     continueButtonVariant: ButtonVariant.danger,
     onConfirm: async () => {
       try {
-        await adminClient.clientScopes.del({ id });
+        // TIDECLOAK IMPLEMENTATION: a governed DELETE returns 202 + a pending
+        // change-request envelope (the agent unwraps it; `del` is typed void
+        // but resolves with the parsed body). Detect it with the established
+        // helper and do NOT navigate away as if deleted — refresh in place.
+        const result = await adminClient.clientScopes.del({ id });
+        if (
+          notifyIfPendingChangeRequest(
+            result,
+            t,
+            addAlert,
+            { realm, navigate },
+            {
+              titleKey: "deletePendingChangeRequestCreated",
+              useEnvelopeMessage: true,
+            },
+          )
+        ) {
+          refresh();
+          return;
+        }
         addAlert(t("deletedSuccessClientScope"), AlertVariant.success);
         navigate(toClientScopes({ realm }));
       } catch (error) {
@@ -233,6 +254,7 @@ export default function EditClientScope() {
         divider={false}
       />
 
+      <IgaPageBanner entityType="client scope" />
       <PageSection variant="light" className="pf-v5-u-p-0">
         <RoutableTabs isBox mountOnEnter unmountOnExit>
           <Tab
@@ -288,7 +310,7 @@ export default function EditClientScope() {
               save={assignRoles}
             />
           </Tab>
-          {realmRepresentation?.adminEventsEnabled &&
+          {realmRepresentation.adminEventsEnabled &&
             hasAccess("view-events") && (
               <Tab
                 data-testid="admin-events-tab"

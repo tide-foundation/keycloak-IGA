@@ -86,14 +86,12 @@ test.describe("OID4VCI Protocol Mapper Configuration", () => {
   let testBed: Awaited<ReturnType<typeof createTestBed>>;
 
   test.beforeEach(async ({ page }) => {
-    testBed = await createTestBed();
+    testBed = await createTestBed({ verifiableCredentialsEnabled: true });
     await login(page, { to: toClientScopes({ realm: testBed.realm }) });
   });
 
   test.afterEach(async () => {
-    if (testBed) {
-      await testBed[Symbol.asyncDispose]();
-    }
+    await testBed[Symbol.asyncDispose]();
   });
 
   test("should display mandatory claim toggle and claim display fields", async ({

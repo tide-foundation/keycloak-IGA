@@ -2,10 +2,10 @@ package org.keycloak.representations.workflows;
 
 public final class WorkflowConstants {
 
-    public static final String DEFAULT_WORKFLOW = "event-based-workflow";
-
+    public static final String AD_HOC = "adhoc";
     public static final String CONFIG_USES = "uses";
     public static final String CONFIG_WITH = "with";
+    public static final String CONFIG_SUPPORTS = "supports";
 
     // Entry configuration keys for Workflow
     public static final String CONFIG_ON_EVENT = "on";
@@ -27,9 +27,11 @@ public final class WorkflowConstants {
     public static final String CONFIG_AFTER = "after";
     public static final String CONFIG_PRIORITY = "priority";
     public static final String CONFIG_SCHEDULED_AT = "scheduled-at";
+    public static final String CONFIG_STATUS = "status";
 
     // Entry configuration keys for WorkflowSchedule
     public static final String CONFIG_SCHEDULE_AFTER = "schedule." + CONFIG_AFTER;
     public static final String CONFIG_BATCH_SIZE = "batch-size";
     public static final String CONFIG_SCHEDULE_BATCH_SIZE = "schedule." + CONFIG_BATCH_SIZE;
+    public static final String CONFIG_LAST_SCHEDULE_RUN = "schedule.lastRun";
 }

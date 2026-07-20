@@ -23,9 +23,9 @@ import java.util.List;
 
 import org.keycloak.it.junit5.extension.CLIResult;
 import org.keycloak.it.junit5.extension.DistributionTest;
+import org.keycloak.it.junit5.extension.KeycloakRunner;
 import org.keycloak.it.junit5.extension.RawDistOnly;
 import org.keycloak.it.junit5.extension.WithEnvVars;
-import org.keycloak.it.utils.KeycloakDistribution;
 import org.keycloak.quarkus.runtime.Environment;
 import org.keycloak.quarkus.runtime.cli.command.BootstrapAdmin;
 import org.keycloak.quarkus.runtime.cli.command.BootstrapAdminService;
@@ -42,15 +42,15 @@ import org.keycloak.quarkus.runtime.cli.command.UpdateCompatibilityMetadata;
 import io.quarkus.test.junit.main.Launch;
 import org.apache.commons.io.FileUtils;
 import org.approvaltests.Approvals;
-import org.hamcrest.MatcherAssert;
-import org.hamcrest.Matchers;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.keycloak.quarkus.runtime.cli.command.AbstractAutoBuildCommand.OPTIMIZED_BUILD_OPTION_LONG;
 
-@WithEnvVars({"KEYCLOAK_COMMAND_MODE", "ALL"})
-@DistributionTest
+@WithEnvVars({"KEYCLOAK_COMMAND_MODE", "ALL", "KEYCLOAK_HELP_WIDTH", "80"})
+@DistributionTest(localCache = false)
 @RawDistOnly(reason = "Verifying the help message output doesn't need long spin-up of docker dist tests.")
+@Tag(DistributionTest.WIN)
 public class HelpCommandDistTest {
 
     public static final String REPLACE_EXPECTED = "KEYCLOAK_REPLACE_EXPECTED";
@@ -188,7 +188,7 @@ public class HelpCommandDistTest {
     }
 
     @Test
-    public void testHelpDoesNotStartReAugJvm(KeycloakDistribution dist) {
+    public void testHelpDoesNotStartReAugJvm(KeycloakRunner runner) {
         for (String helpCmd : List.of("-h", "--help", "--help-all")) {
             for (String cmd : List.of("", "start", "start-dev", "build")) {
                 String debugOption = "--debug";
@@ -197,7 +197,7 @@ public class HelpCommandDistTest {
                     debugOption = "--debug=8787";
                 }
 
-                CLIResult run = dist.run(debugOption, cmd, helpCmd);
+                CLIResult run = runner.run(debugOption, cmd, helpCmd);
                 assertSingleJvmStarted(run);
             }
         }
@@ -208,17 +208,24 @@ public class HelpCommandDistTest {
     }
 
     private void assertHelp(CLIResult cliResult) {
-        // normalize the output to prevent changes around the feature toggles or events to mark the output to differ
         String output = cliResult.getOutput()
+                // strip ANSI escape sequences (colors, bold, etc.) that may appear in the output
+                .replaceAll("\u001B\\[[;\\d]*m", "")
+                // normalize the output to prevent changes around the feature toggles or events to mark the output to differ
                 .replaceAll("((Disables|Enables) a set of one or more features. Possible values are: )[^.]{30,}", "$1<...>")
-                .replaceAll("(create a metric.\\s+Possible values are:)[^.]{30,}.[^.]*.", "$1<...>");
+                .replaceAll("(create a metric.\\s+Possible values are:)[^.]{30,}.[^.]*.", "$1<...>")
+                // strip trailing whitespace on each line that picocli may leave
+                .replaceAll("[ \\t]+(?=\\R)", "")
+                .stripTrailing();
 
         if (Environment.isWindows()) {
-            MatcherAssert.assertThat(output, Matchers.containsString("kc.bat"));
             output = output
-                    .replace("kc.bat", "kc.sh")
                     .replace("data\\log\\", "data/log/")
                     .replace("\r\n", "\n");
+        }
+        
+        if (output.startsWith("Appending additional Java properties to JAVA_OPTS")) {
+            output = output.substring(output.indexOf("\n") + 1);
         }
 
         try {

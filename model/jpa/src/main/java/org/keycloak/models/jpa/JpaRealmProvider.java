@@ -205,11 +205,13 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
         session.clientScopes().removeClientScopes(adapter);
         session.roles().removeRoles(adapter);
 
+        // Remove groups before organizations to avoid FK constraint violations
+        session.groups().preRemove(adapter);
+
         em.createNamedQuery("deleteOrganizationDomainsByRealm")
                 .setParameter("realmId", realm.getId()).executeUpdate();
         em.createNamedQuery("deleteOrganizationsByRealm")
                 .setParameter("realmId", realm.getId()).executeUpdate();
-        session.groups().preRemove(adapter);
 
         session.identityProviders().removeAll();
         session.identityProviders().removeAllMappers();
@@ -504,6 +506,22 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
     }
 
     @Override
+    public Stream<RoleModel> getCompositeRolesStream(RealmModel realm, Set<String> parentRoleIds) {
+        if (parentRoleIds == null || parentRoleIds.isEmpty()) {
+            return Stream.empty();
+        }
+        // One query fetches the child roles for every parent in the frontier, so a composite-role
+        // tree expands with a single getChildRolesFromParentIds query per breadth-first level. The
+        // query hydrates the child RoleEntity rows, so the getRoleById calls below are served from
+        // the persistence context without extra round-trips.
+        TypedQuery<RoleEntity> query = em.createNamedQuery("getChildRolesFromParentIds", RoleEntity.class)
+                .setParameter("parentRoleIds", parentRoleIds);
+        return closing(query.getResultStream())
+                .map(roleEntity -> session.roles().getRoleById(realm, roleEntity.getId()))
+                .filter(Objects::nonNull);
+    }
+
+    @Override
     public GroupModel getGroupById(RealmModel realm, String id) {
         GroupEntity groupEntity = em.find(GroupEntity.class, id);
         if (groupEntity == null) return null;
@@ -771,7 +789,6 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
             .map(realm::getGroupById)
             // In concurrent tests, the group might be deleted in another thread, therefore, skip those null values.
             .filter(Objects::nonNull)
-            .sorted(GroupModel.COMPARE_BY_NAME)
         );
     }
 
@@ -831,6 +848,9 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
         groupEntity.setRealm(realm.getId());
         groupEntity.setParentId(toParent == null? GroupEntity.TOP_PARENT_ID : toParent.getId());
         groupEntity.setType(type == null ? Type.REALM.intValue() : type.intValue());
+        long now = Time.currentTimeMillis();
+        groupEntity.setCreatedTimestamp(now);
+        groupEntity.setLastModifiedTimestamp(now);
         em.persist(groupEntity);
         em.flush();
 
@@ -898,7 +918,17 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
 
         resource = toClientModel(realm, entity);
 
-        session.getKeycloakSessionFactory().publish((ClientModel.ClientCreationEvent) () -> resource);
+        session.getKeycloakSessionFactory().publish(new ClientModel.ClientCreationEvent() {
+            @Override
+            public ClientModel getCreatedClient() {
+                return resource;
+            }
+
+            @Override
+            public KeycloakSession getKeycloakSession() {
+                return session;
+            }
+        });
         return resource;
     }
 
@@ -1129,7 +1159,7 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
             }
         });
 
-        int countRemoved = em.createNamedQuery("deleteClientScopeClientMappingByClient")
+        em.createNamedQuery("deleteClientScopeClientMappingByClient")
                 .setParameter("clientId", clientEntity.getId())
                 .executeUpdate();
         em.remove(clientEntity);  // i have no idea why, but this needs to come before deleteScopeMapping
@@ -1387,7 +1417,8 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
         if (Boolean.TRUE.equals(exact)) {
             predicates.add(builder.equal(root.get("name"), search));
         } else {
-            predicates.add(builder.like(builder.lower(root.get("name")), builder.lower(builder.literal("%" + search + "%"))));
+            String escapedSearch = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace("*", "%");
+            predicates.add(builder.like(builder.lower(root.get("name")), builder.lower(builder.literal("%" + escapedSearch + "%")), '\\'));
         }
 
         predicates.addAll(AdminPermissionsSchema.SCHEMA.applyAuthorizationFilters(session, AdminPermissionsSchema.GROUPS, realm, builder, queryBuilder, root));
@@ -1398,7 +1429,6 @@ public class JpaRealmProvider implements RealmProvider, ClientProvider, ClientSc
         return closing(paginateQuery(em.createQuery(queryBuilder), first, max).getResultStream()
                 .map(id -> session.groups().getGroupById(realm, id))
                 .filter(Objects::nonNull)
-                .sorted(GroupModel.COMPARE_BY_NAME)
                 .distinct());
     }
 

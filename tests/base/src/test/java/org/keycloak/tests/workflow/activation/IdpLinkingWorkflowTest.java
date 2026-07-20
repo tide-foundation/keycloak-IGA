@@ -6,18 +6,19 @@ import jakarta.ws.rs.core.Response;
 
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.WorkflowsResource;
-import org.keycloak.models.workflow.ResourceOperationType;
 import org.keycloak.models.workflow.SetUserAttributeStepProviderFactory;
+import org.keycloak.models.workflow.events.UserFedIdentityAddedWorkflowEventFactory;
+import org.keycloak.models.workflow.events.UserFedIdentityRemovedWorkflowEventFactory;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.userprofile.config.UPConfig;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.FederatedIdentityBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
-import org.keycloak.testsuite.util.FederatedIdentityBuilder;
 
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +43,7 @@ public class IdpLinkingWorkflowTest extends AbstractWorkflowTest {
 
         // create the workflow that triggers on IdP linking
         WorkflowRepresentation expectedWorkflow = WorkflowRepresentation.withName("myworkflow")
-                .onEvent(ResourceOperationType.USER_FEDERATED_IDENTITY_ADDED.name() + "(" + IDP_ALIAS + ")")
+                .onEvent(UserFedIdentityAddedWorkflowEventFactory.ID + "(" + IDP_ALIAS + ")")
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(SetUserAttributeStepProviderFactory.ID)
@@ -57,7 +58,7 @@ public class IdpLinkingWorkflowTest extends AbstractWorkflowTest {
 
         // create a test user then add a federated identity (idp-linking)
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("generic-user").email("generic-user@example.com").build())) {
             userId = ApiUtil.getCreatedId(response);
         }
@@ -81,7 +82,7 @@ public class IdpLinkingWorkflowTest extends AbstractWorkflowTest {
 
         // create the workflow that triggers on IdP unlinking
         WorkflowRepresentation expectedWorkflow = WorkflowRepresentation.withName("myworkflow")
-                .onEvent(ResourceOperationType.USER_FEDERATED_IDENTITY_REMOVED.name() + "(" + IDP_ALIAS + ")")
+                .onEvent(UserFedIdentityRemovedWorkflowEventFactory.ID + "(" + IDP_ALIAS + ")")
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(SetUserAttributeStepProviderFactory.ID)
@@ -96,7 +97,7 @@ public class IdpLinkingWorkflowTest extends AbstractWorkflowTest {
 
         // create a test user then add a federated identity (idp-linking) - workflow should not trigger yet
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("generic-user").email("generic-user@example.com").build())) {
             userId = ApiUtil.getCreatedId(response);
         }

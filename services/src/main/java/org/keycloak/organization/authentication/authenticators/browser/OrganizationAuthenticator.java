@@ -34,6 +34,7 @@ import org.keycloak.authentication.FlowStatus;
 import org.keycloak.authentication.authenticators.browser.AbstractUsernameFormAuthenticator;
 import org.keycloak.authentication.authenticators.browser.IdentityProviderAuthenticator;
 import org.keycloak.authentication.authenticators.browser.WebAuthnConditionalUIAuthenticator;
+import org.keycloak.authentication.authenticators.util.AuthenticatorUtils;
 import org.keycloak.email.freemarker.beans.ProfileBean;
 import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.forms.login.freemarker.model.AuthenticationContextBean;
@@ -56,14 +57,17 @@ import org.keycloak.organization.forms.login.freemarker.model.OrganizationAwareR
 import org.keycloak.organization.protocol.mappers.oidc.OrganizationScope;
 import org.keycloak.organization.utils.Organizations;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
+import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.messages.Messages;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.util.Booleans;
 
 import static org.keycloak.authentication.AuthenticatorUtil.isSSOAuthentication;
+import static org.keycloak.authentication.authenticators.browser.AbstractUsernameFormAuthenticator.USER_SET_BEFORE_USERNAME_PASSWORD_AUTH;
 import static org.keycloak.models.OrganizationDomainModel.ANY_DOMAIN;
 import static org.keycloak.models.utils.KeycloakModelUtils.findUserByNameOrEmail;
 import static org.keycloak.organization.utils.Organizations.getEmailDomain;
+import static org.keycloak.organization.utils.Organizations.getMatchingDomain;
 import static org.keycloak.organization.utils.Organizations.isEnabledAndOrganizationsPresent;
 import static org.keycloak.organization.utils.Organizations.resolveHomeBroker;
 import static org.keycloak.utils.StringUtil.isBlank;
@@ -110,6 +114,12 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         MultivaluedMap<String, String> parameters = request.getDecodedFormParameters();
         String username = parameters.getFirst(UserModel.USERNAME);
 
+        // Skip when re-entered from a form without the rememberMe field (e.g. select-organization.ftl):
+        // an unconditional call would clear the authNote saved on the first action() call.
+        if (parameters.containsKey("rememberMe")) {
+            AuthenticatorUtils.processRememberMe(context, parameters);
+        }
+
         // check if it's a webauthn submission and perform the webauth login
         if (webauthnAuth.isPasskeysEnabled() && (parameters.containsKey(WebAuthnConstants.AUTHENTICATOR_DATA)
                 || parameters.containsKey(WebAuthnConstants.ERROR))) {
@@ -140,6 +150,11 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         OrganizationModel organization = resolveOrganization(user, domain);
 
         if (organization == null) {
+            // remember the username before the org selection challenge so it can be preserved
+            // when the user switches organizations (the switch handler reads ATTEMPTED_USERNAME)
+            if (user != null && username != null) {
+                context.getAuthenticationSession().setAuthNote(AbstractUsernameFormAuthenticator.ATTEMPTED_USERNAME, username);
+            }
             if (shouldUserSelectOrganization(context, user)) {
                 return;
             }
@@ -203,10 +218,6 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
 
         if (alias.isEmpty()) {
             organization = Organizations.resolveOrganization(session, user, domain);
-            if (organization != null && isSSOAuthentication(authSession)) {
-                // make sure the organization selected by the user is available from the client session when running mappers and issuing tokens
-                authSession.setClientNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
-            }
         } else {
             OrganizationProvider provider = getOrganizationProvider();
             organization = provider.getByAlias(alias.get(0));
@@ -219,6 +230,11 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         if (!alias.isEmpty() || isSSOAuthentication(authSession)) {
             // make sure the organization selected by the user is available from the client session when running mappers and issuing tokens
             authSession.setClientNote(OrganizationModel.ORGANIZATION_ATTRIBUTE, organization.getId());
+        }
+
+        if (!alias.isEmpty()) {
+            // user explicitly selected an organization, allow switching later in the flow
+            authSession.setAuthNote(OrganizationModel.ORGANIZATION_SWITCHABLE_ATTRIBUTE, Boolean.TRUE.toString());
         }
 
         return organization;
@@ -261,7 +277,7 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
 
     private boolean tryRedirectBroker(AuthenticationFlowContext context, OrganizationModel organization, UserModel user, String username, String domain) {
         // the user has credentials set; do not redirect to allow the user to pick how to authenticate
-        if (user != null && user.credentialManager().getStoredCredentialsStream().findAny().isPresent()) {
+        if (user != null && user.credentialManager().getFirstFactorCredentialsStream().findAny().isPresent()) {
             return false;
         }
 
@@ -283,22 +299,38 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
             return false;
         }
 
-        // first look for an IDP that matches exactly the specified domain (case-insensitive)
-        IdentityProviderModel idp = organization.getIdentityProviders()
-                .filter(broker -> IdentityProviderRedirectMode.EMAIL_MATCH.isSet(broker) &&
-                    domain.equalsIgnoreCase(broker.getConfig().get(OrganizationModel.ORGANIZATION_DOMAIN_ATTRIBUTE))).findFirst().orElse(null);
+        OrganizationDomainModel matching = getMatchingDomain(domain, organization);
 
-        if (idp != null) {
-            // redirect the user using the broker that matches the specified domain
-            redirect(context, idp.getAlias(), username);
-            return true;
+        if (matching == null) {
+            return false;
         }
 
-        // look for an idp that can match any of the org domains
-        idp = organization.getIdentityProviders().filter(IdentityProviderRedirectMode.EMAIL_MATCH::isSet)
-                .filter(broker -> ANY_DOMAIN.equals(broker.getConfig().get(OrganizationModel.ORGANIZATION_DOMAIN_ATTRIBUTE)))
-                .filter(broker -> organization.getDomains().map(OrganizationDomainModel::getName).anyMatch(domain::equals))
-                .findFirst().orElse(null);
+        // first look for an IDP that matches exactly the specified domain (case-insensitive)
+        IdentityProviderModel idp = organization.getIdentityProviders()
+                .filter(IdentityProviderRedirectMode.EMAIL_MATCH::isSet)
+                .filter(broker -> {
+                    String brokerDomain = broker.getConfig().get(OrganizationModel.ORGANIZATION_DOMAIN_ATTRIBUTE);
+
+                    if (brokerDomain == null) {
+                        return false;
+                    }
+
+                    String excludedDomains = broker.getConfig().get(OrganizationModel.ORGANIZATION_EXCLUDED_DOMAIN_ATTRIBUTE);
+
+                    if (excludedDomains != null) {
+                        for (String excludedDomain : excludedDomains.split(",")) {
+                            if (Organizations.isSameDomain(domain, excludedDomain.trim())) {
+                                return false;
+                            }
+                        }
+                    }
+
+                    if (ANY_DOMAIN.equals(brokerDomain)) {
+                        return true;
+                    }
+
+                    return brokerDomain.equals(matching.getName());
+                }).findFirst().orElse(null);
 
         if (idp != null) {
             redirect(context, idp.getAlias(), username);
@@ -354,7 +386,7 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
                 });
 
         if (domainMatch) {
-            form.addError(new FormMessage("Your email domain matches the " + organization.getName() + " organization but you don't have an account yet."));
+            form.addError(new FormMessage("Your email domain matches an organization but you don't have an account yet."));
         }
 
         // user is null, setup webauthn data if enabled
@@ -413,6 +445,15 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
 
         if (loginHint != null) {
             form.setFormData(new MultivaluedHashMap<>(Map.of(UserModel.USERNAME, loginHint)));
+        } else {
+            context.getAuthenticationSession().removeAuthNote(USER_SET_BEFORE_USERNAME_PASSWORD_AUTH);
+            String rememberMeUsername = AuthenticationManager.getRememberMeUsername(context.getSession());
+            if (rememberMeUsername != null) {
+                MultivaluedHashMap<String, String> formData = new MultivaluedHashMap<>();
+                formData.add(AuthenticationManager.FORM_USERNAME, rememberMeUsername);
+                formData.add("rememberMe", "on");
+                form.setFormData(formData);
+            }
         }
 
         return formCreator == null ? form.createLoginUsername() : formCreator.apply(form);
@@ -462,7 +503,7 @@ public class OrganizationAuthenticator extends IdentityProviderAuthenticator {
         if (organization == null) {
             OrganizationScope scope = OrganizationScope.valueOfScope(session);
 
-            if (OrganizationScope.SINGLE.equals(scope)) {
+            if (OrganizationScope.SPECIFIC.equals(scope)) {
                 organization = scope.resolveOrganizations(session).findAny().orElse(null);
             }
         }

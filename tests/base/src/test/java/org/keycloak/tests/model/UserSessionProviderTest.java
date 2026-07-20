@@ -43,13 +43,14 @@ import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.provider.ProviderEventListener;
 import org.keycloak.testframework.annotations.InjectRealm;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
+import org.keycloak.testframework.realm.ClientBuilder;
 import org.keycloak.testframework.realm.ManagedRealm;
+import org.keycloak.testframework.realm.RealmBuilder;
 import org.keycloak.testframework.realm.RealmConfig;
-import org.keycloak.testframework.realm.RealmConfigBuilder;
 import org.keycloak.testframework.remote.annotations.TestOnServer;
+import org.keycloak.testframework.remote.providers.timeoffset.InfinispanTimeUtil;
 import org.keycloak.testframework.remote.runonserver.InjectRunOnServer;
 import org.keycloak.testframework.remote.runonserver.RunOnServerClient;
-import org.keycloak.tests.utils.infinispan.InfinispanTimeUtil;
 
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
@@ -64,6 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 /**
  * @author <a href="mailto:sthorger@redhat.com">Stian Thorgersen</a>
  */
@@ -636,9 +638,9 @@ public class UserSessionProviderTest {
 
         KeycloakModelUtils.runJobInTransaction(session.getKeycloakSessionFactory(), (KeycloakSession kcSession) -> {
             kcSession.getContext().setRealm(realm);
-            assertSessions(kcSession.sessions().getUserSessionsStream(realm, realm.getClientByClientId("test-app"))
+            assertSessions(kcSession.sessions().readOnlyStreamUserSessions(realm, realm.getClientByClientId("test-app"), -1, -1)
                     .collect(Collectors.toList()), sessions[0], sessions[1], sessions[2]);
-            assertSessions(kcSession.sessions().getUserSessionsStream(realm, realm.getClientByClientId("third-party"))
+            assertSessions(kcSession.sessions().readOnlyStreamUserSessions(realm, realm.getClientByClientId("third-party"), -1 ,-1)
                     .collect(Collectors.toList()), sessions[0]);
         });
     }
@@ -765,7 +767,7 @@ public class UserSessionProviderTest {
     }
 
     private static void assertPaginatedSession(KeycloakSession session, RealmModel realm, ClientModel client, int start, int max, int expectedSize) {
-        assertEquals(expectedSize, session.sessions().getUserSessionsStream(realm, client, start, max).count());
+        assertEquals(expectedSize, session.sessions().readOnlyStreamUserSessions(realm, client, start, max).count());
     }
 
     @Test
@@ -886,6 +888,50 @@ public class UserSessionProviderTest {
         runOnServer.run(UserSessionProviderTest::testOnUserRemovedLazyUserAttributesAreLoaded);
     }
 
+    @TestOnServer
+    public void testReadOnlyStreamsWithDeletedUser(KeycloakSession session) {
+        KeycloakModelUtils.runJobInTransactionWithResult(session.getKeycloakSessionFactory(), UserSessionProviderTest::createSessions);
+
+        // Remove user1 directly via UserProvider (bypassing UserManager) to simulate a federated user
+        // deleted from the external store. This leaves orphaned sessions in the database.
+        KeycloakModelUtils.runJobInTransaction(session.getKeycloakSessionFactory(), kcSession -> {
+            RealmModel realm = kcSession.realms().getRealmByName("test");
+            kcSession.getContext().setRealm(realm);
+            UserModel user1 = kcSession.users().getUserByUsername(realm, "user1");
+            kcSession.users().removeUser(realm, user1);
+        });
+
+        // Orphaned sessions must be filtered out
+        KeycloakModelUtils.runJobInTransaction(session.getKeycloakSessionFactory(), kcSession -> {
+            RealmModel realm = kcSession.realms().getRealmByName("test");
+            kcSession.getContext().setRealm(realm);
+
+            List<UserSessionModel> readOnlySessionList = kcSession.sessions().readOnlyStreamUserSessions(realm).toList();
+            assertEquals(1, readOnlySessionList.size());
+            assertNotNull(readOnlySessionList.get(0).getUser().getUsername());
+        });
+    }
+
+    @TestOnServer
+    public void testReadOnlyStreams(KeycloakSession session) {
+        var sessions = KeycloakModelUtils.runJobInTransactionWithResult(session.getKeycloakSessionFactory(), UserSessionProviderTest::createSessions);
+
+        KeycloakModelUtils.runJobInTransaction(session.getKeycloakSessionFactory(), kcSession -> {
+            RealmModel realm = kcSession.realms().getRealmByName("test");
+            kcSession.getContext().setRealm(realm);
+            var readOnlySessionList = kcSession.sessions().readOnlyStreamUserSessions(realm).toList();
+            assertSessions(readOnlySessionList, sessions);
+
+            // all sessions have client sessions from test-app
+            readOnlySessionList = kcSession.sessions().readOnlyStreamUserSessions(realm, realm.getClientByClientId("test-app"), -1, -1).toList();
+            assertSessions(readOnlySessionList, sessions);
+
+            // only the first one have a client session form third-party
+            readOnlySessionList = kcSession.sessions().readOnlyStreamUserSessions(realm, realm.getClientByClientId("third-party"), -1, -1).toList();
+            assertSessions(readOnlySessionList, sessions[0]);
+        });
+    }
+
     public static void testOnUserRemovedLazyUserAttributesAreLoaded(KeycloakSession session) {
         RealmModel realm = session.realms().getRealmByName("test");
         UserModel user1 = session.users().getUserByUsername(realm, "user1");
@@ -979,10 +1025,10 @@ public class UserSessionProviderTest {
     private static class UserSessionProviderRealm implements RealmConfig {
 
         @Override
-        public RealmConfigBuilder configure(RealmConfigBuilder realm) {
+        public RealmBuilder configure(RealmBuilder realm) {
             realm.name("test");
-            realm.addClient("test-app");
-            realm.addClient("third-party");
+            realm.clients(ClientBuilder.create("test-app"));
+            realm.clients(ClientBuilder.create("third-party"));
             return realm;
         }
     }

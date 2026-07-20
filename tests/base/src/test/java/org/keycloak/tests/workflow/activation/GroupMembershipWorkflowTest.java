@@ -7,16 +7,17 @@ import jakarta.ws.rs.core.Response.Status;
 
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.WorkflowsResource;
-import org.keycloak.models.workflow.ResourceOperationType;
 import org.keycloak.models.workflow.SetUserAttributeStepProviderFactory;
+import org.keycloak.models.workflow.events.UserGroupMembershipAddedWorkflowEventFactory;
+import org.keycloak.models.workflow.events.UserGroupMembershipRemovedWorkflowEventFactory;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.representations.userprofile.config.UPConfig;
 import org.keycloak.representations.userprofile.config.UPConfig.UnmanagedAttributePolicy;
 import org.keycloak.representations.workflows.WorkflowRepresentation;
 import org.keycloak.representations.workflows.WorkflowStepRepresentation;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.realm.GroupConfigBuilder;
-import org.keycloak.testframework.realm.UserConfigBuilder;
+import org.keycloak.testframework.realm.GroupBuilder;
+import org.keycloak.testframework.realm.UserBuilder;
 import org.keycloak.testframework.util.ApiUtil;
 import org.keycloak.tests.workflow.AbstractWorkflowTest;
 import org.keycloak.tests.workflow.config.WorkflowsBlockingServerConfig;
@@ -46,13 +47,13 @@ public class GroupMembershipWorkflowTest extends AbstractWorkflowTest {
         managedRealm.admin().users().userProfile().update(upConfig);
         String groupId;
 
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create()
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create()
                 .name("generic-group").build())) {
             groupId = ApiUtil.getCreatedId(response);
         }
 
         WorkflowRepresentation expectedWorkflow = WorkflowRepresentation.withName("myworkflow")
-                .onEvent(ResourceOperationType.USER_GROUP_MEMBERSHIP_ADDED.name() + "(" + GROUP_NAME + ")")
+                .onEvent(UserGroupMembershipAddedWorkflowEventFactory.ID + "(" + GROUP_NAME + ")")
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(SetUserAttributeStepProviderFactory.ID)
@@ -68,7 +69,7 @@ public class GroupMembershipWorkflowTest extends AbstractWorkflowTest {
         }
 
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("generic-user").email("generic-user@example.com").build())) {
             userId = ApiUtil.getCreatedId(response);
         }
@@ -95,12 +96,12 @@ public class GroupMembershipWorkflowTest extends AbstractWorkflowTest {
         String groupId;
 
         // create a test group
-        try (Response response = managedRealm.admin().groups().add(GroupConfigBuilder.create().name(GROUP_NAME).build())) {
+        try (Response response = managedRealm.admin().groups().add(GroupBuilder.create().name(GROUP_NAME).build())) {
             groupId = ApiUtil.getCreatedId(response);
         }
 
         WorkflowRepresentation expectedWorkflow = WorkflowRepresentation.withName("myworkflow")
-                .onEvent(ResourceOperationType.USER_GROUP_MEMBERSHIP_REMOVED.name() + "(" + GROUP_NAME + ")")
+                .onEvent(UserGroupMembershipRemovedWorkflowEventFactory.ID + "(" + GROUP_NAME + ")")
                 .withSteps(
                         WorkflowStepRepresentation.create()
                                 .of(SetUserAttributeStepProviderFactory.ID)
@@ -117,7 +118,7 @@ public class GroupMembershipWorkflowTest extends AbstractWorkflowTest {
 
         // now create a user and add them to the group
         String userId;
-        try (Response response = managedRealm.admin().users().create(UserConfigBuilder.create()
+        try (Response response = managedRealm.admin().users().create(UserBuilder.create()
                 .username("generic-user").email("generic-user@example.com").build())) {
             userId = ApiUtil.getCreatedId(response);
         }

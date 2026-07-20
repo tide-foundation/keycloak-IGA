@@ -14,11 +14,14 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAdminClient } from "../admin-client";
 import { KeycloakSpinner } from "@keycloak/keycloak-ui-shared";
+import { IgaPageBanner } from "../components/iga-banner/IgaPageBanner";
 import { ViewHeader } from "../components/view-header/ViewHeader";
 import { useRealm } from "../context/realm-context/RealmContext";
+import { notifyIfPendingChangeRequest } from "../utils/pendingChangeRequest"; // TIDECLOAK IMPLEMENTATION
 import { UserForm } from "./UserForm";
 import { UserFormFields, toUserRepresentation } from "./form-state";
 import { toUser } from "./routes/User";
+import { toUsers } from "./routes/Users";
 
 import "./user-section.css";
 
@@ -37,10 +40,6 @@ export default function CreateUser() {
   useFetch(
     () => adminClient.users.getProfileMetadata({ realm: realmName }),
     (userProfileMetadata) => {
-      if (!userProfileMetadata) {
-        throw new Error(t("notFound"));
-      }
-
       setUserProfileMetadata(userProfileMetadata);
     },
     [],
@@ -53,6 +52,17 @@ export default function CreateUser() {
         groups: addedGroups.map((group) => group.path!),
         enabled: true,
       });
+
+      // TIDECLOAK IMPLEMENTATION: IGA may intercept with a pending change request.
+      if (
+        notifyIfPendingChangeRequest(createdUser, t, addAlert, {
+          realm: realmName,
+          navigate,
+        })
+      ) {
+        navigate(toUsers({ realm: realmName }));
+        return;
+      }
 
       addAlert(t("userCreated"), AlertVariant.success);
       navigate(
@@ -68,7 +78,7 @@ export default function CreateUser() {
     }
   };
 
-  if (!realm || !userProfileMetadata) {
+  if (!userProfileMetadata) {
     return <KeycloakSpinner />;
   }
 
@@ -78,6 +88,7 @@ export default function CreateUser() {
         titleKey={t("createUser")}
         className="kc-username-view-header"
       />
+      <IgaPageBanner entityType="user" />
       <PageSection variant="light">
         <UserForm
           form={form}

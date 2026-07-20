@@ -22,8 +22,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
+import org.keycloak.common.Profile;
 import org.keycloak.common.util.MultiSiteUtils;
 import org.keycloak.connections.infinispan.InfinispanConnectionProvider;
 import org.keycloak.infinispan.util.InfinispanUtils;
@@ -119,8 +119,8 @@ public class UserSessionInitializerTest extends KeycloakModelTest {
             assertThat("Count of offline sesions for client 'test-app'", session.sessions().getOfflineSessionsCount(realm, testApp), is((long) 3));
             assertThat("Count of offline sesions for client 'third-party'", session.sessions().getOfflineSessionsCount(realm, thirdparty), is((long) 1));
 
-            List<UserSessionModel> loadedSessions = session.sessions().getOfflineUserSessionsStream(realm, testApp, 0, 10)
-                    .collect(Collectors.toList());
+            List<UserSessionModel> loadedSessions = session.sessions().readOnlyStreamOfflineUserSessions(realm, testApp, 0, 10)
+                    .toList();
 
             assertSessionLoaded(loadedSessions, origSessionIds[0].getId(), session.users().getUserByUsername(realm, "user1"), "127.0.0.1", started, started, "test-app", "third-party");
             assertSessionLoaded(loadedSessions, origSessionIds[1].getId(), session.users().getUserByUsername(realm, "user1"), "127.0.0.2", started, started, "test-app");
@@ -150,8 +150,8 @@ public class UserSessionInitializerTest extends KeycloakModelTest {
             ClientModel thirdparty = realm.getClientByClientId("third-party");
 
             assertThat("Count of offline sesions for client 'third-party'", session.sessions().getOfflineSessionsCount(realm, thirdparty), is((long) 1));
-            List<UserSessionModel> loadedSessions = session.sessions().getOfflineUserSessionsStream(realm, thirdparty, 0, 10)
-                    .collect(Collectors.toList());
+            List<UserSessionModel> loadedSessions = session.sessions().readOnlyStreamOfflineUserSessions(realm, thirdparty, 0, 10)
+                    .toList();
 
             assertThat("Size of loaded Sessions", loadedSessions.size(), is(1));
             assertSessionLoaded(loadedSessions, origSessionIds[0].getId(), session.users().getUserByUsername(realm, "user1"), "127.0.0.1", started, started, "third-party");
@@ -165,6 +165,7 @@ public class UserSessionInitializerTest extends KeycloakModelTest {
     @Test
     public void testUserSessionPropagationBetweenSites() throws InterruptedException {
         assumeFalse("Run only if Infinispan caches are used for storing/caching sessions", MultiSiteUtils.isMultiSiteEnabled() && MultiSiteUtils.isPersistentSessionsEnabled());
+        assumeFalse("The Sessions caches are disabled", Profile.isFeatureEnabled(Profile.Feature.STATELESS));
         AtomicInteger index = new AtomicInteger();
         AtomicReference<String> userSessionId = new AtomicReference<>();
         AtomicReference<List<Boolean>> containsSession = new AtomicReference<>(new LinkedList<>());

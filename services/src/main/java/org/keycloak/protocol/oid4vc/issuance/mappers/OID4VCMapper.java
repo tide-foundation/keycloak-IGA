@@ -34,13 +34,13 @@ import org.keycloak.models.oid4vci.Oid4vcProtocolMapperModel;
 import org.keycloak.protocol.ProtocolMapper;
 import org.keycloak.protocol.oid4vc.OID4VCEnvironmentProviderFactory;
 import org.keycloak.protocol.oid4vc.OID4VCLoginProtocolFactory;
-import org.keycloak.protocol.oid4vc.model.Format;
 import org.keycloak.protocol.oid4vc.model.VerifiableCredential;
 import org.keycloak.provider.ProviderConfigProperty;
 
 import org.apache.commons.collections4.ListUtils;
 
 import static org.keycloak.OID4VCConstants.CREDENTIAL_SUBJECT;
+import static org.keycloak.VCFormat.SD_JWT_VC;
 
 /**
  * Base class for OID4VC Mappers, to provide common configuration and functionality for all of them
@@ -99,7 +99,7 @@ public abstract class OID4VCMapper implements ProtocolMapper, OID4VCEnvironmentP
      * attributes from the metadata
      */
     public boolean includeInMetadata() {
-        return Optional.ofNullable(mapperModel.getConfig().get(CredentialScopeModel.INCLUDE_IN_METADATA))
+        return Optional.ofNullable(mapperModel.getConfig().get(CredentialScopeModel.VC_INCLUDE_IN_METADATA))
                        .map(Boolean::parseBoolean)
                        .orElse(true);
     }
@@ -113,15 +113,22 @@ public abstract class OID4VCMapper implements ProtocolMapper, OID4VCEnvironmentP
     public List<String> getMetadataAttributePath() {
         final String claimName = mapperModel.getConfig().get(CLAIM_NAME);
         final String userAttributeName = mapperModel.getConfig().get(USER_ATTRIBUTE_KEY);
-        return ListUtils.union(getAttributePrefix(),
-                               List.of(Optional.ofNullable(claimName).orElse(userAttributeName)));
+        String attributeName = Optional.ofNullable(claimName)
+                .orElse(userAttributeName);
+
+        if (attributeName == null) {
+            return Collections.emptyList();
+        }
+        
+        return ListUtils.union(getAttributePrefix(), List.of(attributeName));
     }
 
     protected List<String> getAttributePrefix() {
-        return switch (Optional.ofNullable(format).orElse("")) {
-            case Format.JWT_VC, Format.LDP_VC -> List.of(CREDENTIAL_SUBJECT);
-            default -> Collections.emptyList();
-        };
+        if (SD_JWT_VC.equals(format)) {
+            return Collections.emptyList();
+        } else {
+            return List.of(CREDENTIAL_SUBJECT);
+        }
     }
 
     @Override
@@ -167,12 +174,15 @@ public abstract class OID4VCMapper implements ProtocolMapper, OID4VCEnvironmentP
      */
     public void setClaimWithMetadataPrefix(Map<String, Object> claimsOrig, Map<String, Object> claimsWithPrefix) {
         List<String> attributePath = getMetadataAttributePath();
+        if (attributePath.isEmpty()) {
+            return;
+        }
         String propertyName = attributePath.get(attributePath.size() - 1);
         if (claimsOrig.get(propertyName) != null) {
             Object claimValue = claimsOrig.get(propertyName);
             Map<String, Object> current = claimsWithPrefix;
 
-            for (int i = 0; i < attributePath.size() ; i++) {
+            for (int i = 0; i < attributePath.size(); i++) {
                 String currentSnippetName = attributePath.get(i);
                 if (i < attributePath.size() - 1) {
                     Map<String, Object> obj = (Map<String, Object>) current.get(currentSnippetName);
