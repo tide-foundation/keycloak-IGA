@@ -18,8 +18,6 @@ package org.keycloak.testsuite.authz;
 
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +27,6 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response.Status;
 
 import org.keycloak.admin.client.resource.UsersResource;
-import org.keycloak.authorization.AuthorizationProvider;
 import org.keycloak.authorization.client.AuthorizationDeniedException;
 import org.keycloak.authorization.client.resource.AuthorizationResource;
 import org.keycloak.authorization.client.resource.PolicyResource;
@@ -616,26 +613,7 @@ public class UserManagedPermissionServiceTest extends AbstractResourceServerTest
 
         users.delete(marta.getId()).close();
 
-        getTestingClient().server().run((RunOnServer) UserManagedPermissionServiceTest::testRemovePolicyWhenOwnerDeleted);
-    }
-
-    private static void testRemovePolicyWhenOwnerDeleted(KeycloakSession session) {
-        RealmModel realm = session.realms().getRealmByName("authz-test");
-        ClientModel client = realm.getClientByClientId("resource-server-test");
-        AuthorizationProvider provider = session.getProvider(AuthorizationProvider.class);
-        ResourceServer resourceServer = provider.getStoreFactory().getResourceServerStore().findByClient(client);
-        Map<Policy.FilterOption, String[]> filters = new HashMap<>();
-
-        filters.put(Policy.FilterOption.TYPE, new String[] {"uma"});
-
-        PolicyStore policyStore = provider.getStoreFactory().getPolicyStore();
-        List<Policy> policies = policyStore
-                .find(resourceServer, filters, null, null);
-        assertTrue(policies.isEmpty());
-
-        policies = policyStore
-                .find(resourceServer, Collections.emptyMap(), null, null);
-        assertTrue(policies.isEmpty());
+        getTestingClient().server().run(UserManagedPermissionServiceRunOnServerHelpers.testRemovePolicyWhenOwnerDeleted());
     }
 
     @Test
@@ -1039,38 +1017,76 @@ public class UserManagedPermissionServiceTest extends AbstractResourceServerTest
 
         protection.policy(resource.getId()).create(newPermission);
 
-        getTestingClient().server().run((RunOnServer) UserManagedPermissionServiceTest::testRemovePoliciesOnResourceDelete);
+        getTestingClient().server().run(UserManagedPermissionServiceRunOnServerHelpers.testRemovePoliciesOnResourceDelete());
     }
 
-    private static void testRemovePoliciesOnResourceDelete(KeycloakSession session) {
-        RealmModel realm = session.realms().getRealmByName("authz-test");
-        ClientModel client = realm.getClientByClientId("resource-server-test");
-        AuthorizationProvider provider = session.getProvider(AuthorizationProvider.class);
-        UserModel user = session.users().getUserByUsername(realm, "marta");
-        ResourceServer resourceServer = provider.getStoreFactory().getResourceServerStore().findByClient(client);
-        Map<Policy.FilterOption, String[]> filters = new HashMap<>();
+    @Test
+    public void testResourceTypeAnyDoesNotLeakOwnerManagedResources() {
+        // Alice creates her resource with owner-managed access
+        ResourceRepresentation aliceResource = new ResourceRepresentation();
+        aliceResource.setName("alice-medical-records");
+        aliceResource.setType("patient-data");
+        aliceResource.setOwnerManagedAccess(true);
+        aliceResource.addScope("read", "write");
+        aliceResource = getAuthzClient().protection("alice", "password").resource().create(aliceResource);
 
-        filters.put(Policy.FilterOption.TYPE, new String[] {"uma"});
-        filters.put(OWNER, new String[] {user.getId()});
+        // Marta creates her own resource of the same type but does NOT share it with kolo
+        ResourceRepresentation martaResource = new ResourceRepresentation();
+        martaResource.setName("marta-medical-records");
+        martaResource.setType("patient-data");
+        martaResource.setOwner("marta");
+        martaResource.setOwnerManagedAccess(true);
+        martaResource.addScope("read", "write");
+        martaResource = getAuthzClient().protection("marta", "password").resource().create(martaResource);
 
-        List<Policy> policies = provider.getStoreFactory().getPolicyStore()
-                .find(resourceServer, filters, null, null);
-        assertEquals(1, policies.size());
+        // Request a permission ticket for alice's resource; kolo's failed authorization creates a pending ticket
+        PermissionResponse ticketResponse = getAuthzClient().protection()
+                .permission().create(new PermissionRequest(aliceResource.getId(), "read"));
 
-        Policy policy = policies.get(0);
-        assertFalse(policy.getResources().isEmpty());
+        AuthorizationRequest koloRequest = new AuthorizationRequest();
+        koloRequest.setTicket(ticketResponse.getTicket());
+        koloRequest.setSubmitRequest(true);
 
-        Resource resource = policy.getResources().iterator().next();
-        assertEquals("Resource A", resource.getName());
+        try {
+            getAuthzClient().authorization("kolo", "password").authorize(koloRequest);
+            fail("User should not have permission before ticket is granted");
+        } catch (Exception e) {
+            assertTrue(e instanceof AuthorizationDeniedException);
+            assertTrue(e.getMessage().contains("request_submitted"));
+        }
 
-        provider.getStoreFactory().getResourceStore().delete(resource.getId());
+        // Grant the pending ticket so kolo has explicit access to alice's resource
+        List<PermissionTicketRepresentation> tickets = getAuthzClient().protection()
+                .permission().findByResource(aliceResource.getId());
+        assertEquals(1, tickets.size());
+        PermissionTicketRepresentation aliceTicket = tickets.get(0);
+        aliceTicket.setGranted(true);
+        getAuthzClient().protection().permission().update(aliceTicket);
 
-        filters = new HashMap<>();
+        org.keycloak.admin.client.resource.AuthorizationResource authzAdmin = getClient(getRealm()).authorization();
+        ResourceServerRepresentation settings = authzAdmin.getSettings();
+        settings.setPolicyEnforcementMode(PolicyEnforcementMode.PERMISSIVE);
+        authzAdmin.update(settings);
 
-        filters.put(OWNER, new String[] {user.getId()});
-        policies = provider.getStoreFactory().getPolicyStore()
-                .find(resourceServer, filters, null, null);
-        assertTrue(policies.isEmpty());
+        try {
+            // kolo requests an RPT using resource-type-any for all "patient-data" resources
+            AuthorizationRequest request = new AuthorizationRequest();
+            request.addPermission("resource-type-any:patient-data", "read");
+
+            AuthorizationResponse response = getAuthzClient().authorization("kolo", "password").authorize(request);
+            assertNotNull(response);
+
+            AccessToken rpt = toAccessToken(response.getToken());
+            Collection<Permission> permissions = rpt.getAuthorization().getPermissions();
+
+            // kolo should only have access to alice's resource, NOT marta's (which was never shared)
+            assertEquals(1, permissions.size());
+            Permission granted = permissions.iterator().next();
+            assertEquals(aliceResource.getId(), granted.getResourceId());
+        } finally {
+            settings.setPolicyEnforcementMode(PolicyEnforcementMode.ENFORCING);
+            authzAdmin.update(settings);
+        }
     }
 
     @Test
