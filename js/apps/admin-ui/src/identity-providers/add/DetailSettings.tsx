@@ -575,6 +575,114 @@ export default function DetailSettings() {
     return Array.isArray(value) ? value[0] : value;
   }
 
+  /** TIDECLOAK IMPLEMENTATION START */
+  const currentHost = window.location.origin;
+
+  const backgroundUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/BACKGROUND_IMAGE`;
+  const logoUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/LOGO`;
+
+  const handleFileChange =
+    (type: "background" | "logo") => (event: DropEvent, file: File) => {
+      if (type === "background") {
+        setBackgroundImage(file);
+        setBackgroundPreviewUrl(URL.createObjectURL(file));
+      } else if (type === "logo") {
+        setLogo(file);
+        setLogoPreviewUrl(URL.createObjectURL(file));
+      }
+      setImageDeleteRequested(false);
+    };
+
+  const handleClear = (type: "background" | "logo") => {
+    if (type === "background") {
+      setBackgroundImage(null);
+      setBackgroundPreviewUrl("");
+    } else if (type === "logo") {
+      setLogo(null);
+      setLogoPreviewUrl("");
+    }
+    setImageDeleteRequested(true);
+  };
+
+  async function fetchImage(type: string) {
+    try {
+      const response = await adminClient.tideAdmin.getImageName({ type });
+
+      if (response === null && response === "") {
+        return;
+      }
+      // Create a new File object from the Blob
+      const file = new File([], response!, { type });
+      return file;
+    } catch (error) {
+      console.error("Failed to fetch image: ", error);
+      return null;
+    }
+  }
+  const initializeImages = async () => {
+    const backgroundImageFile = await fetchImage("BACKGROUND_IMAGE");
+    const logoImageFile = await fetchImage("LOGO");
+
+    if (
+      backgroundImageFile?.size !== undefined &&
+      backgroundImageFile.name !== ""
+    ) {
+      setBackgroundImage(backgroundImageFile);
+      setBackgroundPreviewUrl(backgroundUrl);
+    }
+
+    if (logoImageFile?.size !== undefined && logoImageFile.name !== "") {
+      setLogo(logoImageFile);
+      setLogoPreviewUrl(logoUrl);
+    }
+    setImageDeleteRequested(false);
+  };
+
+  useEffect(() => {
+    void initializeImages();
+  }, []);
+
+  const hasValue = (value: string) =>
+    value !== undefined && value !== null && value !== "" ? true : false;
+  const handleImageUpdate = async (image: File | null, type: string) => {
+    try {
+      if (image === null && imageDeleteRequested === true) {
+        // delete image on server
+        await adminClient.tideAdmin.deleteImage({ type });
+      } else if (image !== null && image.size > 0) {
+        const formData = new FormData();
+        formData.append("fileData", image);
+        formData.append("fileName", image.name);
+        formData.append("fileType", type);
+        await adminClient.tideAdmin.uploadImage(formData);
+      }
+    } catch (error) {
+      addError("Error upload image", error);
+    }
+  };
+
+  const handleReset = async () => {
+    reset();
+    if (providerId === "tide") {
+      await adminClient.identityProviders.update(
+        { alias },
+        {
+          ...provider,
+          config: { ...provider?.config, pendingUpdateSettings: false },
+          alias,
+          providerId,
+        },
+      );
+      await initializeImages();
+      setImageDeleteRequested(false);
+      refresh();
+    }
+  };
+
+  function getSingleValue(value: string | string[]): string {
+    return Array.isArray(value) ? value[0] : value;
+  }
+
   useFetch(
     () => adminClient.identityProviders.findOne({ alias }),
     (fetchedProvider) => {
