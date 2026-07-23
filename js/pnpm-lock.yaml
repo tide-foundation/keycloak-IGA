@@ -182,8 +182,8 @@ importers:
         specifier: ^5.4.16
         version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tidecloak/js':
-        specifier: 0.13.37-staging
-        version: 0.13.37-staging
+        specifier: 0.14.0
+        version: 0.14.0
       '@uiw/react-textarea-code-editor':
         specifier: ^3.1.1
         version: 3.1.1(@babel/runtime@7.28.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -409,8 +409,8 @@ importers:
         specifier: ^5.4.16
         version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tidecloak/js':
-        specifier: 0.13.37-staging
-        version: 0.13.37-staging
+        specifier: 0.14.0
+        version: 0.14.0
       i18next:
         specifier: ^25.7.3
         version: 25.7.3(typescript@5.9.3)
@@ -1727,16 +1727,16 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@tidecloak/js@0.13.37-staging':
-    resolution: {integrity: sha512-V4Rpxh+ml38L1eI90U32uHppZ7d4jO4tHsDFle9b8+RjpRpWHLzJvggAlWaY6OpKePVV+PzncQVwQi1nG+Riow==}
+  '@tidecloak/js@0.14.0':
+    resolution: {integrity: sha512-s78Hfdf0ATeAMHDJPRmWvdW4ogg9U7GKUUkHgZhAjfLrOSktcpdPXqxpXGOxQKDFLiGtZ1NnwXJEFuS89tLxQA==}
     peerDependencies:
-      '@tidecloak/policy': 0.13.37-staging
+      '@tidecloak/policy': ^0.14.0
     peerDependenciesMeta:
       '@tidecloak/policy':
         optional: true
 
-  '@tideorg/js@0.13.37-staging':
-    resolution: {integrity: sha512-FIiegIdYMG+cNlP7ICaOZJHt+vi4I615veEuzPeybLX5i4I0PIZp0yJKKQecp+pMetNbxMNsneqdpyEHsIWH8w==}
+  '@tideorg/js@0.14.1':
+    resolution: {integrity: sha512-BJP7P3vt5BxHc/dAo08ydt4qBYc1qxoSIzQXtM1CkOAHyfxdG1wFHPScNA1ArSD3xRy//0yQM3d/jIGbWkKwVg==}
 
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
@@ -3091,8 +3091,8 @@ packages:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
 
-  heimdall-tide@0.13.37-staging:
-    resolution: {integrity: sha512-0/QUqSAlQ2e+Nklu7rfYEv16p88KiY8VVdfrrVzld8jlovh7u3AvlUngxueHkVIyJ5MKUnmH3o7JwKDzt/5Irg==}
+  heimdall-tide@0.14.1:
+    resolution: {integrity: sha512-VvG6vRLpnsJgOG1yx5MjTqM1lGfHqzv6gzuowUSOQmI9clpXC40o++wlyXYoceXda/b3Kg/1PF5QRs2bk+XLrQ==}
 
   hermes-estree@0.25.1:
     resolution: {integrity: sha512-0wUoCcLp+5Ev5pDW2OriHC2MJCbwLwuRx+gAqMTOkGKJJiBCLjtrvy4PWUGn6MIVefecRpzoOZ/UV6iGdOr+Cw==}
@@ -5997,12 +5997,12 @@ snapshots:
       '@types/react': 18.3.23
       '@types/react-dom': 18.3.7(@types/react@18.3.23)
 
-  '@tidecloak/js@0.13.37-staging':
+  '@tidecloak/js@0.14.0':
     dependencies:
-      '@tideorg/js': 0.13.37-staging
-      heimdall-tide: 0.13.37-staging
+      '@tideorg/js': 0.14.1
+      heimdall-tide: 0.14.1
 
-  '@tideorg/js@0.13.37-staging': {}
+  '@tideorg/js@0.14.1': {}
 
   '@tsconfig/node10@1.0.11': {}
 
@@ -7571,9 +7571,9 @@ snapshots:
 
   he@1.2.0: {}
 
-  heimdall-tide@0.13.37-staging:
+  heimdall-tide@0.14.1:
     dependencies:
-      '@tideorg/js': 0.13.37-staging
+      '@tideorg/js': 0.14.1
 
   hermes-estree@0.25.1: {}
 
