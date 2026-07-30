@@ -100,9 +100,9 @@
     "i18next": "^25.7.3",
     "i18next-fetch-backend": "^6.0.0",
     "jszip": "^3.10.1",
-    "@tidecloak/js": "file:~/tidecloak-js/packages/tidecloak-js",
+    "@tidecloak/js": "^0.13.33",
     "keycloak-js": "^26.2.2",
-    "lodash-es": "^4.17.22",
+    "lodash-es": "^4.18.1",
     "p-debounce": "^5.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -111,7 +111,7 @@
     "react-router-dom": "^6.30.2",
     "reactflow": "^11.11.4",
     "use-react-router-breadcrumbs": "^4.0.1",
-    "yaml": "^2.8.2"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.0",
@@ -130,11 +130,11 @@
     "lightningcss": "^1.30.2",
     "properties-file": "^3.6.3",
     "ts-node": "^10.9.2",
-    "uuid": "^13.0.0",
-    "vite": "^7.3.0",
+    "uuid": "^13.0.1",
+    "vite": "^7.3.5",
     "vite-plugin-checker": "^0.12.0",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.6"
   },
   "author": {
     "name": "Red Hat, Inc.",
