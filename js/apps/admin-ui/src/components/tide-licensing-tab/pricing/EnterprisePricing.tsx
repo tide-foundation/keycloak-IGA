@@ -27,6 +27,7 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
+  Label,
   Skeleton,
   Slider,
   Text,
@@ -76,7 +77,9 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   const freePlan = useFreePlan(serverBaseUrl, realm);
   const [users, setUsers] = useState<number | null>(null);
 
-  const range = packages.tiers ? capacityRange(packages.tiers) : null;
+  const range = packages.tiers
+    ? capacityRange(packages.tiers, freePlan?.userLimit)
+    : null;
 
   // Open on the smallest package once the catalogue lands, so the card starts
   // on a real, quotable capacity rather than an invented default.
@@ -94,95 +97,59 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   const isError = packages.isError || quoting.isError;
 
   return (
-    <>
-      {/* The free plan is a STANDALONE offer: its own Stripe Product, its own
-          subscription, a fixed capacity per month at no charge. It is NOT an
-          allowance deducted from paid capacity — buying 500 paid users gets you
-          500, not 600 — so it renders as a separate choice and never reduces
-          the paid total below. */}
-      {freePlan ? (
-        <Card isPlain isCompact data-testid="free-plan">
-          <CardTitle>
-            <Title headingLevel="h2" size="lg">
-              {t("Free")}
-            </Title>
-            <TextContent>
-              <Text component="small">
-                {t(
-                  "Up to {{limit}} users at no charge. One free plan per subscription.",
-                  { limit: formatCount(freePlan.userLimit) },
-                )}
-              </Text>
-            </TextContent>
-          </CardTitle>
-          <CardBody>
-            <Title headingLevel="h3" size="2xl" data-testid="free-plan-amount">
-              {formatMoney(freePlan.unitAmount, freePlan.currency)}{" "}
-              <Text component="small">{formatInterval(freePlan.interval)}</Text>
-            </Title>
-            <Button
-              variant="secondary"
-              className="pf-v5-u-mt-md"
-              onClick={() => onChooseFree?.(freePlan)}
-              data-testid="free-plan-choose"
-            >
-              {t("Start on the free plan")}
-            </Button>
-          </CardBody>
-        </Card>
-      ) : null}
-
-      <Card isPlain isCompact>
-        <CardTitle>
-          <Title headingLevel="h2" size="xl">
-            {t("Enterprise")}
-          </Title>
-          <TextContent>
-            <Text component="small">
-              {t(
-                "Capacity is sold in packages that combine. Tell us how many users you need and we work out the cheapest mix.",
-              )}
-            </Text>
-          </TextContent>
-        </CardTitle>
-        <CardBody>
-          {packages.isLoading ? (
-            <PricingSkeleton />
-          ) : isError ? (
-            <Alert
-              variant="danger"
-              isInline
-              title={t("Pricing is temporarily unavailable.")}
-              data-testid="pricing-error"
-            >
-              {t("Please try again shortly.")}
-            </Alert>
-          ) : !range ? (
-            <Alert
-              variant="info"
-              isInline
-              title={t("No plans are available right now.")}
-              data-testid="pricing-empty"
-            >
-              {t(
-                "No active Stripe price on the configured product carries a valid user_limit.",
-              )}
-            </Alert>
-          ) : (
-            <CapacityChooser
-              range={range}
-              users={users ?? range.min}
-              onUsersChange={setUsers}
-              quote={quoting.quote}
-              isQuoting={quoting.isQuoting}
-              onChoose={onChoose}
-              ctaLabel={ctaLabel ?? t("Request License")}
-              isCtaDisabled={isCtaDisabled}
-            />
-          )}
-        </CardBody>
-      </Card>
-    </>
+    <Card isPlain isCompact>
+      <CardTitle>
+        <Title headingLevel="h2" size="xl">
+          {t("Enterprise")}
+        </Title>
+        <TextContent>
+          <Text component="small">
+            {t(
+              "Capacity is sold in packages that combine. Tell us how many users you need and we work out the cheapest mix.",
+            )}
+          </Text>
+        </TextContent>
+      </CardTitle>
+      <CardBody>
+        {packages.isLoading ? (
+          <PricingSkeleton />
+        ) : isError ? (
+          <Alert
+            variant="danger"
+            isInline
+            title={t("Pricing is temporarily unavailable.")}
+            data-testid="pricing-error"
+          >
+            {t("Please try again shortly.")}
+          </Alert>
+        ) : !range ? (
+          <Alert
+            variant="info"
+            isInline
+            title={t("No plans are available right now.")}
+            data-testid="pricing-empty"
+          >
+            {t(
+              "No active Stripe price on the configured product carries a valid user_limit.",
+            )}
+          </Alert>
+        ) : (
+          <CapacityChooser
+            range={range}
+            packages={packages.tiers ?? []}
+            freePlan={freePlan}
+            users={users ?? range.min}
+            onUsersChange={setUsers}
+            quote={quoting.quote}
+            isQuoting={quoting.isQuoting}
+            onChoose={onChoose}
+            onChooseFree={onChooseFree}
+            ctaLabel={ctaLabel ?? t("Request License")}
+            isCtaDisabled={isCtaDisabled}
+          />
+        )}
+      </CardBody>
+    </Card>
   );
 };
 
@@ -195,22 +162,28 @@ const MULTI_BUY_STOPS = 10;
 
 type ChooserProps = {
   range: CapacityRange;
+  packages: PricingTier[];
+  freePlan: PricingTier | null;
   users: number;
   onUsersChange: (users: number) => void;
   quote: PricingQuote | undefined;
   isQuoting: boolean;
   onChoose: (quote: PricingQuote) => void;
+  onChooseFree?: (plan: PricingTier) => void;
   ctaLabel: string;
   isCtaDisabled: boolean;
 };
 
 const CapacityChooser: FC<ChooserProps> = ({
   range,
+  packages,
+  freePlan,
   users,
   onUsersChange,
   quote,
   isQuoting,
   onChoose,
+  onChooseFree,
   ctaLabel,
   isCtaDisabled,
 }) => {
@@ -220,6 +193,18 @@ const CapacityChooser: FC<ChooserProps> = ({
   // range to slide over. Capacity still varies — you can buy several of the one
   // package — so the track spans multiples of that package instead, and the
   // label below says so rather than implying a choice of sizes.
+  // ONE card covers both plans: at or below the free plan's capacity the
+  // selection IS the free plan, above it the paid packages. Crossing that line
+  // switches plan outright — the free users are NOT carried into the paid
+  // total, because the free plan is standalone and not an allowance.
+  const isFree = freePlan !== null && users <= freePlan.userLimit;
+
+  // Nothing to choose between: one paid package and no free plan, or a free
+  // plan and nothing else. The capacity control would imply a choice that is
+  // not there, so this degrades to a plain price and a button — the shape the
+  // old "Request License" affordance had.
+  const isSingleOption = packages.length + (freePlan ? 1 : 0) <= 1;
+
   const hasMultiplePackageSizes = range.max > range.min;
   const sliderMax = hasMultiplePackageSizes
     ? range.max
@@ -233,8 +218,16 @@ const CapacityChooser: FC<ChooserProps> = ({
 
   return (
     <div className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-lg">
-      {/* Headline: the quoted total, straight from the server. */}
-      {quote ? (
+      {/* Headline: the free plan's price, or the server's quoted total. */}
+      {isFree ? (
+        <Title headingLevel="h3" size="3xl" data-testid="pricing-amount">
+          {formatMoney(freePlan.unitAmount, freePlan.currency)}{" "}
+          <Text component="small">{formatInterval(freePlan.interval)}</Text>{" "}
+          <Label color="green" data-testid="pricing-free-badge">
+            {t("Free plan")}
+          </Label>
+        </Title>
+      ) : quote ? (
         <Title
           headingLevel="h3"
           size="3xl"
@@ -252,29 +245,33 @@ const CapacityChooser: FC<ChooserProps> = ({
         />
       )}
 
-      <TextContent>
-        <Text component="h4">{t("How many users do you need?")}</Text>
-      </TextContent>
+      {isSingleOption ? null : (
+        <TextContent>
+          <Text component="h4">{t("How many users do you need?")}</Text>
+        </TextContent>
+      )}
 
-      <Slider
-        min={range.min}
-        max={sliderMax}
-        step={sliderStep}
-        value={sliderValue}
-        inputValue={users}
-        isInputVisible
-        inputLabel={t("users")}
-        inputAriaLabel={t("Exact number of users")}
-        showBoundaries
-        // PatternFly reports the typed value as `inputValue` and the dragged one
-        // as `value`; both are snapped onto a capacity the packages can express
-        // exactly, so we never ask the server to quote 1,234 when the packages
-        // step in hundreds.
-        onChange={(_event, value, inputValue) =>
-          onUsersChange(snapCapacity(inputValue ?? value, range))
-        }
-        data-testid="pricing-slider"
-      />
+      {isSingleOption ? null : (
+        <Slider
+          min={range.min}
+          max={sliderMax}
+          step={sliderStep}
+          value={sliderValue}
+          inputValue={users}
+          isInputVisible
+          inputLabel={t("users")}
+          inputAriaLabel={t("Exact number of users")}
+          showBoundaries
+          // PatternFly reports the typed value as `inputValue` and the dragged one
+          // as `value`; both are snapped onto a capacity the packages can express
+          // exactly, so we never ask the server to quote 1,234 when the packages
+          // step in hundreds.
+          onChange={(_event, value, inputValue) =>
+            onUsersChange(snapCapacity(inputValue ?? value, range))
+          }
+          data-testid="pricing-slider"
+        />
+      )}
 
       {!hasMultiplePackageSizes ? (
         <TextContent data-testid="pricing-single-package">
@@ -286,7 +283,51 @@ const CapacityChooser: FC<ChooserProps> = ({
         </TextContent>
       ) : null}
 
-      {quote ? (
+      {isFree ? (
+        <>
+          <DescriptionList isHorizontal isCompact>
+            <DescriptionListGroup>
+              <DescriptionListTerm>{t("Capacity")}</DescriptionListTerm>
+              <DescriptionListDescription data-testid="pricing-capacity-value">
+                {t("Up to {{limit}} users", {
+                  limit: formatCount(freePlan.userLimit),
+                })}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+            <DescriptionListGroup>
+              <DescriptionListTerm>{t("Price")}</DescriptionListTerm>
+              <DescriptionListDescription>
+                {formatMoney(freePlan.unitAmount, freePlan.currency)}{" "}
+                {formatInterval(freePlan.interval)}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          </DescriptionList>
+
+          <TextContent>
+            <Text component="small">
+              {t(
+                "One free plan per subscription. Above {{limit}} users the capacity is priced in full — the free users are not carried over.",
+                { limit: formatCount(freePlan.userLimit) },
+              )}
+            </Text>
+          </TextContent>
+
+          <TextContent data-testid="pricing-bundle">
+            <Text component="small">
+              {t("Free plan")} &middot; {freePlan.priceId}
+            </Text>
+          </TextContent>
+
+          <Button
+            variant="primary"
+            isDisabled={isCtaDisabled}
+            onClick={() => onChooseFree?.(freePlan)}
+            data-testid="pricing-choose"
+          >
+            {ctaLabel}
+          </Button>
+        </>
+      ) : quote ? (
         <>
           <DescriptionList isHorizontal isCompact>
             <DescriptionListGroup>

@@ -22,10 +22,20 @@ export type CapacityRange = {
   step: number;
 };
 
-export function capacityRange(tiers: PricingTier[]): CapacityRange | null {
-  if (tiers.length === 0) return null;
-
+/**
+ * @param freeLimit capacity of the free plan, when one is offered. It becomes
+ *        the FIRST stop, so one continuous track reads "free up to here, priced
+ *        above it". Its size participates in the step GCD too, so a free plan of
+ *        an odd size cannot make paid stops unreachable.
+ */
+export function capacityRange(
+  tiers: PricingTier[],
+  freeLimit?: number,
+): CapacityRange | null {
   const limits = tiers.map((t) => t.userLimit);
+  if (freeLimit && freeLimit > 0) limits.push(freeLimit);
+  if (limits.length === 0) return null;
+
   const step = limits.reduce((a, b) => gcd(a, b));
 
   return {
