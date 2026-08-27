@@ -3,6 +3,13 @@ import { RequiredActionAlias } from "../defs/requiredActionProviderRepresentatio
 import Resource from "./resource.js";
 
 /* TIDECLOAK IMPLEMENTATION */
+/** What the payer node reports it supports. */
+interface payerCapabilitiesResponse {
+  lineItems: boolean;
+  changeCapacity: boolean;
+  packagePlansConfigured: boolean;
+}
+
 interface stripeCheckoutSessionResponse {
   message: string;
   activationPackage: string;
@@ -347,7 +354,7 @@ export class TideProvider extends Resource<{ realm?: string }> {
    * payer has no such route — and the console then hides capacity changes
    * rather than offering one the payer would silently mishandle.
    */
-  public payerCapabilities = this.makeRequest<void, Response>({
+  public payerCapabilities = this.makeRequest<void, payerCapabilitiesResponse>({
     method: "GET",
     path: "/vendorResources/payerCapabilities",
   });

@@ -391,11 +391,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
    */
   const checkPayerCapabilities = async () => {
     try {
-      const response = await adminClient.tideAdmin.payerCapabilities();
-      const caps = (await (response as unknown as Response).json()) as {
-        changeCapacity?: boolean;
-        packagePlansConfigured?: boolean;
-      };
+      // makeRequest already parses the body, so this is the object itself —
+      // calling .json() on it throws, which the catch below turned into
+      // "capabilities unavailable" and silently hid the control.
+      const caps = await adminClient.tideAdmin.payerCapabilities();
       setCanChangeCapacity(
         caps.changeCapacity === true && caps.packagePlansConfigured === true,
       );
