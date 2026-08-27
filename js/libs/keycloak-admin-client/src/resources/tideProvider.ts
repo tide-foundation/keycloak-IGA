@@ -329,6 +329,20 @@ export class TideProvider extends Resource<{ realm?: string }> {
 
   /* # TIDECLOAK IMPLEMENTATION */
   /**
+   * Returns a hosted Stripe URL that saves a card against this realm's
+   * customer. Offered only after a capacity is chosen and the payer reports no
+   * payment method — never as a gate on seeing prices.
+   */
+  public addPaymentMethod = this.makeRequest<
+    FormData,
+    stripeCheckoutSessionResponse
+  >({
+    method: "POST",
+    path: "/vendorResources/addPaymentMethod",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
    * What the payer node supports. 503 when it cannot be determined — an older
    * payer has no such route — and the console then hides capacity changes
    * rather than offering one the payer would silently mishandle.

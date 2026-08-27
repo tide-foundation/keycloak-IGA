@@ -1,5 +1,6 @@
 import { useWatch, useForm } from "react-hook-form";
 import {
+  Alert,
   AlertVariant,
   FormGroup,
   ClipboardCopy,
@@ -56,6 +57,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const [canChangeCapacity, setCanChangeCapacity] = useState(false);
   const [isChangingCapacity, setIsChangingCapacity] = useState(false);
   const [capacityUsers, setCapacityUsers] = useState<number | null>(null);
+  // Set when the payer refuses for want of a card (402) — the free-tier case.
+  const [needsCard, setNeedsCard] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
 
   const [key, setKey] = useState(0);
@@ -421,9 +424,29 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       );
       await refresh();
     } catch (error) {
-      addError("Could not change capacity", error);
+      // 402 means the capacity is fine but there is no card on file. Offer to
+      // collect one rather than reporting a failure the operator cannot act on.
+      const status = (error as { response?: { status?: number } }).response
+        ?.status;
+      if (status === 402) {
+        setNeedsCard(true);
+      } else {
+        addError("Could not change capacity", error);
+      }
     } finally {
       setIsChangingCapacity(false);
+    }
+  };
+
+  /** Send the operator to Stripe's hosted card page, then back here. */
+  const handleAddPaymentMethod = async () => {
+    try {
+      const form = new FormData();
+      form.append("returnUrl", window.location.href);
+      const response = await adminClient.tideAdmin.addPaymentMethod(form);
+      window.location.href = response.redirectUrl;
+    } catch (error) {
+      addError("Could not start payment method collection", error);
     }
   };
 
@@ -681,6 +704,27 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                         : t("Change capacity")}
                     </Button>
                   </div>
+                  {needsCard ? (
+                    <Alert
+                      variant="warning"
+                      isInline
+                      className="pf-v5-u-mt-md"
+                      title={t("A payment method is needed for paid capacity.")}
+                    >
+                      <p>
+                        {t(
+                          "You have not needed one on the free plan. Add a card and this change is applied.",
+                        )}
+                      </p>
+                      <Button
+                        variant="link"
+                        isInline
+                        onClick={async () => await handleAddPaymentMethod()}
+                      >
+                        {t("Add a payment method")}
+                      </Button>
+                    </Alert>
+                  ) : null}
                 </FormGroup>
               ) : null}
               <FormGroup fieldId="license-subscription-spacer"></FormGroup>
