@@ -34,7 +34,7 @@ import {
   TextContent,
   Title,
 } from "@patternfly/react-core";
-import { FC, useEffect, useState } from "react";
+import { FC, ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { capacityRange, snapCapacity, type CapacityRange } from "./capacity";
 import {
@@ -62,6 +62,14 @@ export type EnterprisePricingProps = {
   onChooseFree?: (plan: PricingTier) => void;
   ctaLabel?: string;
   isCtaDisabled?: boolean;
+  /**
+   * Rendered INSTEAD of the card when the server build has no pricing
+   * endpoints. The console and the tidecloak-key-provider jar ship as separate
+   * artifacts, so a console that knows about pricing can be pointed at an older
+   * Keycloak. Pass the pre-pricing affordance here — the operator keeps a
+   * working way to request a license rather than being shown a failure.
+   */
+  unsupportedFallback?: ReactNode;
 };
 
 export const EnterprisePricing: FC<EnterprisePricingProps> = ({
@@ -71,6 +79,7 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   onChooseFree,
   ctaLabel,
   isCtaDisabled = false,
+  unsupportedFallback = null,
 }) => {
   const { t } = useTranslation();
   const packages = usePricingTiers(serverBaseUrl, realm);
@@ -95,6 +104,12 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   // A failure at either step means we cannot state a price. Both collapse to
   // the same message — never to a fallback number.
   const isError = packages.isError || quoting.isError;
+
+  // Older key-provider jar: no pricing endpoints at all. Hand back the
+  // pre-pricing affordance rather than an error the operator cannot act on.
+  if (packages.isUnsupported) {
+    return unsupportedFallback;
+  }
 
   return (
     <Card isPlain isCompact>

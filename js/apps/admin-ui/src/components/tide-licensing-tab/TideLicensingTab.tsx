@@ -617,6 +617,22 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                   realm={realm}
                   onChoose={handleChoosePlan}
                   isCtaDisabled={isLoading}
+                  // This console and the tidecloak-key-provider jar ship as
+                  // separate artifacts, so it can be pointed at a Keycloak
+                  // whose jar has no pricing endpoints. There, the tab falls
+                  // back to exactly the button it had before pricing existed:
+                  // an operator on an older image is never left without a way
+                  // to request a license.
+                  unsupportedFallback={
+                    <Button
+                      variant="primary"
+                      onClick={async () =>
+                        await handleCheckout(LicensingTiers.Free)
+                      }
+                    >
+                      {t("Request License")}
+                    </Button>
+                  }
                 />
               </FormGroup>
             </>

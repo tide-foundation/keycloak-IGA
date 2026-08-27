@@ -23,6 +23,26 @@
  * cheapest) exist only once, on the server. Nothing here decides a price.
  */
 
+/**
+ * Thrown when the server has no pricing endpoints at all.
+ *
+ * VERSION SKEW. The admin console and the tidecloak-key-provider jar are
+ * SEPARATE artifacts on separate upgrade schedules, so a console that knows
+ * about pricing can be pointed at a Keycloak whose jar predates it. That server
+ * answers 404, which means "this build has no pricing", NOT "pricing is broken".
+ *
+ * The difference is what the operator sees. Treating 404 as a failure would
+ * replace a working licensing tab with "Pricing is temporarily unavailable" and
+ * strand them with no way to request a license at all. Callers catch this and
+ * fall back to the pre-pricing affordance instead.
+ */
+export class PricingUnsupportedError extends Error {
+  constructor() {
+    super("This server build has no pricing endpoints.");
+    this.name = "PricingUnsupportedError";
+  }
+}
+
 /** One Stripe Price, projected server-side. A package of user capacity. */
 export type PricingTier = {
   priceId: string;
@@ -75,6 +95,11 @@ function pricingBase(serverBaseUrl: string, realm: string): string {
  * a Stripe outage in the console log.
  */
 async function throwForStatus(res: Response): Promise<never> {
+  // 404 is an OLD SERVER, not a broken one — the resource does not exist in
+  // that build. Distinguished here so callers can degrade rather than alarm.
+  if (res.status === 404) {
+    throw new PricingUnsupportedError();
+  }
   const raw = await res.text().catch(() => "");
   let message: string | undefined;
   try {

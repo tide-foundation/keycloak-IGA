@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import {
+  PricingUnsupportedError,
   fetchFreePlan,
   fetchPricingQuote,
   fetchPricingTiers,
@@ -32,6 +33,12 @@ export type PricingTiersState = {
   tiers: PricingTier[] | undefined;
   isLoading: boolean;
   isError: boolean;
+  /**
+   * The server build has no pricing endpoints (see PricingUnsupportedError).
+   * Distinct from isError: this is an old server, not a broken one, and the
+   * caller should fall back to the pre-pricing UI rather than show a failure.
+   */
+  isUnsupported: boolean;
 };
 
 /** The active Stripe packages. Refetched only on realm/server change. */
@@ -42,11 +49,13 @@ export function usePricingTiers(
   const [tiers, setTiers] = useState<PricingTier[] | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
+  const [isUnsupported, setIsUnsupported] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     setIsLoading(true);
     setIsError(false);
+    setIsUnsupported(false);
 
     fetchPricingTiers(serverBaseUrl, realm, controller.signal)
       .then((result) => {
@@ -56,6 +65,13 @@ export function usePricingTiers(
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
+        if (error instanceof PricingUnsupportedError) {
+          // An older key-provider jar. Not a failure — the caller shows the
+          // pre-pricing affordance instead.
+          setIsUnsupported(true);
+          setIsLoading(false);
+          return;
+        }
         // Logged, not shown: the operator gets the generic unavailable copy,
         // the diagnostic stays in the console.
         console.error("Failed to load Tide pricing", error);
@@ -66,7 +82,7 @@ export function usePricingTiers(
     return () => controller.abort();
   }, [serverBaseUrl, realm]);
 
-  return { tiers, isLoading, isError };
+  return { tiers, isLoading, isError, isUnsupported };
 }
 
 export type PricingQuoteState = {
