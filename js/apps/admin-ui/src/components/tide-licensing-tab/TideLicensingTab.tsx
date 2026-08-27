@@ -7,9 +7,10 @@ import {
   Button,
   Text,
   Spinner,
+  TextInput,
 } from "@patternfly/react-core";
 import { HelpItem, ScrollForm } from "@keycloak/keycloak-ui-shared";
-import { useState, FC, useEffect } from "react";
+import { useState, FC, FormEvent, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FormAccess } from "../form/FormAccess.js";
 import { useRealm } from "../../context/realm-context/RealmContext.js";
@@ -48,6 +49,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const [isInitialCheckout, setIsInitialCheckout] = useState<boolean>(false);
 
   const [hasTideIdpPresent, setHasTideIdpPresent] = useState(false);
+  // Whether the payer node supports package-based capacity changes. False for
+  // an older payer, which has no Capabilities route — the control is then
+  // HIDDEN rather than shown and allowed to fail quietly, because that payer
+  // ignores unknown fields and would bill a single price for a bundle.
+  const [canChangeCapacity, setCanChangeCapacity] = useState(false);
+  const [isChangingCapacity, setIsChangingCapacity] = useState(false);
+  const [capacityUsers, setCapacityUsers] = useState<number | null>(null);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
 
   const [key, setKey] = useState(0);
@@ -373,6 +381,52 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     URL.revokeObjectURL(link.href);
   };
 
+  /**
+   * Ask the payer what it supports, once this realm actually has a
+   * subscription to change. Any failure means "not available" rather than an
+   * error the operator can act on.
+   */
+  const checkPayerCapabilities = async () => {
+    try {
+      const response = await adminClient.tideAdmin.payerCapabilities();
+      const caps = (await (response as unknown as Response).json()) as {
+        changeCapacity?: boolean;
+        packagePlansConfigured?: boolean;
+      };
+      setCanChangeCapacity(
+        caps.changeCapacity === true && caps.packagePlansConfigured === true,
+      );
+    } catch {
+      setCanChangeCapacity(false);
+    }
+  };
+
+  /**
+   * Buy more (or fewer) units. Sends the USER COUNT; the server quotes it and
+   * sends the packages it resolved, prorated against the existing billing
+   * anchor. Success means ACCEPTED — capacity lands when the invoice is paid.
+   */
+  const handleChangeCapacity = async () => {
+    if (capacityUsers === null || capacityUsers <= 0) return;
+    try {
+      setIsChangingCapacity(true);
+      const form = new FormData();
+      form.append("users", String(capacityUsers));
+      await adminClient.tideAdmin.changeCapacity(form);
+      addAlert(
+        t(
+          "Capacity change submitted. It applies once the prorated invoice is paid.",
+        ),
+        AlertVariant.success,
+      );
+      await refresh();
+    } catch (error) {
+      addError("Could not change capacity", error);
+    } finally {
+      setIsChangingCapacity(false);
+    }
+  };
+
   const handleManageSubscription = async () => {
     const redirectUrl = window.location.href.endsWith("/")
       ? window.location.href.slice(0, -1)
@@ -440,6 +494,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   useEffect(() => {
     void getScheduledTasks();
   }, [realm, key]);
+
+  useEffect(() => {
+    if (!hasValue(watchConfigVVKId)) return;
+    void checkPayerCapabilities();
+  }, [watchConfigVVKId, key]);
 
   useEffect(() => {
     void getLicenseHistory();
@@ -576,6 +635,55 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                   {t("Manage")}
                 </Button>
               </FormGroup>
+
+              {/* Buy more units. Only offered when the payer node reports that
+                  it supports package-based capacity changes: an older payer
+                  ignores unknown fields, so it would answer 200 while billing a
+                  single price for what was presented as a bundle. Hidden rather
+                  than shown-and-failing. */}
+              {canChangeCapacity ? (
+                <FormGroup
+                  label={t("Capacity")}
+                  labelIcon={
+                    <HelpItem
+                      helpText={
+                        "Change how many users this license covers. You are charged the difference for the rest of this billing period; your renewal date does not change."
+                      }
+                      fieldLabelId={"LicenseCapacity"}
+                    />
+                  }
+                  fieldId="license-capacity"
+                >
+                  <div className="pf-v5-u-display-flex pf-v5-u-align-items-center pf-v5-u-gap-md">
+                    <TextInput
+                      id="license-capacity-users"
+                      type="number"
+                      aria-label={t("Number of users")}
+                      value={capacityUsers ?? licenseMaxUserAcc}
+                      onChange={(
+                        _event: FormEvent<HTMLInputElement>,
+                        value: string,
+                      ) => setCapacityUsers(Number.parseInt(value, 10) || null)}
+                      style={{ maxWidth: "10rem" }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      isDisabled={
+                        isChangingCapacity ||
+                        capacityUsers === null ||
+                        capacityUsers <= 0
+                      }
+                      onClick={async () => await handleChangeCapacity()}
+                    >
+                      {isChangingCapacity
+                        ? t("Submitting…")
+                        : t("Change capacity")}
+                    </Button>
+                  </div>
+                </FormGroup>
+              ) : null}
+              <FormGroup fieldId="license-subscription-spacer"></FormGroup>
               <FormGroup
                 label={t("Secure Configuration")}
                 fieldId="secure-configuration"
