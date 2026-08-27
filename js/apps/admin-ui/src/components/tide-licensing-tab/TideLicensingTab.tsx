@@ -724,6 +724,12 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                   serverBaseUrl={environment.serverBaseUrl}
                   realm={realm}
                   onChoose={handleChoosePlan}
+                  // The free plan is the existing free-tier request. Without
+                  // this the $0 call to action was a no-op: the card calls
+                  // onChooseFree, which nothing supplied.
+                  onChooseFree={async () =>
+                    await handleCheckout(LicensingTiers.Free)
+                  }
                   isCtaDisabled={isLoading}
                   // This console and the tidecloak-key-provider jar ship as
                   // separate artifacts, so it can be pointed at a Keycloak

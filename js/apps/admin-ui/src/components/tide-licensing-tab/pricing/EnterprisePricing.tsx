@@ -20,6 +20,7 @@
 import {
   Alert,
   Button,
+  Divider,
   Card,
   CardBody,
   CardTitle,
@@ -300,6 +301,7 @@ const CapacityChooser: FC<ChooserProps> = ({
 
       {isFree ? (
         <>
+          <Divider className="pf-v5-u-my-md" />
           <DescriptionList isHorizontal isCompact>
             <DescriptionListGroup>
               <DescriptionListTerm>{t("Capacity")}</DescriptionListTerm>
@@ -344,6 +346,7 @@ const CapacityChooser: FC<ChooserProps> = ({
         </>
       ) : quote ? (
         <>
+          <Divider className="pf-v5-u-my-md" />
           <DescriptionList isHorizontal isCompact>
             <DescriptionListGroup>
               <DescriptionListTerm>{t("Capacity")}</DescriptionListTerm>
@@ -394,37 +397,40 @@ const CapacityChooser: FC<ChooserProps> = ({
             </TextContent>
           ) : null}
 
+          <Divider className="pf-v5-u-my-md" />
+
           {/* A customer will ask what makes up the total, so a mix is itemised.
               When the answer is a single package, a one-row list restating the
               headline is noise — say it in a line instead. */}
           {quote.lineItems.length === 1 ? (
             <TextContent data-testid="pricing-bundle">
               <Text component="small">
-                {describeSingle(quote.lineItems[0]!)} &middot;{" "}
+                {describeSingle(quote.lineItems[0]!)}
+              </Text>
+              <Text component="small" className="pf-v5-u-color-200">
                 {quote.lineItems[0]!.priceId}
               </Text>
             </TextContent>
           ) : (
             <div data-testid="pricing-bundle">
-              <TextContent>
-                <Text component="h4">{t("Your packages")}</Text>
-              </TextContent>
-              <DescriptionList isHorizontal isCompact>
-                {quote.lineItems.map((line) => (
-                  <DescriptionListGroup key={line.priceId}>
-                    <DescriptionListTerm>
-                      {line.packages} &times;{" "}
-                      {t("{{size}}-user package", {
-                        size: formatCount(line.userLimit),
-                      })}
-                    </DescriptionListTerm>
-                    <DescriptionListDescription>
-                      {formatMoney(line.subtotal, quote.currency)}{" "}
-                      <Text component="small">{line.priceId}</Text>
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                ))}
-              </DescriptionList>
+              <Title headingLevel="h4" size="md" className="pf-v5-u-mb-sm">
+                {t("Your packages")}
+              </Title>
+              {quote.lineItems.map((line) => (
+                <PackageLine
+                  key={line.priceId}
+                  line={line}
+                  currency={quote.currency}
+                />
+              ))}
+              <Divider className="pf-v5-u-my-sm" />
+              <div className="pf-v5-u-display-flex pf-v5-u-justify-content-space-between pf-v5-u-font-weight-bold">
+                <span>{t("Total")}</span>
+                <span>
+                  {formatMoney(quote.totalAmount, quote.currency)}{" "}
+                  {formatInterval(quote.interval)}
+                </span>
+              </div>
             </div>
           )}
 
@@ -440,6 +446,37 @@ const CapacityChooser: FC<ChooserProps> = ({
       ) : (
         <Skeleton height="12rem" screenreaderText={t("Loading pricing")} />
       )}
+    </div>
+  );
+};
+
+/**
+ * One package line: what it is and what it costs, with the Stripe price id
+ * demoted to a small muted line underneath.
+ *
+ * The id has to stay — it is the handle an operator quotes to support, and the
+ * value the eventual Checkout call uses — but on the same line as the amount it
+ * was the widest thing on the card and read as the important part.
+ */
+const PackageLine: FC<{ line: QuoteLineItem; currency: string }> = ({
+  line,
+  currency,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div className="pf-v5-u-display-flex pf-v5-u-justify-content-space-between pf-v5-u-align-items-flex-start pf-v5-u-mb-sm">
+      <div>
+        <div>
+          {line.packages} &times;{" "}
+          {t("{{size}}-user package", { size: formatCount(line.userLimit) })}
+        </div>
+        <small className="pf-v5-u-color-200 pf-v5-u-font-size-xs">
+          {line.priceId}
+        </small>
+      </div>
+      <div className="pf-v5-u-text-nowrap pf-v5-u-ml-md">
+        {formatMoney(line.subtotal, currency)}
+      </div>
     </div>
   );
 };

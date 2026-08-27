@@ -69,8 +69,10 @@ export function formatMoney(minorUnits: number, currency: string): string {
 
 /**
  * Effective price per user: `formatPerUser(110000, 2500, "usd")` -> `"$0.44"`.
- * Allows two digits more precision than the currency normally carries, because
- * per-user rates are routinely sub-minor-unit ($0.375, not $0.38).
+ * Allows one digit more precision than the currency normally carries, because
+ * per-user rates are routinely sub-minor-unit ($0.375, not $0.38). One extra
+ * digit, not two: $0.3964 is more precision than anyone acts on and made the
+ * figure harder to read at a glance.
  */
 export function formatPerUser(
   minorUnits: number,
@@ -85,7 +87,7 @@ export function formatPerUser(
       style: "currency",
       currency: currency.toUpperCase(),
       minimumFractionDigits: digits,
-      maximumFractionDigits: digits + 2,
+      maximumFractionDigits: digits + 1,
     }).format(value);
   } catch {
     return `${value} ${currency.toUpperCase()}`;
