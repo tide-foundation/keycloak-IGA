@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import {
+  fetchFreePlan,
   fetchPricingQuote,
   fetchPricingTiers,
   type PricingQuote,
@@ -114,4 +115,33 @@ export function usePricingQuote(
   }, [serverBaseUrl, realm, users]);
 
   return { quote, isQuoting, isError };
+}
+
+/**
+ * The free plan, or null when none is on offer.
+ *
+ * Standalone plan, never a discount on paid capacity. Failures resolve to null
+ * (see `fetchFreePlan`), so a missing free plan shows no free option rather
+ * than pushing the card into its error state.
+ */
+export function useFreePlan(
+  serverBaseUrl: string,
+  realm: string,
+): PricingTier | null {
+  const [plan, setPlan] = useState<PricingTier | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    // fetchFreePlan never rejects (every failure path resolves to null), so
+    // there is nothing to catch — void marks the promise as deliberately
+    // unawaited.
+    void fetchFreePlan(serverBaseUrl, realm, controller.signal).then(
+      (result) => {
+        if (!controller.signal.aborted) setPlan(result);
+      },
+    );
+    return () => controller.abort();
+  }, [serverBaseUrl, realm]);
+
+  return plan;
 }

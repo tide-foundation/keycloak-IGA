@@ -137,6 +137,39 @@ export async function fetchPricingTiers(
 }
 
 /**
+ * The free plan, or null when none is on offer.
+ *
+ * A STANDALONE plan — its own Stripe Product, its own subscription, a fixed
+ * capacity per month at no charge. It is NOT an allowance deducted from a paid
+ * quote: buying 500 paid users gets you 500, not 600. That is why it has its
+ * own endpoint and never appears inside a quote's line items.
+ *
+ * Every failure path returns null rather than throwing: the server answers 204
+ * when no free plan is configured, and the paid packages are a complete offer
+ * on their own, so a missing free plan must not blank the pricing card.
+ */
+export async function fetchFreePlan(
+  serverBaseUrl: string,
+  realm: string,
+  signal?: AbortSignal,
+): Promise<PricingTier | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${pricingBase(serverBaseUrl, realm)}/free`, { signal });
+  } catch {
+    return null;
+  }
+  if (res.status === 204 || !res.ok) return null;
+
+  try {
+    const raw: unknown = await res.json();
+    return isTier(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Ask the SERVER for the cheapest bundle of packages covering `users`.
  *
  * The bundle is never assembled here. Beyond the security argument (a

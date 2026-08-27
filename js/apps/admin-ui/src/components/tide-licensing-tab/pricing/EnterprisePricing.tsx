@@ -44,9 +44,10 @@ import {
 } from "./format";
 import type { PricingQuote, PricingTier, QuoteLineItem } from "./pricingApi";
 import {
+  useDebouncedValue,
+  useFreePlan,
   usePricingQuote,
   usePricingTiers,
-  useDebouncedValue,
 } from "./usePricing";
 
 export type EnterprisePricingProps = {
@@ -56,6 +57,8 @@ export type EnterprisePricingProps = {
   realm: string;
   /** Invoked with the server's quote when the operator commits. */
   onChoose: (quote: PricingQuote) => void;
+  /** Invoked when the operator picks the FREE plan (its own subscription). */
+  onChooseFree?: (plan: PricingTier) => void;
   ctaLabel?: string;
   isCtaDisabled?: boolean;
 };
@@ -64,11 +67,13 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   serverBaseUrl,
   realm,
   onChoose,
+  onChooseFree,
   ctaLabel,
   isCtaDisabled = false,
 }) => {
   const { t } = useTranslation();
   const packages = usePricingTiers(serverBaseUrl, realm);
+  const freePlan = useFreePlan(serverBaseUrl, realm);
   const [users, setUsers] = useState<number | null>(null);
 
   const range = packages.tiers ? capacityRange(packages.tiers) : null;
@@ -89,56 +94,95 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   const isError = packages.isError || quoting.isError;
 
   return (
-    <Card isPlain isCompact>
-      <CardTitle>
-        <Title headingLevel="h2" size="xl">
-          {t("Enterprise")}
-        </Title>
-        <TextContent>
-          <Text component="small">
-            {t(
-              "Capacity is sold in packages that combine. Tell us how many users you need and we work out the cheapest mix.",
-            )}
-          </Text>
-        </TextContent>
-      </CardTitle>
-      <CardBody>
-        {packages.isLoading ? (
-          <PricingSkeleton />
-        ) : isError ? (
-          <Alert
-            variant="danger"
-            isInline
-            title={t("Pricing is temporarily unavailable.")}
-            data-testid="pricing-error"
-          >
-            {t("Please try again shortly.")}
-          </Alert>
-        ) : !range ? (
-          <Alert
-            variant="info"
-            isInline
-            title={t("No plans are available right now.")}
-            data-testid="pricing-empty"
-          >
-            {t(
-              "No active Stripe price on the configured Enterprise product carries a valid user_limit.",
-            )}
-          </Alert>
-        ) : (
-          <CapacityChooser
-            range={range}
-            users={users ?? range.min}
-            onUsersChange={setUsers}
-            quote={quoting.quote}
-            isQuoting={quoting.isQuoting}
-            onChoose={onChoose}
-            ctaLabel={ctaLabel ?? t("Request License")}
-            isCtaDisabled={isCtaDisabled}
-          />
-        )}
-      </CardBody>
-    </Card>
+    <>
+      {/* The free plan is a STANDALONE offer: its own Stripe Product, its own
+          subscription, a fixed capacity per month at no charge. It is NOT an
+          allowance deducted from paid capacity — buying 500 paid users gets you
+          500, not 600 — so it renders as a separate choice and never reduces
+          the paid total below. */}
+      {freePlan ? (
+        <Card isPlain isCompact data-testid="free-plan">
+          <CardTitle>
+            <Title headingLevel="h2" size="lg">
+              {t("Free")}
+            </Title>
+            <TextContent>
+              <Text component="small">
+                {t(
+                  "Up to {{limit}} users at no charge. One free plan per subscription.",
+                  { limit: formatCount(freePlan.userLimit) },
+                )}
+              </Text>
+            </TextContent>
+          </CardTitle>
+          <CardBody>
+            <Title headingLevel="h3" size="2xl" data-testid="free-plan-amount">
+              {formatMoney(freePlan.unitAmount, freePlan.currency)}{" "}
+              <Text component="small">{formatInterval(freePlan.interval)}</Text>
+            </Title>
+            <Button
+              variant="secondary"
+              className="pf-v5-u-mt-md"
+              onClick={() => onChooseFree?.(freePlan)}
+              data-testid="free-plan-choose"
+            >
+              {t("Start on the free plan")}
+            </Button>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      <Card isPlain isCompact>
+        <CardTitle>
+          <Title headingLevel="h2" size="xl">
+            {t("Enterprise")}
+          </Title>
+          <TextContent>
+            <Text component="small">
+              {t(
+                "Capacity is sold in packages that combine. Tell us how many users you need and we work out the cheapest mix.",
+              )}
+            </Text>
+          </TextContent>
+        </CardTitle>
+        <CardBody>
+          {packages.isLoading ? (
+            <PricingSkeleton />
+          ) : isError ? (
+            <Alert
+              variant="danger"
+              isInline
+              title={t("Pricing is temporarily unavailable.")}
+              data-testid="pricing-error"
+            >
+              {t("Please try again shortly.")}
+            </Alert>
+          ) : !range ? (
+            <Alert
+              variant="info"
+              isInline
+              title={t("No plans are available right now.")}
+              data-testid="pricing-empty"
+            >
+              {t(
+                "No active Stripe price on the configured product carries a valid user_limit.",
+              )}
+            </Alert>
+          ) : (
+            <CapacityChooser
+              range={range}
+              users={users ?? range.min}
+              onUsersChange={setUsers}
+              quote={quoting.quote}
+              isQuoting={quoting.isQuoting}
+              onChoose={onChoose}
+              ctaLabel={ctaLabel ?? t("Request License")}
+              isCtaDisabled={isCtaDisabled}
+            />
+          )}
+        </CardBody>
+      </Card>
+    </>
   );
 };
 
