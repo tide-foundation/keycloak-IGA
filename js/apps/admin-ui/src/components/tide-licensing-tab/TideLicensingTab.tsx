@@ -8,10 +8,9 @@ import {
   Button,
   Text,
   Spinner,
-  TextInput,
 } from "@patternfly/react-core";
 import { HelpItem, ScrollForm } from "@keycloak/keycloak-ui-shared";
-import { useState, FC, FormEvent, useEffect } from "react";
+import { useState, FC, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FormAccess } from "../form/FormAccess.js";
 import { useRealm } from "../../context/realm-context/RealmContext.js";
@@ -23,6 +22,7 @@ import { License, TideLicenseHistory } from "./TideLicenseHistory";
 import { ScheduledTaskInfo, TideScheduledTasks } from "./TideScheduledTasks.js";
 import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil.js";
 import { EnterprisePricing } from "./pricing/EnterprisePricing";
+import { ChangeCapacityModal } from "./pricing/ChangeCapacityModal";
 import type { PricingQuote } from "./pricing/pricingApi";
 import { environment } from "../../environment.js";
 
@@ -56,7 +56,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   // ignores unknown fields and would bill a single price for a bundle.
   const [canChangeCapacity, setCanChangeCapacity] = useState(false);
   const [isChangingCapacity, setIsChangingCapacity] = useState(false);
-  const [capacityUsers, setCapacityUsers] = useState<number | null>(null);
+  const [isCapacityOpen, setIsCapacityOpen] = useState(false);
   // Set when the payer refuses for want of a card (402) — the free-tier case.
   const [needsCard, setNeedsCard] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
@@ -408,13 +408,20 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
    * sends the packages it resolved, prorated against the existing billing
    * anchor. Success means ACCEPTED — capacity lands when the invoice is paid.
    */
-  const handleChangeCapacity = async () => {
-    if (capacityUsers === null || capacityUsers <= 0) return;
+  /**
+   * Apply the capacity the operator chose in the modal.
+   *
+   * Sends the requested USER COUNT, not the bundle: the server re-quotes it and
+   * sends the packages it resolved, so the browser never proposes a
+   * combination, let alone an amount.
+   */
+  const handleChangeCapacity = async (quote: PricingQuote) => {
     try {
       setIsChangingCapacity(true);
       const form = new FormData();
-      form.append("users", String(capacityUsers));
+      form.append("users", String(quote.requestedUsers));
       await adminClient.tideAdmin.changeCapacity(form);
+      setIsCapacityOpen(false);
       addAlert(
         t(
           "Capacity change submitted. It applies once the prorated invoice is paid.",
@@ -428,6 +435,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       const status = (error as { response?: { status?: number } }).response
         ?.status;
       if (status === 402) {
+        setIsCapacityOpen(false);
         setNeedsCard(true);
       } else {
         addError("Could not change capacity", error);
@@ -676,33 +684,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                   }
                   fieldId="license-capacity"
                 >
-                  <div className="pf-v5-u-display-flex pf-v5-u-align-items-center pf-v5-u-gap-md">
-                    <TextInput
-                      id="license-capacity-users"
-                      type="number"
-                      aria-label={t("Number of users")}
-                      value={capacityUsers ?? licenseMaxUserAcc}
-                      onChange={(
-                        _event: FormEvent<HTMLInputElement>,
-                        value: string,
-                      ) => setCapacityUsers(Number.parseInt(value, 10) || null)}
-                      style={{ maxWidth: "10rem" }}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      isDisabled={
-                        isChangingCapacity ||
-                        capacityUsers === null ||
-                        capacityUsers <= 0
-                      }
-                      onClick={async () => await handleChangeCapacity()}
-                    >
-                      {isChangingCapacity
-                        ? t("Submitting…")
-                        : t("Change capacity")}
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setIsCapacityOpen(true)}
+                  >
+                    {t("Change capacity")}
+                  </Button>
                   {needsCard ? (
                     <Alert
                       variant="warning"
@@ -726,7 +714,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                   ) : null}
                 </FormGroup>
               ) : null}
-              <FormGroup fieldId="license-subscription-spacer"></FormGroup>
               <FormGroup
                 label={t("Secure Configuration")}
                 fieldId="secure-configuration"
@@ -811,6 +798,15 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
 
   return (
     <FormAccess role="manage-identity-providers" isHorizontal>
+      <ChangeCapacityModal
+        isOpen={isCapacityOpen}
+        onClose={() => setIsCapacityOpen(false)}
+        serverBaseUrl={environment.serverBaseUrl}
+        realm={realm}
+        currentUsers={licenseMaxUserAcc}
+        onConfirm={handleChangeCapacity}
+        isSubmitting={isChangingCapacity}
+      />
       <ScrollForm
         label={t("jumpToSection")}
         className="pf-v5-u-px-lg"
