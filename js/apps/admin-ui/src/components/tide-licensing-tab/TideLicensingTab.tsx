@@ -343,7 +343,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     setKey(key + 1);
   };
 
-  const handleCheckout = async (licensingTier: string) => {
+  /**
+   * @param users how many users the operator asked for. Optional: omitted takes
+   *        the plan's single price. The server quotes this count and resolves
+   *        the packages itself, so the browser never names a price or an
+   *        amount.
+   */
+  const handleCheckout = async (licensingTier: string, users?: number) => {
     try {
       setIsInitialCheckout(true);
       setIsLoading(true);
@@ -354,10 +360,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       const data = new FormData();
       data.append("redirectUrl", redirectUrl);
       data.append("licensingTier", licensingTier);
+      if (users !== undefined) data.append("users", String(users));
 
       const response =
         await adminClient.tideAdmin.createStripeCheckoutSession(data);
-      window.location.href = response.redirectUrl;
+      window.location.href = readRedirectUrl(response);
     } catch (err) {
       await adminClient.tideAdmin.reAddTideKey();
       setIsLoading(false);
@@ -385,19 +392,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
    * proposing its own combination, and it is free — the tier list is cached.
    */
   const handleChoosePlan = async (quote: PricingQuote) => {
-    console.info("[pricing] plan selected", {
-      requestedUsers: quote.requestedUsers,
-      includedUsers: quote.includedUsers,
-      totalAmount: quote.totalAmount,
-      currency: quote.currency,
-      interval: quote.interval,
-      lineItems: quote.lineItems.map((line) => ({
-        priceId: line.priceId,
-        packages: line.packages,
-        stripeQuantity: line.stripeQuantity,
-      })),
-    });
-    await handleCheckout(LicensingTiers.Free);
+    // Sends the COUNT, not the bundle. This previously logged the quote and
+    // then requested the free tier regardless, so choosing any paid capacity
+    // silently bought the free plan.
+    await handleCheckout(LicensingTiers.Free, quote.requestedUsers);
   };
 
   const generateJWK = async () => {
