@@ -233,7 +233,12 @@ const CapacityChooser: FC<ChooserProps> = ({
   const sliderMax = hasMultiplePackageSizes
     ? range.max
     : range.min * MULTI_BUY_STOPS;
-  const sliderStep = hasMultiplePackageSizes ? range.step : range.min;
+  // Every whole user is selectable, not just package boundaries. Stepping in
+  // package sizes meant 150 could not be expressed at all: it jumped 100 -> 200,
+  // and the operator was shown a capacity they never asked for. The server
+  // answers any count with the cheapest packages covering it, so 150 quotes one
+  // 100-user package and reads as "add 100 for $50".
+  const sliderStep = 1;
 
   // A count typed above the track's top is still quotable (packages combine);
   // it just pins the thumb at the end.
