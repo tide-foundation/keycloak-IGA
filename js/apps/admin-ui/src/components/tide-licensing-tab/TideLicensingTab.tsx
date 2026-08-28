@@ -1,6 +1,5 @@
 import { useWatch, useForm } from "react-hook-form";
 import {
-  Alert,
   AlertVariant,
   FormGroup,
   ClipboardCopy,
@@ -22,7 +21,7 @@ import { License, TideLicenseHistory } from "./TideLicenseHistory";
 import { ScheduledTaskInfo, TideScheduledTasks } from "./TideScheduledTasks.js";
 import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil.js";
 import { EnterprisePricing } from "./pricing/EnterprisePricing";
-import { ChangeCapacityModal } from "./pricing/ChangeCapacityModal";
+import { ManageSubscriptionModal } from "./pricing/ManageSubscriptionModal";
 import type { PricingQuote } from "./pricing/pricingApi";
 import { environment } from "../../environment.js";
 
@@ -58,6 +57,12 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const [isChangingCapacity, setIsChangingCapacity] = useState(false);
   const [isCapacityOpen, setIsCapacityOpen] = useState(false);
   // Set when the payer refuses for want of a card (402) — the free-tier case.
+  // Null until asked. Drives whether the capacity change is offered at all,
+  // so the operator is told what is missing BEFORE choosing a plan rather than
+  // being refused after.
+  const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(
+    null,
+  );
   const [needsCard, setNeedsCard] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
 
@@ -398,6 +403,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       setCanChangeCapacity(
         caps.changeCapacity === true && caps.packagePlansConfigured === true,
       );
+      const status = await adminClient.tideAdmin.paymentMethodStatus();
+      setHasPaymentMethod(status.hasPaymentMethod === true);
     } catch {
       setCanChangeCapacity(false);
     }
@@ -658,62 +665,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                 }
                 fieldId="license-subscription"
               >
-                <Button
-                  type="button"
-                  onClick={async () => await handleManageSubscription()}
-                >
+                <Button type="button" onClick={() => setIsCapacityOpen(true)}>
                   {t("Manage")}
                 </Button>
               </FormGroup>
 
-              {/* Buy more units. Only offered when the payer node reports that
-                  it supports package-based capacity changes: an older payer
-                  ignores unknown fields, so it would answer 200 while billing a
-                  single price for what was presented as a bundle. Hidden rather
-                  than shown-and-failing. */}
-              {canChangeCapacity ? (
-                <FormGroup
-                  label={t("Capacity")}
-                  labelIcon={
-                    <HelpItem
-                      helpText={
-                        "Change how many users this license covers. You are charged the difference for the rest of this billing period; your renewal date does not change."
-                      }
-                      fieldLabelId={"LicenseCapacity"}
-                    />
-                  }
-                  fieldId="license-capacity"
-                >
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setIsCapacityOpen(true)}
-                  >
-                    {t("Change capacity")}
-                  </Button>
-                  {needsCard ? (
-                    <Alert
-                      variant="warning"
-                      isInline
-                      className="pf-v5-u-mt-md"
-                      title={t("A payment method is needed for paid capacity.")}
-                    >
-                      <p>
-                        {t(
-                          "You have not needed one on the free plan. Add a card and this change is applied.",
-                        )}
-                      </p>
-                      <Button
-                        variant="link"
-                        isInline
-                        onClick={async () => await handleAddPaymentMethod()}
-                      >
-                        {t("Add a payment method")}
-                      </Button>
-                    </Alert>
-                  ) : null}
-                </FormGroup>
-              ) : null}
               <FormGroup
                 label={t("Secure Configuration")}
                 fieldId="secure-configuration"
@@ -798,14 +754,21 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
 
   return (
     <FormAccess role="manage-identity-providers" isHorizontal>
-      <ChangeCapacityModal
+      <ManageSubscriptionModal
         isOpen={isCapacityOpen}
         onClose={() => setIsCapacityOpen(false)}
         serverBaseUrl={environment.serverBaseUrl}
         realm={realm}
         currentUsers={licenseMaxUserAcc}
-        onConfirm={handleChangeCapacity}
+        usersInUse={currentUsers}
+        expiry={licenseExpiry}
+        onChangeCapacity={handleChangeCapacity}
         isSubmitting={isChangingCapacity}
+        onOpenStripePortal={handleManageSubscription}
+        needsCard={needsCard}
+        hasPaymentMethod={hasPaymentMethod}
+        canChangeCapacity={canChangeCapacity}
+        onAddPaymentMethod={handleAddPaymentMethod}
       />
       <ScrollForm
         label={t("jumpToSection")}

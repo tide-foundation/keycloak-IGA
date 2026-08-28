@@ -10,6 +10,11 @@ interface payerCapabilitiesResponse {
   packagePlansConfigured: boolean;
 }
 
+/** Whether the realm's Stripe customer has a card on file. */
+interface paymentMethodStatusResponse {
+  hasPaymentMethod: boolean;
+}
+
 interface stripeCheckoutSessionResponse {
   message: string;
   activationPackage: string;
@@ -332,6 +337,20 @@ export class TideProvider extends Resource<{ realm?: string }> {
   public changeCapacity = this.makeRequest<FormData, Response>({
     method: "POST",
     path: "/vendorResources/changeCapacity",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Whether a card is on file. Asked before the operator picks a capacity, so
+   * the change can be disabled with an explanation rather than refused after
+   * they have chosen.
+   */
+  public paymentMethodStatus = this.makeRequest<
+    void,
+    paymentMethodStatusResponse
+  >({
+    method: "GET",
+    path: "/vendorResources/paymentMethodStatus",
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
