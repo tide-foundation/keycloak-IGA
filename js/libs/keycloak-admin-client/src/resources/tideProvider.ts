@@ -3,6 +3,18 @@ import { RequiredActionAlias } from "../defs/requiredActionProviderRepresentatio
 import Resource from "./resource.js";
 
 /* TIDECLOAK IMPLEMENTATION */
+/** What the payer node reports it supports. */
+interface payerCapabilitiesResponse {
+  lineItems: boolean;
+  changeCapacity: boolean;
+  packagePlansConfigured: boolean;
+}
+
+/** Whether the realm's Stripe customer has a card on file. */
+interface paymentMethodStatusResponse {
+  hasPaymentMethod: boolean;
+}
+
 interface stripeCheckoutSessionResponse {
   message: string;
   activationPackage: string;
@@ -312,6 +324,58 @@ export class TideProvider extends Resource<{ realm?: string }> {
   >({
     method: "POST",
     path: "/vendorResources/createCustomerPortalSession",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Buy more (or fewer) units on the live subscription.
+   *
+   * Takes a USER COUNT (`users`), never a bundle and never an amount: the
+   * server quotes it against current Stripe prices and sends the packages it
+   * resolved. Prorated against the existing billing anchor.
+   */
+  public changeCapacity = this.makeRequest<FormData, Response>({
+    method: "POST",
+    path: "/vendorResources/changeCapacity",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Whether a card is on file. Asked before the operator picks a capacity, so
+   * the change can be disabled with an explanation rather than refused after
+   * they have chosen.
+   */
+  public paymentMethodStatus = this.makeRequest<
+    void,
+    paymentMethodStatusResponse
+  >({
+    method: "GET",
+    path: "/vendorResources/paymentMethodStatus",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Returns a hosted Stripe URL that saves a card against this realm's
+   * customer. Offered only after a capacity is chosen and the payer reports no
+   * payment method — never as a gate on seeing prices.
+   */
+  public addPaymentMethod = this.makeRequest<
+    FormData,
+    stripeCheckoutSessionResponse
+  >({
+    method: "POST",
+    path: "/vendorResources/addPaymentMethod",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * What the payer node supports. 503 when it cannot be determined — an older
+   * payer has no such route — and the console then hides capacity changes
+   * rather than offering one the payer would silently mishandle.
+   */
+  public payerCapabilities = this.makeRequest<void, payerCapabilitiesResponse>({
+    method: "GET",
+    path: "/vendorResources/payerCapabilities",
   });
 
   /* # TIDECLOAK IMPLEMENTATION */

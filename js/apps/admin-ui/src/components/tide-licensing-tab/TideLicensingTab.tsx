@@ -1,7 +1,4 @@
-import {
-  useWatch,
-  useForm
-} from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import {
   AlertVariant,
   FormGroup,
@@ -9,13 +6,12 @@ import {
   Label,
   Button,
   Text,
-  Spinner
+  Spinner,
 } from "@patternfly/react-core";
 import { HelpItem, ScrollForm } from "@keycloak/keycloak-ui-shared";
 import { useState, FC, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FormAccess } from "../form/FormAccess.js";
-import { KEY_PROVIDER_TYPE } from "../../util.js";
 import { useRealm } from "../../context/realm-context/RealmContext.js";
 import ComponentRepresentation from "@keycloak/keycloak-admin-client/lib/defs/componentRepresentation";
 import { useAdminClient } from "../../admin-client.js";
@@ -24,6 +20,10 @@ import { useAlerts, useFetch } from "@keycloak/keycloak-ui-shared";
 import { License, TideLicenseHistory } from "./TideLicenseHistory";
 import { ScheduledTaskInfo, TideScheduledTasks } from "./TideScheduledTasks.js";
 import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil.js";
+import { EnterprisePricing } from "./pricing/EnterprisePricing";
+import { ManageSubscriptionModal } from "./pricing/ManageSubscriptionModal";
+import type { PricingQuote } from "./pricing/pricingApi";
+import { environment } from "../../environment.js";
 
 // TIDECLOAK IMPLEMENTATION
 type TideLicensingTabProps = {
@@ -31,10 +31,37 @@ type TideLicensingTabProps = {
 };
 
 enum LicensingTiers {
-  Free = 'FreeTier',
-};
+  Free = "FreeTier",
+}
 
-export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback }) => {
+// `refreshCallback` stays on the props type for callers that already pass it,
+// but is intentionally not destructured: nothing in this component has ever
+// called it, and inventing a call site here would be a behaviour change.
+/**
+ * Pull the hosted-page URL out of a vendor redirect response.
+ *
+ * The admin client JSON-parses the body when it can and hands back the raw
+ * string when it cannot, so these endpoints arrive as either `{redirectUrl}`,
+ * `{url}`, or a bare URL depending on the server build. Throwing on an
+ * unrecognised shape keeps the failure in the caller's catch, where it is
+ * reported, instead of navigating the browser to "undefined".
+ */
+function readRedirectUrl(response: unknown): string {
+  if (typeof response === "string") {
+    const text = response.trim().replace(/^"|"$/g, "");
+    if (/^https?:/i.test(text)) return text;
+  } else if (response && typeof response === "object") {
+    const { redirectUrl, url } = response as {
+      redirectUrl?: string;
+      url?: string;
+    };
+    const candidate = redirectUrl ?? url;
+    if (candidate) return candidate;
+  }
+  throw new Error("The server did not return a redirect URL.");
+}
+
+export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
 
@@ -46,8 +73,22 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   const [isInitialCheckout, setIsInitialCheckout] = useState<boolean>(false);
 
   const [hasTideIdpPresent, setHasTideIdpPresent] = useState(false);
+  // Whether the payer node supports package-based capacity changes. False for
+  // an older payer, which has no Capabilities route — the control is then
+  // HIDDEN rather than shown and allowed to fail quietly, because that payer
+  // ignores unknown fields and would bill a single price for a bundle.
+  const [canChangeCapacity, setCanChangeCapacity] = useState(false);
+  const [isChangingCapacity, setIsChangingCapacity] = useState(false);
+  const [isCapacityOpen, setIsCapacityOpen] = useState(false);
+  // Set when the payer refuses for want of a card (402) — the free-tier case.
+  // Null until asked. Drives whether the capacity change is offered at all,
+  // so the operator is told what is missing BEFORE choosing a plan rather than
+  // being refused after.
+  const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(
+    null,
+  );
+  const [needsCard, setNeedsCard] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
-
 
   const [key, setKey] = useState(0);
   const { realm, realmRepresentation } = useRealm();
@@ -55,22 +96,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   const form = useForm<ComponentRepresentation>({
     mode: "onChange",
   });
-  const { getValues, reset, control, setValue } = form;
+  const { reset, control } = form;
   const [currentUsers, setCurrentUsers] = useState<string>("0");
   const [licenseExpiry, setLicenseExpiry] = useState<string>("0");
   const [licenseMaxUserAcc, setLicenseMaxUserAcc] = useState<string>("0");
   const { id } = useParams<{ id: string }>();
-
-  const fieldNames = [
-    "config.gVRK",
-    "config.payerPublic",
-    "config.pendingGVRK",
-    "config.vvkId",
-    "config.customerId",
-    "config.maxUserAcc",
-    "config.initialSessionId",
-    "config.systemHomeOrk"
-  ] as const;
 
   const signSettings = async () => {
     const tideComponent = await findTideComponent(adminClient, realm);
@@ -90,7 +120,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
 
   const checkTideIdpSecurity = async () => {
     try {
-      const idp = await adminClient.identityProviders.findOne({ alias: "tide" });
+      const idp = await adminClient.identityProviders.findOne({
+        alias: "tide",
+      });
       const present = !!idp;
       setHasTideIdpPresent(present);
 
@@ -104,7 +136,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         "settingsSig",
         "loginURLSig",
         "linkTideURLSig",
-        "changeSetURLSig"
+        "changeSetURLSig",
       ];
 
       const missing = sigKeys.filter((k) => isBlank(cfg[k]));
@@ -117,9 +149,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   };
 
   useEffect(() => {
-    checkTideIdpSecurity();
+    void checkTideIdpSecurity();
   }, [realm, key]);
-
 
   // Function to ensure each watched field is a single string
   function getSingleValue(value: string | string[] | undefined): string {
@@ -127,21 +158,30 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     return Array.isArray(value) ? value[0] : value;
   }
 
-  // Use `useWatch` for each field and apply type narrowing
-  const watchedConfig = fieldNames.reduce((acc, fieldName) => {
-    acc[fieldName] = getSingleValue(useWatch({ control, name: fieldName }));
-    return acc;
-  }, {} as Record<typeof fieldNames[number], string>);
-  // Now you can access each config like so:
-  const {
-    ["config.gVRK"]: watchConfigGVRK,
-    ["config.payerPublic"]: watchConfigPayerPub,
-    ["config.pendingGVRK"]: watchConfigPendingGVRK,
-    ["config.vvkId"]: watchConfigVVKId,
-    ["config.customerId"]: watchConfigCustomerId,
-    ["config.maxUserAcc"]: watchConfigMaxUserAcc,
-  } = watchedConfig;
-
+  // One `useWatch` per field, at the top level. This was previously a
+  // `fieldNames.reduce(...)` that called the hook inside the callback: stable
+  // in practice (fieldNames is a fixed const tuple, so the call order never
+  // varied) but a rules-of-hooks violation, and it would break silently the
+  // day fieldNames became conditional. Unrolled, it is the same hook order,
+  // visibly so.
+  const watchConfigGVRK = getSingleValue(
+    useWatch({ control, name: "config.gVRK" }),
+  );
+  const watchConfigPayerPub = getSingleValue(
+    useWatch({ control, name: "config.payerPublic" }),
+  );
+  const watchConfigPendingGVRK = getSingleValue(
+    useWatch({ control, name: "config.pendingGVRK" }),
+  );
+  const watchConfigVVKId = getSingleValue(
+    useWatch({ control, name: "config.vvkId" }),
+  );
+  const watchConfigCustomerId = getSingleValue(
+    useWatch({ control, name: "config.customerId" }),
+  );
+  const watchConfigMaxUserAcc = getSingleValue(
+    useWatch({ control, name: "config.maxUserAcc" }),
+  );
 
   useFetch(
     async () => {
@@ -156,9 +196,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   );
 
   // Helper functions
-  const hasValue = (value: string) => value !== undefined && value !== null && value !== "" ? true : false;
+  const hasValue = (value: string) => value !== "";
 
-  const retry = async (fn: () => Promise<boolean | undefined>, retries = 3, delay = 1000) => {
+  const retry = async (
+    fn: () => Promise<boolean | undefined>,
+    retries = 3,
+    delay = 1000,
+  ) => {
     for (let i = 0; i < retries; i++) {
       try {
         const result = await fn();
@@ -169,20 +213,21 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         console.error(`Attempt ${i + 1} failed. Retrying...`, error);
       }
       // Wait before retrying
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
     throw new Error(`Failed after ${retries} retries`);
   };
 
   const isLicensePending = () => {
     const hash = window.location.hash;
-    const queryIndex = hash.indexOf('?');
+    const queryIndex = hash.indexOf("?");
 
     if (queryIndex !== -1) {
       const queryString = hash.substring(queryIndex + 1); // Remove the part before '?'
       const queryParams = new URLSearchParams(queryString);
 
-      const retryLicenseActivation = queryParams.get("licensePending") === "true";
+      const retryLicenseActivation =
+        queryParams.get("licensePending") === "true";
       // Remove the query parameters from the hash, no longer need it
       window.location.hash = hash.substring(0, queryIndex); // Keep only the part before the '?'
       return retryLicenseActivation;
@@ -197,13 +242,19 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         let signSettingsRequired;
         if (!hasValue(watchConfigVVKId) && isLicensePending()) {
           // Retry every second for a minute
-          signSettingsRequired = await retry(async () => await checkLicenseActive(), 60);
+          signSettingsRequired = await retry(
+            async () => await checkLicenseActive(),
+            60,
+          );
         } else {
-          var isLicenseActive = await checkLicenseActive()
+          const isLicenseActive = await checkLicenseActive();
           signSettingsRequired = isLicenseActive;
         }
         // license renewed
-        if (signSettingsRequired) await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: false });
+        if (signSettingsRequired)
+          await adminClient.tideAdmin.triggerLicenseRenewedEvent({
+            error: false,
+          });
 
         if (signSettingsRequired) {
           await adminClient.tideAdmin.generateInitialKey();
@@ -221,7 +272,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         setIsLoading(false);
         setIsInitialCheckout(true);
         // If we reach here, it means the license is still not active after retries
-        addAlert(t("License could not be activated, please retry."), AlertVariant.danger);
+        addAlert(
+          t("License could not be activated, please retry."),
+          AlertVariant.danger,
+        );
         await adminClient.tideAdmin.reAddTideKey();
         await refresh();
       } finally {
@@ -232,7 +286,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     if (!isPendingResign && hasValue(watchConfigPendingGVRK)) {
       setIsPendingResign(true);
       setIsLoading(true);
-      activateLicense();
+      void activateLicense();
     }
   }, [watchConfigPendingGVRK]);
 
@@ -242,10 +296,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         vvkId: watchConfigVVKId,
         customerId: watchConfigCustomerId,
         gVRK: watchConfigGVRK,
-        payerPub: watchConfigPayerPub
+        payerPub: watchConfigPayerPub,
       },
       null,
-      2
+      2,
     );
     setActiveLicenseDetails(licenseDetails);
   }, [watchConfigGVRK, watchConfigPayerPub, watchConfigVVKId]);
@@ -255,8 +309,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       if (hasValue(activeLicenseDetails)) {
         const response = await adminClient.tideAdmin.getLicenseDetails();
         const date = new Date(response.expiryDate * 1000);
-        const day = date.getUTCDate().toString().padStart(2, '0');
-        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0'); // Months are zero-based
+        const day = date.getUTCDate().toString().padStart(2, "0");
+        const month = (date.getUTCMonth() + 1).toString().padStart(2, "0"); // Months are zero-based
         const year = date.getUTCFullYear().toString().slice(-2);
         const formattedDate = `${day}/${month}/${year}`;
 
@@ -265,8 +319,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         setLicenseExpiry(formattedDate);
       }
     };
-    if (hasValue(watchConfigVVKId) !== undefined && hasValue(watchConfigVVKId)) {
-      fetchLicenseDetails();
+    if (hasValue(watchConfigVVKId)) {
+      void fetchLicenseDetails();
     }
   }, [watchConfigVVKId, watchConfigMaxUserAcc, key, activeLicenseDetails]);
 
@@ -274,11 +328,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     try {
       const provider = await adminClient.components.findOne({ id });
       const isActive = await adminClient.tideAdmin.isPendingLicenseActive();
-      const isInitialSetup = provider?.config?.vvkId !== undefined ? !hasValue(getSingleValue(provider?.config?.vvkId)) : true;
+      const isInitialSetup = !hasValue(getSingleValue(provider?.config?.vvkId));
 
       return isActive && isInitialSetup;
     } catch (error) {
-      console.error('Error checking license:', error);
+      console.error("Error checking license:", error);
       return false; // Return false in case of an error
     }
   };
@@ -289,42 +343,21 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     setKey(key + 1);
   };
 
-  const save = async (savedProvider?: ComponentRepresentation) => {
-    const updatedProvider = await adminClient.components.findOne({ id });
-    if (!updatedProvider) {
-      throw new Error(t("notFound"));
-    }
-
-    const p = savedProvider || getValues();
-    const config: ComponentRepresentation = { ...updatedProvider, ...p }
-    try {
-      await adminClient.components.update(
-        { id },
-        {
-          ...config,
-          providerType: KEY_PROVIDER_TYPE,
-        },
-      );
-      addAlert(t("saveProviderSuccess"), AlertVariant.success);
-      addAlert(t("newLicenseActivatedIdentityProvider"), AlertVariant.success);
-    } catch (error) {
-      addAlert(t("newLicenseErrorIdentityProvider"), AlertVariant.danger);
-    }
-  };
-
   const handleCheckout = async (licensingTier: string) => {
     try {
       setIsInitialCheckout(true);
       setIsLoading(true);
-      const redirectUrl = window.location.href.endsWith('/') ? window.location.href.slice(0, -1) : window.location.href;
+      const redirectUrl = window.location.href.endsWith("/")
+        ? window.location.href.slice(0, -1)
+        : window.location.href;
 
       const data = new FormData();
       data.append("redirectUrl", redirectUrl);
       data.append("licensingTier", licensingTier);
 
-      const response = await adminClient.tideAdmin.createStripeCheckoutSession(data);
+      const response =
+        await adminClient.tideAdmin.createStripeCheckoutSession(data);
       window.location.href = response.redirectUrl;
-
     } catch (err) {
       await adminClient.tideAdmin.reAddTideKey();
       setIsLoading(false);
@@ -334,75 +367,149 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     }
   };
 
-  const saveActivationPackage = async (activationPackage: string) => {
-    const activationPackageJson = JSON.parse(activationPackage);
-    validateActivationPackage(activationPackageJson);
-
-    const sessionId = activationPackageJson.sessionId;
-    const customerId = activationPackageJson.customerId;
-    const payerPub = activationPackageJson.payerPublic;
-    const maxUserAcc = activationPackageJson.maxUserAcc;
-
-    setValue("config.initialSessionId", [sessionId]);
-    setValue("config.customerId", [customerId]);
-    setValue("config.payerPublic", [payerPub]);
-    setValue("config.maxUserAcc", [maxUserAcc]);
-  };
-
-  const generateInitialVrk = async () => {
-    await adminClient.tideAdmin.generateInitialVrk();
-    const updatedProvider = await adminClient.components.findOne({ id });
-    reset(updatedProvider);
-    const pendingGVRK = updatedProvider?.config?.pendingGVRK !== undefined ? getSingleValue(updatedProvider?.config?.pendingGVRK) : undefined;
-
-    if (pendingGVRK !== undefined && hasValue(pendingGVRK)) {
-      return { GVRK: pendingGVRK };
-    } else {
-      return null;
-    }
-  };
-
-  const validateActivationPackage = (activationPackageJson: any) => {
-    if (
-      !activationPackageJson.gVRK ||
-      !activationPackageJson.payerPublic ||
-      !activationPackageJson.licenseId ||
-      !activationPackageJson.maxUserAcc ||
-      !activationPackageJson.sessionId ||
-      !activationPackageJson.customerId
-    ) {
-      throw new Error("Invalid activation package provided");
-    }
-    // Check if these values match the temp license request
-    const gVRK = activationPackageJson.gVRK;
-    const pendingGVRK = getSingleValue(getValues("config.pendingGVRK"));
-
-    if (hasValue(pendingGVRK) && gVRK !== pendingGVRK) {
-      throw new Error("Incorrect activation package provided, this is for the wrong license request");
-    }
-
-    return true;
+  /**
+   * "Request License" from the pricing card. The operator has chosen a capacity
+   * and the SERVER has quoted the cheapest bundle of Stripe packages for it.
+   *
+   * The checkout call below still takes a single `licensingTier` STRING and is
+   * proxied to Stripe through Midgard/ORK, which has no notion of a multi-price
+   * bundle — so the quote cannot be honoured end-to-end yet. Rather than
+   * pretend otherwise, the chosen bundle is recorded (priceIds and the
+   * ready-to-use `stripeQuantity` per package) and the existing checkout is
+   * started unchanged, so nothing about today's flow regresses.
+   *
+   * TO WIRE THE BUNDLE THROUGH: post the requested USER COUNT (not the bundle,
+   * and never an amount) to the server, have it re-quote with
+   * `PricingService.quote`, and build the Checkout Session line items from the
+   * Prices it resolved itself. Re-quoting server-side is what stops a caller
+   * proposing its own combination, and it is free — the tier list is cached.
+   */
+  const handleChoosePlan = async (quote: PricingQuote) => {
+    console.info("[pricing] plan selected", {
+      requestedUsers: quote.requestedUsers,
+      includedUsers: quote.includedUsers,
+      totalAmount: quote.totalAmount,
+      currency: quote.currency,
+      interval: quote.interval,
+      lineItems: quote.lineItems.map((line) => ({
+        priceId: line.priceId,
+        packages: line.packages,
+        stripeQuantity: line.stripeQuantity,
+      })),
+    });
+    await handleCheckout(LicensingTiers.Free);
   };
 
   const generateJWK = async () => {
-    var content = await adminClient.tideAdmin.getTideJwk();
-    var jwk = JSON.stringify(content)
-    const blob = new Blob([jwk], { type: 'text/plain' });
-    const link = document.createElement('a');
+    const content = await adminClient.tideAdmin.getTideJwk();
+    const jwk = JSON.stringify(content);
+    const blob = new Blob([jwk], { type: "text/plain" });
+    const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = 'tide-eddsa.jwk';
+    link.download = "tide-eddsa.jwk";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
-  }
+  };
+
+  /**
+   * Ask the payer what it supports, once this realm actually has a
+   * subscription to change. Any failure means "not available" rather than an
+   * error the operator can act on.
+   */
+  const checkPayerCapabilities = async () => {
+    try {
+      // makeRequest already parses the body, so this is the object itself —
+      // calling .json() on it throws, which the catch below turned into
+      // "capabilities unavailable" and silently hid the control.
+      const caps = await adminClient.tideAdmin.payerCapabilities();
+      setCanChangeCapacity(
+        caps.changeCapacity === true && caps.packagePlansConfigured === true,
+      );
+      const status = await adminClient.tideAdmin.paymentMethodStatus();
+      setHasPaymentMethod(status.hasPaymentMethod === true);
+    } catch {
+      setCanChangeCapacity(false);
+    }
+  };
+
+  /**
+   * Buy more (or fewer) units. Sends the USER COUNT; the server quotes it and
+   * sends the packages it resolved, prorated against the existing billing
+   * anchor. Success means ACCEPTED — capacity lands when the invoice is paid.
+   */
+  /**
+   * Apply the capacity the operator chose in the modal.
+   *
+   * Sends the requested USER COUNT, not the bundle: the server re-quotes it and
+   * sends the packages it resolved, so the browser never proposes a
+   * combination, let alone an amount.
+   */
+  const handleChangeCapacity = async (quote: PricingQuote) => {
+    try {
+      setIsChangingCapacity(true);
+      const form = new FormData();
+      form.append("users", String(quote.requestedUsers));
+      await adminClient.tideAdmin.changeCapacity(form);
+      setIsCapacityOpen(false);
+      addAlert(
+        t(
+          "Capacity change submitted. It applies once the prorated invoice is paid.",
+        ),
+        AlertVariant.success,
+      );
+      await refresh();
+    } catch (error) {
+      // 402 means the capacity is fine but there is no card on file. Offer to
+      // collect one rather than reporting a failure the operator cannot act on.
+      const status = (error as { response?: { status?: number } }).response
+        ?.status;
+      if (status === 402) {
+        setIsCapacityOpen(false);
+        setNeedsCard(true);
+      } else {
+        addError("Could not change capacity", error);
+      }
+    } finally {
+      setIsChangingCapacity(false);
+    }
+  };
+
+  /**
+   * Send the operator to Stripe's hosted card page, then back here.
+   *
+   * Goes through readRedirectUrl rather than reading `.redirectUrl` directly:
+   * the admin client parses a non-JSON body into a plain string, so a server
+   * answering with a bare URL yields no `redirectUrl` field and the browser
+   * navigates to the literal text "undefined".
+   */
+  const handleAddPaymentMethod = async () => {
+    try {
+      const form = new FormData();
+      form.append("returnUrl", window.location.href);
+      const response = await adminClient.tideAdmin.addPaymentMethod(form);
+      window.location.href = readRedirectUrl(response);
+    } catch (error) {
+      addError("Could not start payment method collection", error);
+    }
+  };
 
   const handleManageSubscription = async () => {
-    const redirectUrl = window.location.href.endsWith('/') ? window.location.href.slice(0, -1) : window.location.href;
-    const form = new FormData();
-    form.append("redirectUrl", redirectUrl)
-    const response = await adminClient.tideAdmin.createCustomerPortalSession(form);
-    window.location.href = response.redirectUrl;
+    try {
+      const redirectUrl = window.location.href.endsWith("/")
+        ? window.location.href.slice(0, -1)
+        : window.location.href;
+      const form = new FormData();
+      form.append("redirectUrl", redirectUrl);
+      const response =
+        await adminClient.tideAdmin.createCustomerPortalSession(form);
+      window.location.href = readRedirectUrl(response);
+    } catch (error) {
+      // Previously uncaught: a portal session the payer refused left the
+      // button looking inert with nothing said.
+      addError("Could not open the subscription portal", error);
+    }
   };
 
   const getScheduledTasks = async () => {
@@ -410,9 +517,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       const response = await adminClient.tideAdmin.getScheduledTasks();
       // Filter tasks based on criteria
       const filteredTasks = response.filter(
-        task =>
+        (task) =>
           task.taskName.startsWith("tide") && // Starts with 'tide'
-          task.taskName.endsWith(realmRepresentation!.id!) // Matches current realm
+          task.taskName.endsWith(realmRepresentation!.id!), // Matches current realm
       );
       setScheduledTasks(filteredTasks); // Update state with filtered tasks
     } catch (error) {
@@ -421,29 +528,32 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   };
 
   const fetchPendingLicense = async () => {
-    if (watchConfigPendingGVRK === undefined || watchConfigPendingGVRK === "") {
-      return null
+    if (watchConfigPendingGVRK === "") {
+      return null;
     }
     const tempLicenseDetails = {
       vvkId: watchConfigVVKId,
       customerId: watchConfigCustomerId,
       gVRK: watchConfigPendingGVRK,
-      payerPub: watchConfigPayerPub
+      payerPub: watchConfigPayerPub,
     };
     const utcNowTimestamp = Date.now();
     const authForm = new FormData();
     authForm.append("data", utcNowTimestamp.toString());
     const response = await adminClient.tideAdmin.getSubscriptionStatus();
-    const pendingLicense = { licenseData: JSON.stringify(tempLicenseDetails, null, 2), status: await response.toString() ?? "", date: licenseExpiry }
-
+    const pendingLicense = {
+      licenseData: JSON.stringify(tempLicenseDetails, null, 2),
+      status: response.toString(),
+      date: licenseExpiry,
+    };
 
     return pendingLicense;
   };
 
   const getLicenseHistory = async () => {
     try {
-
-      const response: License[] = await adminClient.tideAdmin.getLicenseHistory();
+      const response: License[] =
+        await adminClient.tideAdmin.getLicenseHistory();
       const pendingLicense = await fetchPendingLicense();
       if (pendingLicense !== null) {
         response.unshift(pendingLicense);
@@ -456,15 +566,25 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   };
 
   useEffect(() => {
-    getScheduledTasks();
+    void getScheduledTasks();
   }, [realm, key]);
 
   useEffect(() => {
-    getLicenseHistory()
+    if (!hasValue(watchConfigVVKId)) return;
+    void checkPayerCapabilities();
+  }, [watchConfigVVKId, key]);
+
+  useEffect(() => {
+    void getLicenseHistory();
   }, [watchConfigPayerPub, watchConfigPendingGVRK, watchConfigVVKId, key]);
 
-  const isConfigUnsecured = hasTideIdpPresent && missingSigKeys.length > 0 && hasValue(watchConfigVVKId);
-  const secureStatus: "secure" | "failed" = isConfigUnsecured ? "failed" : "secure";
+  const isConfigUnsecured =
+    hasTideIdpPresent &&
+    missingSigKeys.length > 0 &&
+    hasValue(watchConfigVVKId);
+  const secureStatus: "secure" | "failed" = isConfigUnsecured
+    ? "failed"
+    : "secure";
   const retryVariant = secureStatus === "failed" ? "danger" : "secondary";
 
   const sections = [
@@ -474,140 +594,184 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         <FormAccess role="manage-identity-providers" isHorizontal>
           {isLoading ? (
             <Spinner size="xl" />
+          ) : hasValue(watchConfigVVKId) ? (
+            <>
+              <FormGroup
+                label={t("License Details")}
+                labelIcon={
+                  <HelpItem
+                    helpText={
+                      "This is the details of your current active license. Save a copy locally."
+                    }
+                    fieldLabelId={"LicenseDetails"}
+                  />
+                }
+                fieldId="active-license-details"
+              >
+                <ClipboardCopy isCode isReadOnly>
+                  {activeLicenseDetails}
+                </ClipboardCopy>
+              </FormGroup>
+
+              <FormGroup
+                label={t("Current VRK")}
+                labelIcon={
+                  <HelpItem
+                    helpText={
+                      "The live active VRK currently in use by this license."
+                    }
+                    fieldLabelId={"LicenseCurrentVRK"}
+                  />
+                }
+                fieldId="license-current-vrk"
+              >
+                {hasValue(watchConfigGVRK) ? (
+                  <ClipboardCopy isCode isReadOnly>
+                    {watchConfigGVRK}
+                  </ClipboardCopy>
+                ) : (
+                  <span style={{ opacity: 0.7 }}>—</span>
+                )}
+              </FormGroup>
+
+              <FormGroup
+                label={t("Expiry Date")}
+                labelIcon={
+                  <HelpItem
+                    helpText={"The expiry date of this active license"}
+                    fieldLabelId={"LicenseExpiry"}
+                  />
+                }
+                fieldId="license-expiry"
+              >
+                <Label>{licenseExpiry}</Label>
+              </FormGroup>
+
+              <FormGroup
+                label={t("Max User Accounts")}
+                labelIcon={
+                  <HelpItem
+                    helpText={
+                      "The max amount of user accounts for this license"
+                    }
+                    fieldLabelId={"LicenseMaxUserAccounts"}
+                  />
+                }
+                fieldId="license-max-user-accounts"
+              >
+                <Label>{licenseMaxUserAcc}</Label>
+              </FormGroup>
+
+              <FormGroup
+                label={t("Current User Accounts")}
+                labelIcon={
+                  <HelpItem
+                    helpText={
+                      "The current amount of user accounts on this license"
+                    }
+                    fieldLabelId={"LicenseCurrentUserAccounts"}
+                  />
+                }
+                fieldId="license-current-user-accounts"
+              >
+                <Label>{currentUsers}</Label>
+              </FormGroup>
+
+              <FormGroup
+                label={t("JWK")}
+                labelIcon={
+                  <HelpItem
+                    helpText={"JWK needed for client authentication"}
+                    fieldLabelId={"LicenseJWK"}
+                  />
+                }
+                fieldId="license-jwk"
+              >
+                <Button type="button" onClick={async () => await generateJWK()}>
+                  {t("Export")}
+                </Button>
+              </FormGroup>
+
+              <FormGroup
+                label={t("License Subscription")}
+                labelIcon={
+                  <HelpItem
+                    helpText={"Manage your subscription here."}
+                    fieldLabelId={"LicenseSubscription"}
+                  />
+                }
+                fieldId="license-subscription"
+              >
+                <Button type="button" onClick={() => setIsCapacityOpen(true)}>
+                  {t("Manage")}
+                </Button>
+              </FormGroup>
+
+              <FormGroup
+                label={t("Secure Configuration")}
+                fieldId="secure-configuration"
+              >
+                <div className="pf-v5-u-display-flex pf-v5-u-align-items-center pf-v5-u-gap-md">
+                  {secureStatus === "secure" ? (
+                    <Label color="green" className="pf-v5-u-mr-lg">
+                      {t("Secure")}
+                    </Label>
+                  ) : (
+                    <Label
+                      color="red"
+                      className="pf-v5-u-font-weight-bold pf-v5-u-mr-lg"
+                    >
+                      {t("Failed")}
+                    </Label>
+                  )}
+                  <Button
+                    type="button"
+                    variant={retryVariant} // outlined if secure, filled red if failed
+                    data-testid="secure-config-retry"
+                    onClick={signSettings}
+                  >
+                    {t("Retry")}
+                  </Button>
+                </div>
+              </FormGroup>
+            </>
           ) : (
             <>
-              {hasValue(watchConfigVVKId) ? (
-                <>
-                  <FormGroup
-                    label={t("License Details")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"This is the details of your current active license. Save a copy locally."}
-                        fieldLabelId={"LicenseDetails"}
-                      />
-                    }
-                    fieldId="active-license-details"
-                  >
-                    <ClipboardCopy isCode isReadOnly>{activeLicenseDetails}</ClipboardCopy>
-                  </FormGroup>
-
-                  <FormGroup
-                    label={t("Current VRK")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"The live active VRK currently in use by this license."}
-                        fieldLabelId={"LicenseCurrentVRK"}
-                      />
-                    }
-                    fieldId="license-current-vrk"
-                  >
-                    {hasValue(watchConfigGVRK) ? (
-                      <ClipboardCopy isCode isReadOnly>{watchConfigGVRK}</ClipboardCopy>
-                    ) : (
-                      <span style={{ opacity: 0.7 }}>—</span>
-                    )}
-                  </FormGroup>
-
-                  <FormGroup
-                    label={t("Expiry Date")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"The expiry date of this active license"}
-                        fieldLabelId={"LicenseExpiry"}
-                      />
-                    }
-                    fieldId="license-expiry"
-                  >
-                    <Label>{licenseExpiry}</Label>
-                  </FormGroup>
-
-                  <FormGroup
-                    label={t("Max User Accounts")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"The max amount of user accounts for this license"}
-                        fieldLabelId={"LicenseMaxUserAccounts"}
-                      />
-                    }
-                    fieldId="license-max-user-accounts"
-                  >
-                    <Label>{licenseMaxUserAcc}</Label>
-                  </FormGroup>
-
-                  <FormGroup
-                    label={t("Current User Accounts")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"The current amount of user accounts on this license"}
-                        fieldLabelId={"LicenseCurrentUserAccounts"}
-                      />
-                    }
-                    fieldId="license-current-user-accounts"
-                  >
-                    <Label>{currentUsers}</Label>
-                  </FormGroup>
-
-                  <FormGroup
-                    label={t("JWK")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"JWK needed for client authentication"}
-                        fieldLabelId={"LicenseJWK"}
-                      />
-                    }
-                    fieldId="license-jwk"
-                  >
-                    <Button type="button" onClick={async () => await generateJWK()}>
-                      {t("Export")}
-                    </Button>
-                  </FormGroup>
-
-                  <FormGroup
-                    label={t("License Subscription")}
-                    labelIcon={
-                      <HelpItem
-                        helpText={"Manage your subscription here."}
-                        fieldLabelId={"LicenseSubscription"}
-                      />
-                    }
-                    fieldId="license-subscription"
-                  >
-                    <Button type="button" onClick={async () => await handleManageSubscription()}>
-                      {t("Manage")}
-                    </Button>
-                  </FormGroup>
-                  <FormGroup label={t("Secure Configuration")} fieldId="secure-configuration">
-                    <div className="pf-v5-u-display-flex pf-v5-u-align-items-center pf-v5-u-gap-md">
-                      {secureStatus === "secure" ? (
-                        <Label color="green" className="pf-v5-u-mr-lg">{t("Secure")}</Label>
-                      ) : (
-                        <Label color="red" className="pf-v5-u-font-weight-bold pf-v5-u-mr-lg">
-                          {t("Failed")}
-                        </Label>
-                      )}
-                      <Button
-                        type="button"
-                        variant={retryVariant} // outlined if secure, filled red if failed
-                        data-testid="secure-config-retry"
-                        onClick={signSettings}
-                      >
-                        {t("Retry")}
-                      </Button>
-                    </div>
-                  </FormGroup>
-                </>
-              ) : (
-                <>
-                  <FormGroup fieldId="no-active-license">
-                    <Text>{t("No active license found.")}</Text>
-                  </FormGroup>
-                  <FormGroup fieldId="request-license">
-                    <Button variant="primary" onClick={async () => await handleCheckout(LicensingTiers.Free)}>
+              <FormGroup fieldId="no-active-license">
+                <Text>{t("No active license found.")}</Text>
+              </FormGroup>
+              {/* Replaces the old bare "Request License" button: choose a
+                      capacity and see the live Stripe price for it first. */}
+              <FormGroup fieldId="request-license">
+                <EnterprisePricing
+                  serverBaseUrl={environment.serverBaseUrl}
+                  realm={realm}
+                  onChoose={handleChoosePlan}
+                  // The free plan is the existing free-tier request. Without
+                  // this the $0 call to action was a no-op: the card calls
+                  // onChooseFree, which nothing supplied.
+                  onChooseFree={async () =>
+                    await handleCheckout(LicensingTiers.Free)
+                  }
+                  isCtaDisabled={isLoading}
+                  // This console and the tidecloak-key-provider jar ship as
+                  // separate artifacts, so it can be pointed at a Keycloak
+                  // whose jar has no pricing endpoints. There, the tab falls
+                  // back to exactly the button it had before pricing existed:
+                  // an operator on an older image is never left without a way
+                  // to request a license.
+                  unsupportedFallback={
+                    <Button
+                      variant="primary"
+                      onClick={async () =>
+                        await handleCheckout(LicensingTiers.Free)
+                      }
+                    >
                       {t("Request License")}
                     </Button>
-                  </FormGroup>
-                </>
-              )}
+                  }
+                />
+              </FormGroup>
             </>
           )}
         </FormAccess>
@@ -619,19 +783,35 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     },
     {
       title: t("Scheduled Tasks"),
-      panel: <TideScheduledTasks scheduledTasks={scheduledTasks} refresh={refresh} />,
+      panel: (
+        <TideScheduledTasks scheduledTasks={scheduledTasks} refresh={refresh} />
+      ),
     },
   ];
 
   return (
-    <>
-      <FormAccess role="manage-identity-providers" isHorizontal>
-        <ScrollForm
-          label={t("jumpToSection")}
-          className="pf-v5-u-px-lg"
-          sections={sections}
-        />
-      </FormAccess>
-    </>
+    <FormAccess role="manage-identity-providers" isHorizontal>
+      <ManageSubscriptionModal
+        isOpen={isCapacityOpen}
+        onClose={() => setIsCapacityOpen(false)}
+        serverBaseUrl={environment.serverBaseUrl}
+        realm={realm}
+        currentUsers={licenseMaxUserAcc}
+        usersInUse={currentUsers}
+        expiry={licenseExpiry}
+        onChangeCapacity={handleChangeCapacity}
+        isSubmitting={isChangingCapacity}
+        onOpenStripePortal={handleManageSubscription}
+        needsCard={needsCard}
+        hasPaymentMethod={hasPaymentMethod}
+        canChangeCapacity={canChangeCapacity}
+        onAddPaymentMethod={handleAddPaymentMethod}
+      />
+      <ScrollForm
+        label={t("jumpToSection")}
+        className="pf-v5-u-px-lg"
+        sections={sections}
+      />
+    </FormAccess>
   );
 };
