@@ -64,6 +64,12 @@ export type EnterprisePricingProps = {
   ctaLabel?: string;
   isCtaDisabled?: boolean;
   /**
+   * Whether the free plan is one of the choices. False where the card is used
+   * to BUY capacity: picking free there would be a downgrade to another plan,
+   * not a capacity change, and its call to action would have nothing to do.
+   */
+  showFreePlan?: boolean;
+  /**
    * Rendered INSTEAD of the card when the server build has no pricing
    * endpoints. The console and the tidecloak-key-provider jar ship as separate
    * artifacts, so a console that knows about pricing can be pointed at an older
@@ -80,11 +86,13 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   onChooseFree,
   ctaLabel,
   isCtaDisabled = false,
+  showFreePlan = true,
   unsupportedFallback = null,
 }) => {
   const { t } = useTranslation();
   const packages = usePricingTiers(serverBaseUrl, realm);
-  const freePlan = useFreePlan(serverBaseUrl, realm);
+  const fetchedFreePlan = useFreePlan(serverBaseUrl, realm);
+  const freePlan = showFreePlan ? fetchedFreePlan : null;
   const [users, setUsers] = useState<number | null>(null);
 
   const range = packages.tiers

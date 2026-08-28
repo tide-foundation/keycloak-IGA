@@ -63,6 +63,10 @@ export const ChangeCapacityModal: FC<ChangeCapacityModalProps> = ({
       <EnterprisePricing
         serverBaseUrl={serverBaseUrl}
         realm={realm}
+        // Buying capacity, so the free plan is not a choice here: selecting it
+        // would be a downgrade to a different plan rather than a capacity
+        // change, and its call to action would have nothing to do.
+        showFreePlan={false}
         onChoose={onConfirm}
         ctaLabel={isSubmitting ? t("Submitting…") : t("Confirm change")}
         isCtaDisabled={isSubmitting}
