@@ -45,13 +45,6 @@ export function capacityRange(
   };
 }
 
-/** Snap an arbitrary count onto the nearest expressible capacity, clamped to min. */
-export function snapCapacity(value: number, range: CapacityRange): number {
-  if (!Number.isFinite(value)) return range.min;
-  const snapped = Math.round(value / range.step) * range.step;
-  return Math.max(range.min, snapped);
-}
-
 function gcd(a: number, b: number): number {
   let x = Math.abs(a);
   let y = Math.abs(b);
