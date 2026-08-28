@@ -37,7 +37,7 @@ import {
 } from "@patternfly/react-core";
 import { FC, ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { capacityRange, snapCapacity, type CapacityRange } from "./capacity";
+import { capacityRange, type CapacityRange } from "./capacity";
 import {
   formatCount,
   formatInterval,
@@ -240,6 +240,15 @@ const CapacityChooser: FC<ChooserProps> = ({
   const sliderValue = Math.min(Math.max(users, range.min), sliderMax);
   const overshoot = quote ? quote.includedUsers - quote.requestedUsers : 0;
 
+  // The free plan is kept alongside whatever is bought, so the total is
+  // allowance + packages. Both halves are shown: a realm upgrading off the free
+  // plan was otherwise told it was buying "100 users" for the same 100 it
+  // already had, when what it gets is 100 MORE.
+  const freeAllowance = freePlan?.userLimit ?? 0;
+  const purchasedUsers = quote
+    ? Math.max(0, quote.includedUsers - freeAllowance)
+    : 0;
+
   return (
     <div className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-lg">
       {/* Headline: the free plan's price, or the server's quoted total. */}
@@ -286,12 +295,15 @@ const CapacityChooser: FC<ChooserProps> = ({
           inputLabel={t("users")}
           inputAriaLabel={t("Exact number of users")}
           showBoundaries
-          // PatternFly reports the typed value as `inputValue` and the dragged one
-          // as `value`; both are snapped onto a capacity the packages can express
-          // exactly, so we never ask the server to quote 1,234 when the packages
-          // step in hundreds.
+          // PatternFly reports the typed value as `inputValue` and the dragged
+          // one as `value`. Neither is snapped to a package size: the operator
+          // states how many users they have and the server answers with the
+          // cheapest packages covering it. Snapping ran to NEAREST, so every
+          // count from 101 to 149 rounded down to 100 and landed back inside
+          // the free plan, and asking for one user more than the free plan
+          // appeared to change nothing.
           onChange={(_event, value, inputValue) =>
-            onUsersChange(snapCapacity(inputValue ?? value, range))
+            onUsersChange(Math.max(1, inputValue ?? value))
           }
           data-testid="pricing-slider"
         />
@@ -365,6 +377,17 @@ const CapacityChooser: FC<ChooserProps> = ({
                 })}
               </DescriptionListDescription>
             </DescriptionListGroup>
+            {freeAllowance > 0 ? (
+              <DescriptionListGroup>
+                <DescriptionListTerm>{t("Made up of")}</DescriptionListTerm>
+                <DescriptionListDescription data-testid="pricing-capacity-breakdown">
+                  {t("{{free}} free + {{paid}} purchased", {
+                    free: formatCount(freeAllowance),
+                    paid: formatCount(purchasedUsers),
+                  })}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+            ) : null}
             <DescriptionListGroup>
               <DescriptionListTerm>{t("Price")}</DescriptionListTerm>
               <DescriptionListDescription>
@@ -390,6 +413,22 @@ const CapacityChooser: FC<ChooserProps> = ({
               </DescriptionListDescription>
             </DescriptionListGroup>
           </DescriptionList>
+
+          {freeAllowance > 0 ? (
+            <TextContent data-testid="pricing-addon-advice">
+              <Text>
+                {t(
+                  "Add {{paid}} users for {{price}} {{interval}}, on top of the {{free}} your free plan already includes.",
+                  {
+                    paid: formatCount(purchasedUsers),
+                    price: formatMoney(quote.totalAmount, quote.currency),
+                    interval: formatInterval(quote.interval),
+                    free: formatCount(freeAllowance),
+                  },
+                )}
+              </Text>
+            </TextContent>
+          ) : null}
 
           {overshoot > 0 ? (
             <TextContent data-testid="pricing-overshoot">
