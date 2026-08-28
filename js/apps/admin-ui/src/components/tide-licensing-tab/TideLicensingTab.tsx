@@ -37,6 +37,30 @@ enum LicensingTiers {
 // `refreshCallback` stays on the props type for callers that already pass it,
 // but is intentionally not destructured: nothing in this component has ever
 // called it, and inventing a call site here would be a behaviour change.
+/**
+ * Pull the hosted-page URL out of a vendor redirect response.
+ *
+ * The admin client JSON-parses the body when it can and hands back the raw
+ * string when it cannot, so these endpoints arrive as either `{redirectUrl}`,
+ * `{url}`, or a bare URL depending on the server build. Throwing on an
+ * unrecognised shape keeps the failure in the caller's catch, where it is
+ * reported, instead of navigating the browser to "undefined".
+ */
+function readRedirectUrl(response: unknown): string {
+  if (typeof response === "string") {
+    const text = response.trim().replace(/^"|"$/g, "");
+    if (/^https?:/i.test(text)) return text;
+  } else if (response && typeof response === "object") {
+    const { redirectUrl, url } = response as {
+      redirectUrl?: string;
+      url?: string;
+    };
+    const candidate = redirectUrl ?? url;
+    if (candidate) return candidate;
+  }
+  throw new Error("The server did not return a redirect URL.");
+}
+
 export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
@@ -452,27 +476,40 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     }
   };
 
-  /** Send the operator to Stripe's hosted card page, then back here. */
+  /**
+   * Send the operator to Stripe's hosted card page, then back here.
+   *
+   * Goes through readRedirectUrl rather than reading `.redirectUrl` directly:
+   * the admin client parses a non-JSON body into a plain string, so a server
+   * answering with a bare URL yields no `redirectUrl` field and the browser
+   * navigates to the literal text "undefined".
+   */
   const handleAddPaymentMethod = async () => {
     try {
       const form = new FormData();
       form.append("returnUrl", window.location.href);
       const response = await adminClient.tideAdmin.addPaymentMethod(form);
-      window.location.href = response.redirectUrl;
+      window.location.href = readRedirectUrl(response);
     } catch (error) {
       addError("Could not start payment method collection", error);
     }
   };
 
   const handleManageSubscription = async () => {
-    const redirectUrl = window.location.href.endsWith("/")
-      ? window.location.href.slice(0, -1)
-      : window.location.href;
-    const form = new FormData();
-    form.append("redirectUrl", redirectUrl);
-    const response =
-      await adminClient.tideAdmin.createCustomerPortalSession(form);
-    window.location.href = response.redirectUrl;
+    try {
+      const redirectUrl = window.location.href.endsWith("/")
+        ? window.location.href.slice(0, -1)
+        : window.location.href;
+      const form = new FormData();
+      form.append("redirectUrl", redirectUrl);
+      const response =
+        await adminClient.tideAdmin.createCustomerPortalSession(form);
+      window.location.href = readRedirectUrl(response);
+    } catch (error) {
+      // Previously uncaught: a portal session the payer refused left the
+      // button looking inert with nothing said.
+      addError("Could not open the subscription portal", error);
+    }
   };
 
   const getScheduledTasks = async () => {
