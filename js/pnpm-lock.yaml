@@ -182,8 +182,8 @@ importers:
         specifier: ^5.4.16
         version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tidecloak/js':
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.14.1
+        version: 0.14.1
       '@uiw/react-textarea-code-editor':
         specifier: ^3.1.1
         version: 3.1.1(@babel/runtime@7.28.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -409,8 +409,8 @@ importers:
         specifier: ^5.4.16
         version: 5.4.16(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tidecloak/js':
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.14.1
+        version: 0.14.1
       i18next:
         specifier: ^25.7.3
         version: 25.7.3(typescript@5.9.3)
@@ -1727,10 +1727,10 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@tidecloak/js@0.14.0':
-    resolution: {integrity: sha512-s78Hfdf0ATeAMHDJPRmWvdW4ogg9U7GKUUkHgZhAjfLrOSktcpdPXqxpXGOxQKDFLiGtZ1NnwXJEFuS89tLxQA==}
+  '@tidecloak/js@0.14.1':
+    resolution: {integrity: sha512-EjMJPhgjOYW/aUCus6tSY/hpxUBCgqSpDfJ0kVLOPu0dl6nVYp5Y0BZxcNdFBnWZKdmMDxx1yKVBvnOaYPaGew==}
     peerDependencies:
-      '@tidecloak/policy': ^0.14.0
+      '@tidecloak/policy': ^0.14.1
     peerDependenciesMeta:
       '@tidecloak/policy':
         optional: true
@@ -5997,7 +5997,7 @@ snapshots:
       '@types/react': 18.3.23
       '@types/react-dom': 18.3.7(@types/react@18.3.23)
 
-  '@tidecloak/js@0.14.0':
+  '@tidecloak/js@0.14.1':
     dependencies:
       '@tideorg/js': 0.14.1
       heimdall-tide: 0.14.1
