@@ -312,7 +312,6 @@ export default function DetailSettings() {
     handleSubmit,
     getValues,
     reset,
-    control,
     formState: { isDirty },
   } = form;
   const [provider, setProvider] = useState<IdentityProviderRepresentation>();
@@ -353,119 +352,6 @@ export default function DetailSettings() {
   const [key, setKey] = useState(0);
   const refresh = () => setKey(key + 1);
   const { hasAccess } = useAccess();
-  const handleTideRefresh = async () => {
-    const updatedProvider = await adminClient.identityProviders.findOne({ alias })
-    reset(updatedProvider);
-    refresh()
-  }
-
-  /** TIDECLOAK IMPLEMENTATION START */
-  const currentHost = window.location.origin;
-
-  const backgroundUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/BACKGROUND_IMAGE`;
-  const logoUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/LOGO`;
-
-  const handleFileChange = (type: 'background' | 'logo') => (
-    event: DropEvent,
-    file: File
-  ) => {
-    if (type === 'background') {
-      setBackgroundImage(file);
-      setBackgroundPreviewUrl(URL.createObjectURL(file));
-    } else if (type === 'logo') {
-      setLogo(file);
-      setLogoPreviewUrl(URL.createObjectURL(file));
-    }
-    setImageDeleteRequested(false);
-
-  };
-
-  const handleClear = (type: 'background' | 'logo') => {
-    if (type === 'background') {
-      setBackgroundImage(null);
-      setBackgroundPreviewUrl("");
-    } else if (type === 'logo') {
-      setLogo(null);
-      setLogoPreviewUrl("");
-    }
-    setImageDeleteRequested(true)
-  };
-
-  async function fetchImage(type: string) {
-    try {
-      const response = await adminClient.tideAdmin.getImageName({ type });
-
-      if (response === null && response === "") {
-        return;
-      }
-      // Create a new File object from the Blob
-      const file = new File([], response!, { type });
-      return file;
-    } catch (error) {
-      console.error("Failed to fetch image: ", error);
-      return null;
-    }
-  }
-  const initializeImages = async () => {
-    const backgroundImageFile = await fetchImage("BACKGROUND_IMAGE");
-    const logoImageFile = await fetchImage("LOGO");
-
-    if (backgroundImageFile?.size !== undefined && backgroundImageFile.name !== "") {
-      setBackgroundImage(backgroundImageFile);
-      setBackgroundPreviewUrl(backgroundUrl);
-    }
-
-    if (logoImageFile?.size !== undefined && logoImageFile.name !== "") {
-      setLogo(logoImageFile);
-      setLogoPreviewUrl(logoUrl);
-    }
-    setImageDeleteRequested(false);
-  };
-
-  useEffect(() => {
-    initializeImages();
-  }, []);
-
-
-  const hasValue = (value: string) => value !== undefined && value !== null && value !== "" ? true : false;
-  const handleImageUpdate = async (image: File | null, type: string) => {
-    try {
-      if (image === null && imageDeleteRequested === true) {
-        // delete image on server
-        await adminClient.tideAdmin.deleteImage({ type });
-      } else if (image !== null && image.size > 0) {
-        const formData = new FormData();
-        formData.append("fileData", image);
-        formData.append("fileName", image.name);
-        formData.append("fileType", type);
-        await adminClient.tideAdmin.uploadImage(formData);
-      }
-    } catch (error) {
-      addError("Error upload image", error);
-    }
-  };
-
-  const handleReset = async () => {
-    reset();
-    if (providerId === "tide") {
-      await adminClient.identityProviders.update(
-        { alias },
-        {
-          ...provider,
-          config: { ...provider?.config, pendingUpdateSettings: false },
-          alias,
-          providerId,
-        },
-      );
-      await initializeImages();
-      setImageDeleteRequested(false);
-      refresh();
-    }
-  };
-
-  function getSingleValue(value: string | string[]): string {
-    return Array.isArray(value) ? value[0] : value;
-  }
 
   /** TIDECLOAK IMPLEMENTATION START */
   const currentHost = window.location.origin;
@@ -475,23 +361,29 @@ export default function DetailSettings() {
 
   const handleFileChange =
     (type: "background" | "logo") => (event: DropEvent, file: File) => {
-      if (type === "background") {
-        setBackgroundImage(file);
-        setBackgroundPreviewUrl(URL.createObjectURL(file));
-      } else if (type === "logo") {
-        setLogo(file);
-        setLogoPreviewUrl(URL.createObjectURL(file));
+      switch (type) {
+        case "background":
+          setBackgroundImage(file);
+          setBackgroundPreviewUrl(URL.createObjectURL(file));
+          break;
+        case "logo":
+          setLogo(file);
+          setLogoPreviewUrl(URL.createObjectURL(file));
+          break;
       }
       setImageDeleteRequested(false);
     };
 
   const handleClear = (type: "background" | "logo") => {
-    if (type === "background") {
-      setBackgroundImage(null);
-      setBackgroundPreviewUrl("");
-    } else if (type === "logo") {
-      setLogo(null);
-      setLogoPreviewUrl("");
+    switch (type) {
+      case "background":
+        setBackgroundImage(null);
+        setBackgroundPreviewUrl("");
+        break;
+      case "logo":
+        setLogo(null);
+        setLogoPreviewUrl("");
+        break;
     }
     setImageDeleteRequested(true);
   };
@@ -500,6 +392,10 @@ export default function DetailSettings() {
     try {
       const response = await adminClient.tideAdmin.getImageName({ type });
 
+      // getImageName resolves to string | null, so this guard can never fire as
+      // written. Left untouched deliberately: making it live (`||`) is a
+      // behaviour change that needs a separate decision, not a lint fix.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- deliberately inert, see above
       if (response === null && response === "") {
         return;
       }
@@ -535,114 +431,7 @@ export default function DetailSettings() {
   }, []);
 
   const hasValue = (value: string) =>
-    value !== undefined && value !== null && value !== "" ? true : false;
-  const handleImageUpdate = async (image: File | null, type: string) => {
-    try {
-      if (image === null && imageDeleteRequested === true) {
-        // delete image on server
-        await adminClient.tideAdmin.deleteImage({ type });
-      } else if (image !== null && image.size > 0) {
-        const formData = new FormData();
-        formData.append("fileData", image);
-        formData.append("fileName", image.name);
-        formData.append("fileType", type);
-        await adminClient.tideAdmin.uploadImage(formData);
-      }
-    } catch (error) {
-      addError("Error upload image", error);
-    }
-  };
-
-  const handleReset = async () => {
-    reset();
-    if (providerId === "tide") {
-      await adminClient.identityProviders.update(
-        { alias },
-        {
-          ...provider,
-          config: { ...provider?.config, pendingUpdateSettings: false },
-          alias,
-          providerId,
-        },
-      );
-      await initializeImages();
-      setImageDeleteRequested(false);
-      refresh();
-    }
-  };
-
-  function getSingleValue(value: string | string[]): string {
-    return Array.isArray(value) ? value[0] : value;
-  }
-
-  /** TIDECLOAK IMPLEMENTATION START */
-  const currentHost = window.location.origin;
-
-  const backgroundUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/BACKGROUND_IMAGE`;
-  const logoUrl = `${currentHost}/realms/${realm}/tide-idp-resources/images/LOGO`;
-
-  const handleFileChange =
-    (type: "background" | "logo") => (event: DropEvent, file: File) => {
-      if (type === "background") {
-        setBackgroundImage(file);
-        setBackgroundPreviewUrl(URL.createObjectURL(file));
-      } else if (type === "logo") {
-        setLogo(file);
-        setLogoPreviewUrl(URL.createObjectURL(file));
-      }
-      setImageDeleteRequested(false);
-    };
-
-  const handleClear = (type: "background" | "logo") => {
-    if (type === "background") {
-      setBackgroundImage(null);
-      setBackgroundPreviewUrl("");
-    } else if (type === "logo") {
-      setLogo(null);
-      setLogoPreviewUrl("");
-    }
-    setImageDeleteRequested(true);
-  };
-
-  async function fetchImage(type: string) {
-    try {
-      const response = await adminClient.tideAdmin.getImageName({ type });
-
-      if (response === null && response === "") {
-        return;
-      }
-      // Create a new File object from the Blob
-      const file = new File([], response!, { type });
-      return file;
-    } catch (error) {
-      console.error("Failed to fetch image: ", error);
-      return null;
-    }
-  }
-  const initializeImages = async () => {
-    const backgroundImageFile = await fetchImage("BACKGROUND_IMAGE");
-    const logoImageFile = await fetchImage("LOGO");
-
-    if (
-      backgroundImageFile?.size !== undefined &&
-      backgroundImageFile.name !== ""
-    ) {
-      setBackgroundImage(backgroundImageFile);
-      setBackgroundPreviewUrl(backgroundUrl);
-    }
-
-    if (logoImageFile?.size !== undefined && logoImageFile.name !== "") {
-      setLogo(logoImageFile);
-      setLogoPreviewUrl(logoUrl);
-    }
-    setImageDeleteRequested(false);
-  };
-
-  useEffect(() => {
-    void initializeImages();
-  }, []);
-
-  const hasValue = (value: string) =>
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- vvkId is read from a component config and may be undefined at runtime despite the type
     value !== undefined && value !== null && value !== "" ? true : false;
   const handleImageUpdate = async (image: File | null, type: string) => {
     try {
@@ -857,7 +646,7 @@ export default function DetailSettings() {
   // This drives WARN (missing) vs INFO (configured) guidance on the offboard
   // dialog; it is advisory only and never blocks offboarding.
   const smtpConfigured =
-    !!realmRepresentation?.smtpServer &&
+    !!realmRepresentation.smtpServer &&
     Object.keys(realmRepresentation.smtpServer).length > 0;
 
   const [toggleOffboardingDialog, OffboardingConfirm] = useOffboardingDialog({
