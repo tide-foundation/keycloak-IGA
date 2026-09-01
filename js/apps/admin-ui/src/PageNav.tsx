@@ -102,29 +102,41 @@ export const PageNav = () => {
     componentTypes?.["org.keycloak.services.ui.extend.UiPageProvider"];
   const navigate = useNavigate();
   const { realm, realmRepresentation } = useRealm();
-  const [changeRequestsCount, setClientRequestCount] = useState<number>(0)
+  const [changeRequestsCount, setClientRequestCount] = useState<number>(0);
 
   useEffect(() => {
     const getCount = async () => {
-      const userRequest = await adminClient.tideUsersExt.getRequestedChangesForUsers();
-      const roleRequest = await adminClient.tideUsersExt.getRequestedChangesForRoles();
-      const groupRequest = await adminClient.tideUsersExt.getRequestedChangesForGroups();
-      const clientRequest = await adminClient.tideUsersExt.getRequestedChangesForClients();
-      const realmSettingsRequest = await adminClient.tideUsersExt.getRequestedChangesForRagnarokSettings();
-      const realmLicensingRequest = await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
+      const userRequest =
+        await adminClient.tideUsersExt.getRequestedChangesForUsers();
+      const roleRequest =
+        await adminClient.tideUsersExt.getRequestedChangesForRoles();
+      const groupRequest =
+        await adminClient.tideUsersExt.getRequestedChangesForGroups();
+      const clientRequest =
+        await adminClient.tideUsersExt.getRequestedChangesForClients();
+      const realmLicensingRequest =
+        await adminClient.tideUsersExt.getRequestedChangesForRealmLicensing();
       let policyCount = 0;
       try {
-        const realmPolicy: any = await adminClient.tideUsersExt.getRealmPolicy();
+        const realmPolicy: any =
+          await adminClient.tideUsersExt.getRealmPolicy();
         if (realmPolicy && realmPolicy.status === "pending") policyCount = 1;
-      } catch (_) { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
-      setClientRequestCount(userRequest.length + roleRequest.length + groupRequest.length + clientRequest.length + realmSettingsRequest.length + realmLicensingRequest.length + policyCount)
-    }
+      setClientRequestCount(
+        userRequest.length +
+          roleRequest.length +
+          groupRequest.length +
+          clientRequest.length +
+          realmLicensingRequest.length +
+          policyCount,
+      );
+    };
 
-    getCount();
-
-  }
-  , [realmRepresentation])
+    void getCount();
+  }, [realmRepresentation]);
 
   type SelectedItem = {
     groupId: number | string;
@@ -191,7 +203,15 @@ export const PageNav = () => {
               <LeftNav title="sessions" path="/sessions" />
               <LeftNav title="events" path="/events" />
               {/** TIDECLOAK IMPLEMENTATION */}
-              <LeftNav title="Change Requests" path="/change-requests" />
+              <LeftNav
+                title="Change Requests"
+                path="/change-requests"
+                label={
+                  changeRequestsCount > 0
+                    ? String(changeRequestsCount)
+                    : undefined
+                }
+              />
             </NavGroup>
           )}
 
