@@ -279,12 +279,27 @@ export class TideProvider extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
-  public createStripeCheckoutSession = this.makeRequest<
-    FormData,
-    stripeCheckoutSessionResponse
-  >({
+  // Returns the checkout redirect URL as the raw response body.
+  public createStripeCheckoutSession = this.makeRequest<FormData, string>({
     method: "POST",
     path: "/vendorResources/createStripeCheckoutSession",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  // Creates — or resumes creation of — the realm's Tide Vendor Key (VVK).
+  // Supersedes createStripeCheckoutSession + generateInitialKey: the backend
+  // drives the whole lifecycle off the current vendor key state.
+  //
+  // Responds `text/plain`, so the body IS the result:
+  //   - HTTP 303 + a Stripe checkout URL — send the browser there.
+  //   - HTTP 200 + "CREATED"      — the VVK exists, nothing left to do.
+  //   - HTTP 200 + "NEED_PAYMENT" — still awaiting payment, no checkout URL yet.
+  //
+  // Payload is a FormData carrying the optional `licensingTier` form param;
+  // it is only read on the first (NotCreated) call.
+  public createTideVendorKey = this.makeRequest<FormData, string>({
+    method: "POST",
+    path: "/vendorResources/CreateTideVendorKey",
   });
 
   /* # TIDECLOAK IMPLEMENTATION */

@@ -34,6 +34,12 @@ enum LicensingTiers {
   Free = 'FreeTier',
 };
 
+// TIDECLOAK IMPLEMENTATION
+// Sentinel bodies returned by the CreateTideVendorKey endpoint (text/plain).
+// Any other body is the Stripe checkout URL, returned with HTTP 303.
+const VENDOR_KEY_CREATED = "CREATED";
+const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
+
 export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback }) => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
@@ -206,7 +212,26 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         if (signSettingsRequired) await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: false });
 
         if (signSettingsRequired) {
-          await adminClient.tideAdmin.generateInitialKey();
+          // Payment has landed — resume vendor key creation. No licensing tier
+          // is sent: the backend already has it from the initial call.
+          const result = await createTideVendorKey();
+
+          if (result === VENDOR_KEY_NEEDS_PAYMENT) {
+            // Not a failure: the Tide network hasn't collected payment from
+            // Stripe yet. Leave the key alone and let the user retry — if they
+            // genuinely haven't paid, the retry hands back a Stripe URL.
+            setIsLoading(false);
+            await refresh();
+            addAlert(t("Awaiting payment confirmation, please try again shortly."), AlertVariant.warning);
+            return;
+          }
+
+          if (result !== VENDOR_KEY_CREATED) {
+            // A fresh Stripe checkout URL was issued — send the user back.
+            window.location.href = result;
+            return;
+          }
+
           await refresh(); // refresh current page
           setIsLoading(false); // Loading is done
           setIsPendingResign(false);
@@ -312,18 +337,44 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     }
   };
 
+  // TIDECLOAK IMPLEMENTATION
+  // Single entry point for vendor key creation. The backend decides what needs
+  // to happen next from the current vendor key state and answers in the body:
+  // "CREATED", "NEED_PAYMENT", or a Stripe checkout URL. `licensingTier` is
+  // only read on the first call, when no key exists yet.
+  const createTideVendorKey = async (licensingTier?: string) => {
+    const data = new FormData();
+    if (licensingTier) {
+      data.append("licensingTier", licensingTier);
+    }
+    const result = await adminClient.tideAdmin.createTideVendorKey(data);
+    return (result ?? "").trim();
+  };
+
   const handleCheckout = async (licensingTier: string) => {
     try {
       setIsInitialCheckout(true);
       setIsLoading(true);
-      const redirectUrl = window.location.href.endsWith('/') ? window.location.href.slice(0, -1) : window.location.href;
 
-      const data = new FormData();
-      data.append("redirectUrl", redirectUrl);
-      data.append("licensingTier", licensingTier);
+      const result = await createTideVendorKey(licensingTier);
 
-      const response = await adminClient.tideAdmin.createStripeCheckoutSession(data);
-      window.location.href = response.redirectUrl;
+      if (result === VENDOR_KEY_CREATED) {
+        // Key already exists — there is nothing to pay for.
+        setIsLoading(false);
+        await refresh();
+        return;
+      }
+
+      if (result === VENDOR_KEY_NEEDS_PAYMENT) {
+        // Awaiting payment, but the backend has no checkout URL to send us to.
+        setIsLoading(false);
+        await refresh();
+        addAlert(t("Awaiting payment confirmation, please try again shortly."), AlertVariant.warning);
+        return;
+      }
+
+      // Anything else is the Stripe checkout URL (HTTP 303).
+      window.location.href = result;
 
     } catch (err) {
       await adminClient.tideAdmin.reAddTideKey();
