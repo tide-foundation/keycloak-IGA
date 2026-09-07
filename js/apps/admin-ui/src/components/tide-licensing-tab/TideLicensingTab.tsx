@@ -536,10 +536,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
    */
   const handleAddPaymentMethod = async () => {
     try {
-      const form = new FormData();
-      form.append("returnUrl", window.location.href);
-      const response = await adminClient.tideAdmin.addPaymentMethod(form);
-      window.location.href = readRedirectUrl(response);
+      await openRedirectInNewTab(() => {
+        const form = new FormData();
+        form.append("returnUrl", window.location.href);
+        return adminClient.tideAdmin.addPaymentMethod(form);
+      });
     } catch (error) {
       addError("Could not start payment method collection", error);
     }
@@ -550,11 +551,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       const redirectUrl = window.location.href.endsWith("/")
         ? window.location.href.slice(0, -1)
         : window.location.href;
-      const form = new FormData();
-      form.append("redirectUrl", redirectUrl);
-      const response =
-        await adminClient.tideAdmin.createCustomerPortalSession(form);
-      window.location.href = readRedirectUrl(response);
+      await openRedirectInNewTab(() => {
+        const form = new FormData();
+        form.append("redirectUrl", redirectUrl);
+        return adminClient.tideAdmin.createCustomerPortalSession(form);
+      });
     } catch (error) {
       // Previously uncaught: a portal session the payer refused left the
       // button looking inert with nothing said.

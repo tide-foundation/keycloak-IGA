@@ -38,6 +38,7 @@ import {
 import { FC, ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { capacityRange, type CapacityRange } from "./capacity";
+import styles from "./package-stops.module.css";
 import {
   formatCount,
   formatInterval,
@@ -314,6 +315,20 @@ const CapacityChooser: FC<ChooserProps> = ({
         />
       )}
 
+      {isSingleOption ? null : (
+        <>
+          <Divider className="pf-v5-u-my-md" />
+          <PackageStops
+            packages={packages}
+            freePlan={freePlan}
+            quote={isFree ? undefined : quote}
+            isFree={isFree}
+            users={users}
+            onUsersChange={onUsersChange}
+          />
+        </>
+      )}
+
       {!hasMultiplePackageSizes ? (
         <TextContent data-testid="pricing-single-package">
           <Text component="small">
@@ -499,6 +514,114 @@ const CapacityChooser: FC<ChooserProps> = ({
         <Skeleton height="12rem" screenreaderText={t("Loading pricing")} />
       )}
     </div>
+  );
+};
+
+/**
+ * The package stops under the capacity slider.
+ *
+ * The slider moved and the total changed, but nothing on screen tied the two
+ * together: the capacity below it ("Up to 200 users") is the SERVER's answer,
+ * not the number under the thumb, so the two read as unrelated. Here every
+ * buyable package is a box, and the boxes the current quote is actually made of
+ * are highlighted — dragging the slider lights up what is being bought, and the
+ * itemised total below is then just the same boxes written out.
+ *
+ * The highlight comes from the quote's line items. Nothing here decides which
+ * packages cover a capacity; that stays on the server with the Stripe
+ * credentials, like every other figure on this card.
+ */
+const PackageStops: FC<{
+  packages: PricingTier[];
+  freePlan: PricingTier | null;
+  /** The current quote, or undefined while the free plan is the selection. */
+  quote: PricingQuote | undefined;
+  isFree: boolean;
+  users: number;
+  onUsersChange: (users: number) => void;
+}> = ({ packages, freePlan, quote, isFree, users, onUsersChange }) => {
+  const { t } = useTranslation();
+  const lines = new Map(
+    quote?.lineItems.map((line) => [line.priceId, line] as const),
+  );
+
+  return (
+    <div>
+      <TextContent className="pf-v5-u-mb-sm">
+        <Text component="small">
+          {isFree
+            ? t("Covered by the free plan.")
+            : quote
+              ? t("Covering your {{users}} users with:", {
+                  users: formatCount(users),
+                })
+              : t("Available packages")}
+        </Text>
+      </TextContent>
+
+      <div className={styles.stops} data-testid="pricing-package-stops">
+        {freePlan ? (
+          <PackageStop
+            label={formatCount(freePlan.userLimit)}
+            detail={t("Free plan")}
+            ariaLabel={t("Free plan, up to {{limit}} users", {
+              limit: formatCount(freePlan.userLimit),
+            })}
+            isSelected={isFree}
+            onSelect={() => onUsersChange(freePlan.userLimit)}
+          />
+        ) : null}
+
+        {packages.map((pkg) => {
+          const line = lines.get(pkg.priceId);
+          const price = formatMoney(pkg.unitAmount, pkg.currency);
+          return (
+            <PackageStop
+              key={pkg.priceId}
+              label={formatCount(pkg.userLimit)}
+              // How many of this package the quote takes, when it takes more
+              // than one — otherwise the box just states what the package costs.
+              detail={
+                line && line.packages > 1
+                  ? `${line.packages} \u00d7 ${price}`
+                  : price
+              }
+              ariaLabel={t("{{size}}-user package", {
+                size: formatCount(pkg.userLimit),
+              })}
+              isSelected={line !== undefined}
+              onSelect={() => onUsersChange(pkg.userLimit)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const PackageStop: FC<{
+  label: string;
+  detail: string;
+  ariaLabel: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}> = ({ label, detail, ariaLabel, isSelected, onSelect }) => {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={isSelected}
+      aria-label={ariaLabel}
+      className={isSelected ? `${styles.stop} ${styles.selected}` : styles.stop}
+      data-testid="pricing-package-stop"
+      data-selected={isSelected}
+    >
+      <span className={styles.size}>
+        {label} {t("users")}
+      </span>
+      <span className={styles.detail}>{detail}</span>
+    </button>
   );
 };
 
