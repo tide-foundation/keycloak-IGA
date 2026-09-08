@@ -18,7 +18,7 @@ import { useAdminClient } from "../../admin-client.js";
 import { useParams } from "../../utils/useParams.js";
 import { useAlerts, useFetch } from "@keycloak/keycloak-ui-shared";
 import { License, TideLicenseHistory } from "./TideLicenseHistory";
-import { ScheduledTaskInfo, TideScheduledTasks } from "./TideScheduledTasks.js";
+import { TideAdvancedTroubleshooting } from "./TideAdvancedTroubleshooting.js";
 import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil.js";
 import { EnterprisePricing } from "./pricing/EnterprisePricing";
 import { ManageSubscriptionModal } from "./pricing/ManageSubscriptionModal";
@@ -61,24 +61,16 @@ function readRedirectUrl(response: unknown): string {
   throw new Error("The server did not return a redirect URL.");
 }
 
+// TIDECLOAK IMPLEMENTATION
+// Sentinel bodies returned by the CreateTideVendorKey endpoint (text/plain).
+// Any other body is the Stripe checkout URL, returned with HTTP 303.
+const VENDOR_KEY_CREATED = "CREATED";
+const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
+
 export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
-// TIDECLOAK IMPLEMENTATION
-// Sentinel bodies returned by the CreateTideVendorKey endpoint (text/plain).
-// Any other body is the Stripe checkout URL, returned with HTTP 303.
-const VENDOR_KEY_CREATED = "CREATED";
-const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
-
-// TIDECLOAK IMPLEMENTATION
-// Sentinel bodies returned by the CreateTideVendorKey endpoint (text/plain).
-// Any other body is the Stripe checkout URL, returned with HTTP 303.
-const VENDOR_KEY_CREATED = "CREATED";
-const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
-
-export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback }) => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
 
-  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskInfo[]>([]);
   const [activeLicenseDetails, setActiveLicenseDetails] = useState<string>("");
   const [licensingHistory, setLicensingHistory] = useState<License[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -104,7 +96,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
 
   const [key, setKey] = useState(0);
-  const { realm, realmRepresentation } = useRealm();
+  const { realm } = useRealm();
   const { addAlert, addError } = useAlerts();
   const form = useForm<ComponentRepresentation>({
     mode: "onChange",
@@ -264,10 +256,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
           signSettingsRequired = isLicenseActive;
         }
         // license renewed
-        if (signSettingsRequired)
-          await adminClient.tideAdmin.triggerLicenseRenewedEvent({
-            error: false,
-          });
+
 
         if (signSettingsRequired) {
           // Payment has landed — resume vendor key creation. No licensing tier
@@ -300,7 +289,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
         // TIDECLOAK IMPLEMENTATION: standard-logging slice — surface the
         // underlying error to the user instead of swallowing to console only.
         addError("tideLicenseRenewError", err);
-        await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: true });
         setIsLoading(false);
         setIsInitialCheckout(true);
         // If we reach here, it means the license is still not active after retries
@@ -375,49 +363,41 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     setKey(key + 1);
   };
 
-  const save = async (savedProvider?: ComponentRepresentation) => {
-    const updatedProvider = await adminClient.components.findOne({ id });
-    if (!updatedProvider) {
-      throw new Error(t("notFound"));
-    }
-
-    const p = savedProvider || getValues();
-    const config: ComponentRepresentation = { ...updatedProvider, ...p }
-    try {
-      await adminClient.components.update(
-        { id },
-        {
-          ...config,
-          providerType: KEY_PROVIDER_TYPE,
-        },
-      );
-      addAlert(t("saveProviderSuccess"), AlertVariant.success);
-      addAlert(t("newLicenseActivatedIdentityProvider"), AlertVariant.success);
-    } catch (error) {
-      addAlert(t("newLicenseErrorIdentityProvider"), AlertVariant.danger);
-    }
-  };
-
   // TIDECLOAK IMPLEMENTATION
   // Single entry point for vendor key creation. The backend decides what needs
   // to happen next from the current vendor key state and answers in the body:
   // "CREATED", "NEED_PAYMENT", or a Stripe checkout URL. `licensingTier` is
   // only read on the first call, when no key exists yet.
-  const createTideVendorKey = async (licensingTier?: string) => {
+  const createTideVendorKey = async (
+    licensingTier?: string,
+    requestedUsers?: number,
+  ) => {
     const data = new FormData();
     if (licensingTier) {
       data.append("licensingTier", licensingTier);
+    }
+    // The capacity the operator picked on the pricing card. Today's backend
+    // signature is CreateTideVendorKey(@FormParam("licensingTier")) only, so
+    // this extra form param is dropped server-side and checkout still buys the
+    // tier alone — see the note on handleChoosePlan. It is sent regardless so
+    // the count is not lost at the call site, and so the flow starts honouring
+    // the chosen capacity the moment the endpoint reads it.
+    if (requestedUsers !== undefined) {
+      data.append("requestedUsers", String(requestedUsers));
     }
     const result = await adminClient.tideAdmin.createTideVendorKey(data);
     return (result ?? "").trim();
   };
 
-  const handleCheckout = async (licensingTier: string) => {
+  const handleCheckout = async (
+    licensingTier: string,
+    requestedUsers?: number,
+  ) => {
     try {
       setIsInitialCheckout(true);
       setIsLoading(true);
 
-      const result = await createTideVendorKey(licensingTier);
+      const result = await createTideVendorKey(licensingTier, requestedUsers);
 
       if (result === VENDOR_KEY_CREATED) {
         // Key already exists — there is nothing to pay for.
@@ -582,21 +562,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
     }
   };
 
-  const getScheduledTasks = async () => {
-    try {
-      const response = await adminClient.tideAdmin.getScheduledTasks();
-      // Filter tasks based on criteria
-      const filteredTasks = response.filter(
-        (task) =>
-          task.taskName.startsWith("tide") && // Starts with 'tide'
-          task.taskName.endsWith(realmRepresentation!.id!), // Matches current realm
-      );
-      setScheduledTasks(filteredTasks); // Update state with filtered tasks
-    } catch (error) {
-      console.error("Failed to fetch scheduled tasks:", error);
-    }
-  };
-
   const fetchPendingLicense = async () => {
     if (watchConfigPendingGVRK === "") {
       return null;
@@ -634,10 +599,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       console.error("Failed to fetch license history:", error);
     }
   };
-
-  useEffect(() => {
-    void getScheduledTasks();
-  }, [realm, key]);
 
   useEffect(() => {
     if (!hasValue(watchConfigVVKId)) return;
@@ -852,10 +813,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = ({ refreshCallback })
       panel: <TideLicenseHistory licenseList={licensingHistory} />,
     },
     {
-      title: t("Scheduled Tasks"),
-      panel: (
-        <TideScheduledTasks scheduledTasks={scheduledTasks} refresh={refresh} />
-      ),
+      title: t("Advanced Troubleshooting"),
+      panel: <TideAdvancedTroubleshooting onCompleted={refresh} />,
     },
   ];
 

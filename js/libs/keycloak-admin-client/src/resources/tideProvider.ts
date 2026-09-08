@@ -186,6 +186,37 @@ export class TideProvider extends Resource<{ realm?: string }> {
     queryParamKeys: ["gvrk"],
   });
 
+  /* # TIDECLOAK IMPLEMENTATION
+   * Manual VRK lifecycle recovery, driven by the licensing tab's Advanced
+   * Troubleshooting panel. Each responds `text/plain` "Success" on HTTP 200 and
+   * otherwise throws an RFC 7807 problem (VENDOR_FORCE_*_FAILED); every guard
+   * runs before the component write, so a refusal leaves the realm untouched. */
+  public forceGenVrk = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/force-gen-vrk",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION — signs the pending VRK. */
+  public forceRotateVrk = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/force-rotate-vrk",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION — promotes the pending VRK to active. */
+  public forceSwitchVrk = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/force-switch-vrk",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION
+   * The realm's most recent VRK rotation failure as recorded server-side.
+   * Read-only despite the POST verb; answers `text/plain` with an empty body
+   * when no rotation has failed. */
+  public getLatestRotationError = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/latest-rotation-error",
+  });
+
   /* # TIDECLOAK IMPLEMENTATION */
   public getScheduledTasks = this.makeRequest<void, scheduledTaskInfo[]>({
     method: "GET",
