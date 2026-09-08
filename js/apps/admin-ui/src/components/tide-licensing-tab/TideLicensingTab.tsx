@@ -66,6 +66,29 @@ function readRedirectUrl(response: unknown): string {
 // Any other body is the Stripe checkout URL, returned with HTTP 303.
 const VENDOR_KEY_CREATED = "CREATED";
 const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
+/**
+ * Run a vendor redirect call and land its hosted page in a new tab.
+ *
+ * The tab is opened BEFORE the request is issued: a `window.open` after an
+ * await has lost user activation and the browser blocks it with no error. A
+ * blocked open returns null, so that case falls back to this tab rather than
+ * leaving the operator on a button that appears to do nothing.
+ */
+async function openRedirectInNewTab(
+  request: () => Promise<unknown>,
+): Promise<void> {
+  // Not "noopener": that makes window.open return null and we need the handle.
+  const tab = window.open("", "_blank");
+  if (tab) tab.opener = null;
+  try {
+    const url = readRedirectUrl(await request());
+    if (tab) tab.location.replace(url);
+    else window.location.href = url;
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
+}
 
 export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { t } = useTranslation();
@@ -257,7 +280,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
         }
         // license renewed
 
-
         if (signSettingsRequired) {
           // Payment has landed — resume vendor key creation. No licensing tier
           // is sent: the backend already has it from the initial call.
@@ -269,7 +291,10 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
             // genuinely haven't paid, the retry hands back a Stripe URL.
             setIsLoading(false);
             await refresh();
-            addAlert(t("Awaiting payment confirmation, please try again shortly."), AlertVariant.warning);
+            addAlert(
+              t("Awaiting payment confirmation, please try again shortly."),
+              AlertVariant.warning,
+            );
             return;
           }
 
@@ -410,13 +435,15 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
         // Awaiting payment, but the backend has no checkout URL to send us to.
         setIsLoading(false);
         await refresh();
-        addAlert(t("Awaiting payment confirmation, please try again shortly."), AlertVariant.warning);
+        addAlert(
+          t("Awaiting payment confirmation, please try again shortly."),
+          AlertVariant.warning,
+        );
         return;
       }
 
       // Anything else is the Stripe checkout URL (HTTP 303).
       window.location.href = result;
-
     } catch (err) {
       await adminClient.tideAdmin.reAddTideKey();
       setIsLoading(false);
@@ -536,10 +563,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
    */
   const handleAddPaymentMethod = async () => {
     try {
-      const form = new FormData();
-      form.append("returnUrl", window.location.href);
-      const response = await adminClient.tideAdmin.addPaymentMethod(form);
-      window.location.href = readRedirectUrl(response);
+      await openRedirectInNewTab(() => {
+        const form = new FormData();
+        form.append("returnUrl", window.location.href);
+        return adminClient.tideAdmin.addPaymentMethod(form);
+      });
     } catch (error) {
       addError("Could not start payment method collection", error);
     }
@@ -550,11 +578,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       const redirectUrl = window.location.href.endsWith("/")
         ? window.location.href.slice(0, -1)
         : window.location.href;
-      const form = new FormData();
-      form.append("redirectUrl", redirectUrl);
-      const response =
-        await adminClient.tideAdmin.createCustomerPortalSession(form);
-      window.location.href = readRedirectUrl(response);
+      await openRedirectInNewTab(() => {
+        const form = new FormData();
+        form.append("redirectUrl", redirectUrl);
+        return adminClient.tideAdmin.createCustomerPortalSession(form);
+      });
     } catch (error) {
       // Previously uncaught: a portal session the payer refused left the
       // button looking inert with nothing said.

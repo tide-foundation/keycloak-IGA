@@ -53,3 +53,48 @@ function gcd(a: number, b: number): number {
   }
   return x;
 }
+
+/**
+ * The package sizes the track is built from: ascending, de-duplicated, and
+ * including the free plan so the axis reads "free up to here, priced above".
+ */
+export function capacityStops(
+  tiers: PricingTier[],
+  freeLimit?: number,
+): number[] {
+  const limits = tiers.map((t) => t.userLimit);
+  if (freeLimit && freeLimit > 0) limits.push(freeLimit);
+  return [...new Set(limits.filter((n) => Number.isFinite(n) && n > 0))].sort(
+    (a, b) => a - b,
+  );
+}
+
+/**
+ * POSITION SPACE. Package sizes span orders of magnitude, so a track that maps
+ * value to position linearly puts every small package in the leftmost few
+ * percent and makes the label under the thumb a lie. Instead each adjacent pair
+ * of package sizes owns one equal segment of the track, interpolated linearly
+ * inside it: position `i` is exactly `stops[i]`, and every stop is evenly
+ * spaced, so a thumb under a label really does mean that package size.
+ */
+export function positionToUsers(position: number, stops: number[]): number {
+  if (stops.length === 0) return 0;
+  const last = stops.length - 1;
+  if (last === 0) return stops[0]!;
+  const clamped = Math.min(Math.max(position, 0), last);
+  const index = Math.min(Math.floor(clamped), last - 1);
+  const fraction = clamped - index;
+  const from = stops[index]!;
+  return Math.round(from + (stops[index + 1]! - from) * fraction);
+}
+
+/** Inverse of {@link positionToUsers}; counts outside the track pin to an end. */
+export function usersToPosition(users: number, stops: number[]): number {
+  const last = stops.length - 1;
+  if (last <= 0) return 0;
+  if (users <= stops[0]!) return 0;
+  if (users >= stops[last]!) return last;
+  const next = stops.findIndex((stop) => stop > users);
+  const from = stops[next - 1]!;
+  return next - 1 + (users - from) / (stops[next]! - from);
+}
