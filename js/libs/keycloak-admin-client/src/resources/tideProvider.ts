@@ -358,7 +358,10 @@ export class TideProvider extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
-  public getSubscriptionStatus = this.makeRequest<void, Response>({
+  // Responds `text/plain`. Either a subscription status resolved through
+  // Midgard, or the literal "awaiting_payment" when the vendor key exists but
+  // payment has not landed yet.
+  public getSubscriptionStatus = this.makeRequest<void, string>({
     method: "GET",
     path: "/vendorResources/getSubscriptionStatus",
   });

@@ -67,6 +67,12 @@ function readRedirectUrl(response: unknown): string {
 const VENDOR_KEY_CREATED = "CREATED";
 const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
 
+// TIDECLOAK IMPLEMENTATION
+// getSubscriptionStatus reports this when the vendor key exists but Stripe has
+// not confirmed payment. The licensing tab treats it as "creation started but
+// unfinished" and offers to resume rather than offering a fresh purchase.
+const SUBSCRIPTION_AWAITING_PAYMENT = "awaiting_payment";
+
 export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
@@ -93,6 +99,13 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     null,
   );
   const [needsCard, setNeedsCard] = useState(false);
+  // The subscription status behind an unlicensed realm, or null when it has not
+  // been read yet / could not be read. Only consulted while `config.vvkId` is
+  // blank, i.e. on the branch that would otherwise offer the pricing card.
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+    null,
+  );
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
 
   const [key, setKey] = useState(0);
@@ -389,6 +402,32 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     return (result ?? "").trim();
   };
 
+  // TIDECLOAK IMPLEMENTATION
+  // Shared handling of a CreateTideVendorKey response body, used by both the
+  // first-time purchase and the resume path.
+  const applyVendorKeyResult = async (result: string) => {
+    if (result === VENDOR_KEY_CREATED) {
+      // Key already exists — there is nothing to pay for.
+      setIsLoading(false);
+      await refresh();
+      return;
+    }
+
+    if (result === VENDOR_KEY_NEEDS_PAYMENT) {
+      // Awaiting payment, but the backend has no checkout URL to send us to.
+      setIsLoading(false);
+      await refresh();
+      addAlert(
+        t("Awaiting payment confirmation, please try again shortly."),
+        AlertVariant.warning,
+      );
+      return;
+    }
+
+    // Anything else is the Stripe checkout URL (HTTP 303).
+    window.location.href = result;
+  };
+
   const handleCheckout = async (
     licensingTier: string,
     requestedUsers?: number,
@@ -397,32 +436,35 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       setIsInitialCheckout(true);
       setIsLoading(true);
 
-      const result = await createTideVendorKey(licensingTier, requestedUsers);
-
-      if (result === VENDOR_KEY_CREATED) {
-        // Key already exists — there is nothing to pay for.
-        setIsLoading(false);
-        await refresh();
-        return;
-      }
-
-      if (result === VENDOR_KEY_NEEDS_PAYMENT) {
-        // Awaiting payment, but the backend has no checkout URL to send us to.
-        setIsLoading(false);
-        await refresh();
-        addAlert(t("Awaiting payment confirmation, please try again shortly."), AlertVariant.warning);
-        return;
-      }
-
-      // Anything else is the Stripe checkout URL (HTTP 303).
-      window.location.href = result;
-
+      await applyVendorKeyResult(
+        await createTideVendorKey(licensingTier, requestedUsers),
+      );
     } catch (err) {
       await adminClient.tideAdmin.reAddTideKey();
       setIsLoading(false);
       await refresh();
       addAlert(t("Error with checkout, try again"), AlertVariant.danger);
       throw err;
+    }
+  };
+
+  /**
+   * "Continue License Creation" — the realm already has a vendor key awaiting
+   * payment, so there is nothing to choose. No licensing tier is sent: the
+   * backend is past the NotCreated branch and keeps the tier from the first
+   * call. The usual outcome is a fresh Stripe checkout URL to redirect to.
+   */
+  const handleContinueLicenseCreation = async () => {
+    try {
+      setIsInitialCheckout(true);
+      setIsLoading(true);
+      await applyVendorKeyResult(await createTideVendorKey());
+    } catch (err) {
+      // Deliberately no reAddTideKey() here, unlike handleCheckout: that undoes
+      // a key this flow did not create, and the key is mid-purchase.
+      setIsLoading(false);
+      await refresh();
+      addError("Could not continue license creation", err);
     }
   };
 
@@ -605,9 +647,38 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     void checkPayerCapabilities();
   }, [watchConfigVVKId, key]);
 
+  // TIDECLOAK IMPLEMENTATION
+  // Only asked while the realm is unlicensed: a licensed realm renders the
+  // details branch and never reaches the pricing card this guards.
+  useEffect(() => {
+    const readSubscriptionStatus = async () => {
+      if (hasValue(watchConfigVVKId)) {
+        setSubscriptionStatus(null);
+        return;
+      }
+      setIsCheckingSubscription(true);
+      try {
+        const status = await adminClient.tideAdmin.getSubscriptionStatus();
+        setSubscriptionStatus((status ?? "").toString().trim());
+      } catch (error) {
+        // 400 when the realm has no tide-vendor-key component, or the payer
+        // could not be reached. Neither is a reason to block the purchase
+        // path, so fall through to the pricing card.
+        console.error("Failed to read the subscription status:", error);
+        setSubscriptionStatus(null);
+      } finally {
+        setIsCheckingSubscription(false);
+      }
+    };
+    void readSubscriptionStatus();
+  }, [watchConfigVVKId, key]);
+
   useEffect(() => {
     void getLicenseHistory();
   }, [watchConfigPayerPub, watchConfigPendingGVRK, watchConfigVVKId, key]);
+
+  const isAwaitingPayment =
+    subscriptionStatus === SUBSCRIPTION_AWAITING_PAYMENT;
 
   const isConfigUnsecured =
     hasTideIdpPresent &&
@@ -764,6 +835,30 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                     {t("Retry")}
                   </Button>
                 </div>
+              </FormGroup>
+            </>
+          ) : isCheckingSubscription ? (
+            <Spinner size="xl" />
+          ) : isAwaitingPayment ? (
+            // Creation was already started and is waiting on Stripe. Offering
+            // the pricing card here would invite a second purchase, so the only
+            // action is to resume the one in flight.
+            <>
+              <FormGroup fieldId="awaiting-payment">
+                <Text>
+                  {t(
+                    "License creation has started but payment is not complete.",
+                  )}
+                </Text>
+              </FormGroup>
+              <FormGroup fieldId="continue-license-creation">
+                <Button
+                  variant="primary"
+                  data-testid="continue-license-creation"
+                  onClick={handleContinueLicenseCreation}
+                >
+                  {t("Continue License Creation")}
+                </Button>
               </FormGroup>
             </>
           ) : (
