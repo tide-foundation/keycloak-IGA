@@ -36,7 +36,14 @@
 .selected {
   border-color: var(--pf-v5-global--primary-color--100);
   box-shadow: inset 0 0 0 1px var(--pf-v5-global--primary-color--100);
-  background-color: var(--pf-v5-global--palette--blue-50);
+  /*
+   * A surface token, not a fixed palette blue: palette--blue-50 is a light
+   * tint that does not follow the theme, so on the dark console the selected
+   * box came out near-white against its dark neighbours. --BackgroundColor--300
+   * is one step off the box background in whichever theme is active, which
+   * keeps the emphasis subtle — the border and inset shadow already carry it.
+   */
+  background-color: var(--pf-v5-global--BackgroundColor--300);
   color: var(--pf-v5-global--Color--100);
 }
 

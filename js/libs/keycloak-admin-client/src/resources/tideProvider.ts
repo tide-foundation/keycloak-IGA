@@ -31,7 +31,14 @@ interface License {
 /* TIDECLOAK IMPLEMENTATION */
 interface licenseDetails {
   currentUserAcc: string;
+  /** When the wallet/subscription itself lapses. */
   expiryDate: number;
+  /**
+   * When the CURRENT VRK's authorizer pack lapses — a different clock from
+   * `expiryDate`. Merged into the payer's JSON by the endpoint, and OMITTED
+   * rather than sent as 0 when the expiry could not be resolved.
+   */
+  vrkExpiry?: number;
 }
 
 /* TIDECLOAK IMPLEMENTATION */

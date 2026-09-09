@@ -96,6 +96,30 @@ async function openRedirectInNewTab(
 // unfinished" and offers to resume rather than offering a fresh purchase.
 const SUBSCRIPTION_AWAITING_PAYMENT = "awaiting_payment";
 
+// TIDECLOAK IMPLEMENTATION
+// Render an expiry as a full local date and time ("9 November 2026 at 4:56 pm")
+// rather than the old UTC dd/mm/yy, which was ambiguous about both the century
+// and the timezone.
+//
+// The payer sends `expiryDate` in seconds, but `vrkExpiry` comes from
+// GetAuthorizerPackExpiry and is not guaranteed to use the same unit, so the
+// unit is inferred from magnitude the way the activity log does: 11 digits or
+// more is already milliseconds.
+function formatExpiry(epoch: number | null | undefined): string {
+  if (epoch === null || epoch === undefined) return "—";
+  const n = Number(epoch);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  const date = new Date(n >= 1e11 ? n : n * 1000);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
@@ -140,6 +164,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { reset, control } = form;
   const [currentUsers, setCurrentUsers] = useState<string>("0");
   const [licenseExpiry, setLicenseExpiry] = useState<string>("0");
+  // The current VRK's own expiry, distinct from the wallet's. "—" while unknown
+  // or when the endpoint omitted it.
+  const [vrkExpiry, setVrkExpiry] = useState<string>("—");
   const [licenseMaxUserAcc, setLicenseMaxUserAcc] = useState<string>("0");
   const { id } = useParams<{ id: string }>();
 
@@ -366,15 +393,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     const fetchLicenseDetails = async () => {
       if (hasValue(activeLicenseDetails)) {
         const response = await adminClient.tideAdmin.getLicenseDetails();
-        const date = new Date(response.expiryDate * 1000);
-        const day = date.getUTCDate().toString().padStart(2, "0");
-        const month = (date.getUTCMonth() + 1).toString().padStart(2, "0"); // Months are zero-based
-        const year = date.getUTCFullYear().toString().slice(-2);
-        const formattedDate = `${day}/${month}/${year}`;
 
         setCurrentUsers(response.currentUserAcc);
         setLicenseMaxUserAcc(watchConfigMaxUserAcc);
-        setLicenseExpiry(formattedDate);
+        setLicenseExpiry(formatExpiry(response.expiryDate));
+        setVrkExpiry(formatExpiry(response.vrkExpiry));
       }
     };
     if (hasValue(watchConfigVVKId)) {
@@ -674,11 +697,12 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   }, [watchConfigVVKId, key]);
 
   // TIDECLOAK IMPLEMENTATION
-  // Only asked while the realm is unlicensed: a licensed realm renders the
-  // details branch and never reaches the pricing card this guards.
+  // Only asked while the realm is unlicensed AND nothing else already settles
+  // the question: a licensed realm renders the details branch, and a pending
+  // GVRK already proves creation is in flight. Both skip the round trip.
   useEffect(() => {
     const readSubscriptionStatus = async () => {
-      if (hasValue(watchConfigVVKId)) {
+      if (hasValue(watchConfigVVKId) || hasValue(watchConfigPendingGVRK)) {
         setSubscriptionStatus(null);
         return;
       }
@@ -697,7 +721,7 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       }
     };
     void readSubscriptionStatus();
-  }, [watchConfigVVKId, key]);
+  }, [watchConfigVVKId, watchConfigPendingGVRK, key]);
 
   useEffect(() => {
     void getLicenseHistory();
@@ -705,6 +729,35 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
 
   const isAwaitingPayment =
     subscriptionStatus === SUBSCRIPTION_AWAITING_PAYMENT;
+
+  // TIDECLOAK IMPLEMENTATION
+  // A pending GVRK means a vendor key is half-built: creation got as far as
+  // generating the key but never completed. That is decisive on its own — no
+  // need to ask the payer for a subscription status to know a purchase is
+  // already in flight.
+  const isVendorKeyHalfCreated = hasValue(watchConfigPendingGVRK);
+
+  // Shown wherever creation is already under way. The pricing card is
+  // deliberately not offered in these states: picking a plan again would start
+  // a second purchase on top of the one that is unfinished.
+  const continueLicenseCreationPanel = (
+    <>
+      <FormGroup fieldId="awaiting-payment">
+        <Text>
+          {t("License creation has started but is not complete.")}
+        </Text>
+      </FormGroup>
+      <FormGroup fieldId="continue-license-creation">
+        <Button
+          variant="primary"
+          data-testid="continue-license-creation"
+          onClick={handleContinueLicenseCreation}
+        >
+          {t("Continue License Creation")}
+        </Button>
+      </FormGroup>
+    </>
+  );
 
   const isConfigUnsecured =
     hasTideIdpPresent &&
@@ -763,10 +816,25 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
               </FormGroup>
 
               <FormGroup
-                label={t("Expiry Date")}
+                label={t("Current VRK Expiry")}
                 labelIcon={
                   <HelpItem
-                    helpText={"The expiry date of this active license"}
+                    helpText={
+                      "When the current VRK's authorizer pack lapses. This is a separate clock from the wallet expiry."
+                    }
+                    fieldLabelId={"LicenseCurrentVRKExpiry"}
+                  />
+                }
+                fieldId="license-current-vrk-expiry"
+              >
+                <Label>{vrkExpiry}</Label>
+              </FormGroup>
+
+              <FormGroup
+                label={t("Wallet Expiry")}
+                labelIcon={
+                  <HelpItem
+                    helpText={"When the wallet backing this license expires"}
                     fieldLabelId={"LicenseExpiry"}
                   />
                 }
@@ -863,30 +931,14 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                 </div>
               </FormGroup>
             </>
+          ) : isVendorKeyHalfCreated ? (
+            // Checked before the subscription status: a pending GVRK settles it
+            // on its own, so there is nothing to wait on the payer for.
+            continueLicenseCreationPanel
           ) : isCheckingSubscription ? (
             <Spinner size="xl" />
           ) : isAwaitingPayment ? (
-            // Creation was already started and is waiting on Stripe. Offering
-            // the pricing card here would invite a second purchase, so the only
-            // action is to resume the one in flight.
-            <>
-              <FormGroup fieldId="awaiting-payment">
-                <Text>
-                  {t(
-                    "License creation has started but payment is not complete.",
-                  )}
-                </Text>
-              </FormGroup>
-              <FormGroup fieldId="continue-license-creation">
-                <Button
-                  variant="primary"
-                  data-testid="continue-license-creation"
-                  onClick={handleContinueLicenseCreation}
-                >
-                  {t("Continue License Creation")}
-                </Button>
-              </FormGroup>
-            </>
+            continueLicenseCreationPanel
           ) : (
             <>
               <FormGroup fieldId="no-active-license">
