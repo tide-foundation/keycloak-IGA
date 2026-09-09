@@ -1,0 +1,53 @@
+/*
+ * The package stops under the capacity slider: one box per buyable package,
+ * with the boxes the current quote is actually made of lit up. The row is the
+ * slider's legend, so it has to read as "these are the sizes, and THESE are the
+ * ones you are getting" at a glance — a row of bare numbers did not.
+ */
+.stops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-v5-global--spacer--sm);
+}
+
+.stop {
+  flex: 1 1 7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pf-v5-global--spacer--xs);
+  padding: var(--pf-v5-global--spacer--sm);
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  background-color: var(--pf-v5-global--BackgroundColor--100);
+  color: var(--pf-v5-global--Color--200);
+  cursor: pointer;
+  text-align: center;
+}
+
+.stop:hover {
+  border-color: var(--pf-v5-global--primary-color--100);
+}
+
+/*
+ * The selected emphasis is drawn with an inset shadow rather than a thicker
+ * border so lighting a box up does not resize it and shuffle the row.
+ */
+.selected {
+  border-color: var(--pf-v5-global--primary-color--100);
+  box-shadow: inset 0 0 0 1px var(--pf-v5-global--primary-color--100);
+  background-color: var(--pf-v5-global--palette--blue-50);
+  color: var(--pf-v5-global--Color--100);
+}
+
+.size {
+  font-weight: var(--pf-v5-global--FontWeight--bold);
+  font-size: var(--pf-v5-global--FontSize--md);
+  color: var(--pf-v5-global--Color--100);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  font-variant-numeric: tabular-nums;
+}
