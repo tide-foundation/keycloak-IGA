@@ -100,6 +100,17 @@ export function formatCount(value: number): string {
 }
 
 /**
+ * A user count abbreviated for the slider axis: `200000` -> `"200K"`. Full
+ * counts are too wide to sit side by side under the track.
+ */
+export function formatCompactCount(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+/**
  * Billing interval as a suffix: `"month"` -> `"/ month"`. Passed through from
  * Stripe rather than assumed, so a yearly Price renders correctly too.
  */

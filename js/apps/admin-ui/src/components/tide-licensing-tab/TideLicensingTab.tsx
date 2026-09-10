@@ -18,7 +18,7 @@ import { useAdminClient } from "../../admin-client.js";
 import { useParams } from "../../utils/useParams.js";
 import { useAlerts, useFetch } from "@keycloak/keycloak-ui-shared";
 import { License, TideLicenseHistory } from "./TideLicenseHistory";
-import { ScheduledTaskInfo, TideScheduledTasks } from "./TideScheduledTasks.js";
+import { TideAdvancedTroubleshooting } from "./TideAdvancedTroubleshooting.js";
 import { findTideComponent } from "../../identity-providers/utils/SignSettingsUtil.js";
 import { EnterprisePricing } from "./pricing/EnterprisePricing";
 import { ManageSubscriptionModal } from "./pricing/ManageSubscriptionModal";
@@ -61,11 +61,69 @@ function readRedirectUrl(response: unknown): string {
   throw new Error("The server did not return a redirect URL.");
 }
 
+// TIDECLOAK IMPLEMENTATION
+// Sentinel bodies returned by the CreateTideVendorKey endpoint (text/plain).
+// Any other body is the Stripe checkout URL, returned with HTTP 303.
+const VENDOR_KEY_CREATED = "CREATED";
+const VENDOR_KEY_NEEDS_PAYMENT = "NEED_PAYMENT";
+/**
+ * Run a vendor redirect call and land its hosted page in a new tab.
+ *
+ * The tab is opened BEFORE the request is issued: a `window.open` after an
+ * await has lost user activation and the browser blocks it with no error. A
+ * blocked open returns null, so that case falls back to this tab rather than
+ * leaving the operator on a button that appears to do nothing.
+ */
+async function openRedirectInNewTab(
+  request: () => Promise<unknown>,
+): Promise<void> {
+  // Not "noopener": that makes window.open return null and we need the handle.
+  const tab = window.open("", "_blank");
+  if (tab) tab.opener = null;
+  try {
+    const url = readRedirectUrl(await request());
+    if (tab) tab.location.replace(url);
+    else window.location.href = url;
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
+}
+
+// TIDECLOAK IMPLEMENTATION
+// getSubscriptionStatus reports this when the vendor key exists but Stripe has
+// not confirmed payment. The licensing tab treats it as "creation started but
+// unfinished" and offers to resume rather than offering a fresh purchase.
+const SUBSCRIPTION_AWAITING_PAYMENT = "awaiting_payment";
+
+// TIDECLOAK IMPLEMENTATION
+// Render an expiry as a full local date and time ("9 November 2026 at 4:56 pm")
+// rather than the old UTC dd/mm/yy, which was ambiguous about both the century
+// and the timezone.
+//
+// The payer sends `expiryDate` in seconds, but `vrkExpiry` comes from
+// GetAuthorizerPackExpiry and is not guaranteed to use the same unit, so the
+// unit is inferred from magnitude the way the activity log does: 11 digits or
+// more is already milliseconds.
+function formatExpiry(epoch: number | null | undefined): string {
+  if (epoch === null || epoch === undefined) return "—";
+  const n = Number(epoch);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  const date = new Date(n >= 1e11 ? n : n * 1000);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { t } = useTranslation();
   const { adminClient } = useAdminClient();
 
-  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskInfo[]>([]);
   const [activeLicenseDetails, setActiveLicenseDetails] = useState<string>("");
   const [licensingHistory, setLicensingHistory] = useState<License[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -88,10 +146,17 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     null,
   );
   const [needsCard, setNeedsCard] = useState(false);
+  // The subscription status behind an unlicensed realm, or null when it has not
+  // been read yet / could not be read. Only consulted while `config.vvkId` is
+  // blank, i.e. on the branch that would otherwise offer the pricing card.
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+    null,
+  );
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
   const [missingSigKeys, setMissingSigKeys] = useState<string[]>([]);
 
   const [key, setKey] = useState(0);
-  const { realm, realmRepresentation } = useRealm();
+  const { realm } = useRealm();
   const { addAlert, addError } = useAlerts();
   const form = useForm<ComponentRepresentation>({
     mode: "onChange",
@@ -99,6 +164,9 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   const { reset, control } = form;
   const [currentUsers, setCurrentUsers] = useState<string>("0");
   const [licenseExpiry, setLicenseExpiry] = useState<string>("0");
+  // The current VRK's own expiry, distinct from the wallet's. "—" while unknown
+  // or when the endpoint omitted it.
+  const [vrkExpiry, setVrkExpiry] = useState<string>("—");
   const [licenseMaxUserAcc, setLicenseMaxUserAcc] = useState<string>("0");
   const { id } = useParams<{ id: string }>();
 
@@ -251,13 +319,31 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
           signSettingsRequired = isLicenseActive;
         }
         // license renewed
-        if (signSettingsRequired)
-          await adminClient.tideAdmin.triggerLicenseRenewedEvent({
-            error: false,
-          });
 
         if (signSettingsRequired) {
-          await adminClient.tideAdmin.generateInitialKey();
+          // Payment has landed — resume vendor key creation. No licensing tier
+          // is sent: the backend already has it from the initial call.
+          const result = await createTideVendorKey();
+
+          if (result === VENDOR_KEY_NEEDS_PAYMENT) {
+            // Not a failure: the Tide network hasn't collected payment from
+            // Stripe yet. Leave the key alone and let the user retry — if they
+            // genuinely haven't paid, the retry hands back a Stripe URL.
+            setIsLoading(false);
+            await refresh();
+            addAlert(
+              t("Awaiting payment confirmation, please try again shortly."),
+              AlertVariant.warning,
+            );
+            return;
+          }
+
+          if (result !== VENDOR_KEY_CREATED) {
+            // A fresh Stripe checkout URL was issued — send the user back.
+            window.location.href = result;
+            return;
+          }
+
           await refresh(); // refresh current page
           setIsLoading(false); // Loading is done
           setIsPendingResign(false);
@@ -268,7 +354,6 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
         // TIDECLOAK IMPLEMENTATION: standard-logging slice — surface the
         // underlying error to the user instead of swallowing to console only.
         addError("tideLicenseRenewError", err);
-        await adminClient.tideAdmin.triggerLicenseRenewedEvent({ error: true });
         setIsLoading(false);
         setIsInitialCheckout(true);
         // If we reach here, it means the license is still not active after retries
@@ -308,15 +393,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     const fetchLicenseDetails = async () => {
       if (hasValue(activeLicenseDetails)) {
         const response = await adminClient.tideAdmin.getLicenseDetails();
-        const date = new Date(response.expiryDate * 1000);
-        const day = date.getUTCDate().toString().padStart(2, "0");
-        const month = (date.getUTCMonth() + 1).toString().padStart(2, "0"); // Months are zero-based
-        const year = date.getUTCFullYear().toString().slice(-2);
-        const formattedDate = `${day}/${month}/${year}`;
 
         setCurrentUsers(response.currentUserAcc);
         setLicenseMaxUserAcc(watchConfigMaxUserAcc);
-        setLicenseExpiry(formattedDate);
+        setLicenseExpiry(formatExpiry(response.expiryDate));
+        setVrkExpiry(formatExpiry(response.vrkExpiry));
       }
     };
     if (hasValue(watchConfigVVKId)) {
@@ -343,34 +424,95 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
     setKey(key + 1);
   };
 
-  /**
-   * @param users how many users the operator asked for. Optional: omitted takes
-   *        the plan's single price. The server quotes this count and resolves
-   *        the packages itself, so the browser never names a price or an
-   *        amount.
-   */
-  const handleCheckout = async (licensingTier: string, users?: number) => {
+  // TIDECLOAK IMPLEMENTATION
+  // Single entry point for vendor key creation. The backend decides what needs
+  // to happen next from the current vendor key state and answers in the body:
+  // "CREATED", "NEED_PAYMENT", or a Stripe checkout URL. `licensingTier` is
+  // only read on the first call, when no key exists yet.
+  const createTideVendorKey = async (
+    licensingTier?: string,
+    requestedUsers?: number,
+  ) => {
+    const data = new FormData();
+    if (licensingTier) {
+      data.append("licensingTier", licensingTier);
+    }
+    // The capacity the operator picked on the pricing card. Today's backend
+    // signature is CreateTideVendorKey(@FormParam("licensingTier")) only, so
+    // this extra form param is dropped server-side and checkout still buys the
+    // tier alone — see the note on handleChoosePlan. It is sent regardless so
+    // the count is not lost at the call site, and so the flow starts honouring
+    // the chosen capacity the moment the endpoint reads it.
+    if (requestedUsers !== undefined) {
+      data.append("requestedUsers", String(requestedUsers));
+    }
+    const result = await adminClient.tideAdmin.createTideVendorKey(data);
+    return (result ?? "").trim();
+  };
+
+  // TIDECLOAK IMPLEMENTATION
+  // Shared handling of a CreateTideVendorKey response body, used by both the
+  // first-time purchase and the resume path.
+  const applyVendorKeyResult = async (result: string) => {
+    if (result === VENDOR_KEY_CREATED) {
+      // Key already exists — there is nothing to pay for.
+      setIsLoading(false);
+      await refresh();
+      return;
+    }
+
+    if (result === VENDOR_KEY_NEEDS_PAYMENT) {
+      // Awaiting payment, but the backend has no checkout URL to send us to.
+      setIsLoading(false);
+      await refresh();
+      addAlert(
+        t("Awaiting payment confirmation, please try again shortly."),
+        AlertVariant.warning,
+      );
+      return;
+    }
+
+    // Anything else is the Stripe checkout URL (HTTP 303).
+    window.location.href = result;
+  };
+
+  const handleCheckout = async (
+    licensingTier: string,
+    requestedUsers?: number,
+  ) => {
     try {
       setIsInitialCheckout(true);
       setIsLoading(true);
-      const redirectUrl = window.location.href.endsWith("/")
-        ? window.location.href.slice(0, -1)
-        : window.location.href;
 
-      const data = new FormData();
-      data.append("redirectUrl", redirectUrl);
-      data.append("licensingTier", licensingTier);
-      if (users !== undefined) data.append("users", String(users));
-
-      const response =
-        await adminClient.tideAdmin.createStripeCheckoutSession(data);
-      window.location.href = readRedirectUrl(response);
+      await applyVendorKeyResult(
+        await createTideVendorKey(licensingTier, requestedUsers),
+      );
     } catch (err) {
       await adminClient.tideAdmin.reAddTideKey();
       setIsLoading(false);
       await refresh();
       addAlert(t("Error with checkout, try again"), AlertVariant.danger);
       throw err;
+    }
+  };
+
+  /**
+   * "Continue License Creation" — the realm already has a vendor key awaiting
+   * payment, so there is nothing to choose. No licensing tier is sent: the
+   * backend is past the NotCreated branch and keeps the tier from the first
+   * call. The usual outcome is a fresh Stripe checkout URL to redirect to.
+   */
+  const handleContinueLicenseCreation = async () => {
+    try {
+      setIsInitialCheckout(true);
+      setIsLoading(true);
+      await applyVendorKeyResult(await createTideVendorKey());
+    } catch (err) {
+      // Deliberately no reAddTideKey() here, unlike handleCheckout: that undoes
+      // a key this flow did not create, and the key is mid-purchase.
+      setIsLoading(false);
+      await refresh();
+      addError("Could not continue license creation", err);
     }
   };
 
@@ -484,10 +626,11 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
    */
   const handleAddPaymentMethod = async () => {
     try {
-      const form = new FormData();
-      form.append("returnUrl", window.location.href);
-      const response = await adminClient.tideAdmin.addPaymentMethod(form);
-      window.location.href = readRedirectUrl(response);
+      await openRedirectInNewTab(() => {
+        const form = new FormData();
+        form.append("returnUrl", window.location.href);
+        return adminClient.tideAdmin.addPaymentMethod(form);
+      });
     } catch (error) {
       addError("Could not start payment method collection", error);
     }
@@ -498,30 +641,15 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       const redirectUrl = window.location.href.endsWith("/")
         ? window.location.href.slice(0, -1)
         : window.location.href;
-      const form = new FormData();
-      form.append("redirectUrl", redirectUrl);
-      const response =
-        await adminClient.tideAdmin.createCustomerPortalSession(form);
-      window.location.href = readRedirectUrl(response);
+      await openRedirectInNewTab(() => {
+        const form = new FormData();
+        form.append("redirectUrl", redirectUrl);
+        return adminClient.tideAdmin.createCustomerPortalSession(form);
+      });
     } catch (error) {
       // Previously uncaught: a portal session the payer refused left the
       // button looking inert with nothing said.
       addError("Could not open the subscription portal", error);
-    }
-  };
-
-  const getScheduledTasks = async () => {
-    try {
-      const response = await adminClient.tideAdmin.getScheduledTasks();
-      // Filter tasks based on criteria
-      const filteredTasks = response.filter(
-        (task) =>
-          task.taskName.startsWith("tide") && // Starts with 'tide'
-          task.taskName.endsWith(realmRepresentation!.id!), // Matches current realm
-      );
-      setScheduledTasks(filteredTasks); // Update state with filtered tasks
-    } catch (error) {
-      console.error("Failed to fetch scheduled tasks:", error);
     }
   };
 
@@ -564,17 +692,72 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
   };
 
   useEffect(() => {
-    void getScheduledTasks();
-  }, [realm, key]);
-
-  useEffect(() => {
     if (!hasValue(watchConfigVVKId)) return;
     void checkPayerCapabilities();
   }, [watchConfigVVKId, key]);
 
+  // TIDECLOAK IMPLEMENTATION
+  // Only asked while the realm is unlicensed AND nothing else already settles
+  // the question: a licensed realm renders the details branch, and a pending
+  // GVRK already proves creation is in flight. Both skip the round trip.
+  useEffect(() => {
+    const readSubscriptionStatus = async () => {
+      if (hasValue(watchConfigVVKId) || hasValue(watchConfigPendingGVRK)) {
+        setSubscriptionStatus(null);
+        return;
+      }
+      setIsCheckingSubscription(true);
+      try {
+        const status = await adminClient.tideAdmin.getSubscriptionStatus();
+        setSubscriptionStatus((status ?? "").toString().trim());
+      } catch (error) {
+        // 400 when the realm has no tide-vendor-key component, or the payer
+        // could not be reached. Neither is a reason to block the purchase
+        // path, so fall through to the pricing card.
+        console.error("Failed to read the subscription status:", error);
+        setSubscriptionStatus(null);
+      } finally {
+        setIsCheckingSubscription(false);
+      }
+    };
+    void readSubscriptionStatus();
+  }, [watchConfigVVKId, watchConfigPendingGVRK, key]);
+
   useEffect(() => {
     void getLicenseHistory();
   }, [watchConfigPayerPub, watchConfigPendingGVRK, watchConfigVVKId, key]);
+
+  const isAwaitingPayment =
+    subscriptionStatus === SUBSCRIPTION_AWAITING_PAYMENT;
+
+  // TIDECLOAK IMPLEMENTATION
+  // A pending GVRK means a vendor key is half-built: creation got as far as
+  // generating the key but never completed. That is decisive on its own — no
+  // need to ask the payer for a subscription status to know a purchase is
+  // already in flight.
+  const isVendorKeyHalfCreated = hasValue(watchConfigPendingGVRK);
+
+  // Shown wherever creation is already under way. The pricing card is
+  // deliberately not offered in these states: picking a plan again would start
+  // a second purchase on top of the one that is unfinished.
+  const continueLicenseCreationPanel = (
+    <>
+      <FormGroup fieldId="awaiting-payment">
+        <Text>
+          {t("License creation has started but is not complete.")}
+        </Text>
+      </FormGroup>
+      <FormGroup fieldId="continue-license-creation">
+        <Button
+          variant="primary"
+          data-testid="continue-license-creation"
+          onClick={handleContinueLicenseCreation}
+        >
+          {t("Continue License Creation")}
+        </Button>
+      </FormGroup>
+    </>
+  );
 
   const isConfigUnsecured =
     hasTideIdpPresent &&
@@ -633,10 +816,25 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
               </FormGroup>
 
               <FormGroup
-                label={t("Expiry Date")}
+                label={t("Current VRK Expiry")}
                 labelIcon={
                   <HelpItem
-                    helpText={"The expiry date of this active license"}
+                    helpText={
+                      "When the current VRK's authorizer pack lapses. This is a separate clock from the wallet expiry."
+                    }
+                    fieldLabelId={"LicenseCurrentVRKExpiry"}
+                  />
+                }
+                fieldId="license-current-vrk-expiry"
+              >
+                <Label>{vrkExpiry}</Label>
+              </FormGroup>
+
+              <FormGroup
+                label={t("Wallet Expiry")}
+                labelIcon={
+                  <HelpItem
+                    helpText={"When the wallet backing this license expires"}
                     fieldLabelId={"LicenseExpiry"}
                   />
                 }
@@ -733,6 +931,14 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
                 </div>
               </FormGroup>
             </>
+          ) : isVendorKeyHalfCreated ? (
+            // Checked before the subscription status: a pending GVRK settles it
+            // on its own, so there is nothing to wait on the payer for.
+            continueLicenseCreationPanel
+          ) : isCheckingSubscription ? (
+            <Spinner size="xl" />
+          ) : isAwaitingPayment ? (
+            continueLicenseCreationPanel
           ) : (
             <>
               <FormGroup fieldId="no-active-license">
@@ -780,10 +986,8 @@ export const TideLicensingTab: FC<TideLicensingTabProps> = () => {
       panel: <TideLicenseHistory licenseList={licensingHistory} />,
     },
     {
-      title: t("Scheduled Tasks"),
-      panel: (
-        <TideScheduledTasks scheduledTasks={scheduledTasks} refresh={refresh} />
-      ),
+      title: t("Advanced Troubleshooting"),
+      panel: <TideAdvancedTroubleshooting onCompleted={refresh} />,
     },
   ];
 

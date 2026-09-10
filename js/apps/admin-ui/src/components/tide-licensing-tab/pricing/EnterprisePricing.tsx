@@ -35,10 +35,18 @@ import {
   TextContent,
   Title,
 } from "@patternfly/react-core";
-import { FC, ReactNode, useEffect, useState } from "react";
+import { FC, ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { capacityRange, type CapacityRange } from "./capacity";
 import {
+  capacityRange,
+  capacityStops,
+  positionToUsers,
+  usersToPosition,
+  type CapacityRange,
+} from "./capacity";
+import styles from "./package-stops.module.css";
+import {
+  formatCompactCount,
   formatCount,
   formatInterval,
   formatMoney,
@@ -212,6 +220,7 @@ const CapacityChooser: FC<ChooserProps> = ({
   isCtaDisabled,
 }) => {
   const { t } = useTranslation();
+  const capacityLiveId = useId();
 
   // With a single package size in Stripe, min === max, so the packages give no
   // range to slide over. Capacity still varies — you can buy several of the one
@@ -230,19 +239,30 @@ const CapacityChooser: FC<ChooserProps> = ({
   const isSingleOption = packages.length + (freePlan ? 1 : 0) <= 1;
 
   const hasMultiplePackageSizes = range.max > range.min;
-  const sliderMax = hasMultiplePackageSizes
-    ? range.max
-    : range.min * MULTI_BUY_STOPS;
-  // Every whole user is selectable, not just package boundaries. Stepping in
-  // package sizes meant 150 could not be expressed at all: it jumped 100 -> 200,
-  // and the operator was shown a capacity they never asked for. The server
-  // answers any count with the cheapest packages covering it, so 150 quotes one
-  // 100-user package and reads as "add 100 for $50".
-  const sliderStep = 1;
 
-  // A count typed above the track's top is still quotable (packages combine);
-  // it just pins the thumb at the end.
-  const sliderValue = Math.min(Math.max(users, range.min), sliderMax);
+  // One package size gives nothing to slide between, so the track spans
+  // multiples of it. Those are real boundaries (you buy several of the one
+  // package) rather than an invented scale.
+  const packageSizes = capacityStops(packages, freePlan?.userLimit);
+  const stops =
+    packageSizes.length > 1
+      ? packageSizes
+      : Array.from(
+          { length: MULTI_BUY_STOPS },
+          (_, i) => (packageSizes[0] ?? range.min) * (i + 1),
+        );
+
+  // The track runs in POSITION space, not user counts: see capacity.ts. This is
+  // also what suppresses two PatternFly defects that only fire without
+  // customSteps — a thumb positioned by raw value, and a per-render loop over
+  // every step from min to max.
+  const lastStop = stops.length - 1;
+  const sliderPosition = usersToPosition(users, stops);
+  const customSteps = stops.map((size, index) => ({
+    value: index,
+    label: formatCompactCount(size),
+  }));
+
   const overshoot = quote ? quote.includedUsers - quote.requestedUsers : 0;
 
   // The free plan is kept alongside whatever is bought, so the total is
@@ -290,27 +310,54 @@ const CapacityChooser: FC<ChooserProps> = ({
       )}
 
       {isSingleOption ? null : (
-        <Slider
-          min={range.min}
-          max={sliderMax}
-          step={sliderStep}
-          value={sliderValue}
-          inputValue={users}
-          isInputVisible
-          inputLabel={t("users")}
-          inputAriaLabel={t("Exact number of users")}
-          showBoundaries
-          // PatternFly reports the typed value as `inputValue` and the dragged
-          // one as `value`. Neither is snapped to a package size: the operator
-          // states how many users they have and the server answers with the
-          // cheapest packages covering it. Snapping ran to NEAREST, so every
-          // count from 101 to 149 rounded down to 100 and landed back inside
-          // the free plan, and asking for one user more than the free plan
-          // appeared to change nothing.
-          onChange={(_event, value, inputValue) =>
-            onUsersChange(Math.max(1, inputValue ?? value))
-          }
-          data-testid="pricing-slider"
+        <>
+          <Slider
+            min={0}
+            max={lastStop}
+            step={1}
+            value={sliderPosition}
+            customSteps={customSteps}
+            areCustomStepsContinuous
+            inputValue={users}
+            isInputVisible
+            inputLabel={t("users")}
+            inputAriaLabel={t("Exact number of users")}
+            aria-describedby={capacityLiveId}
+            // PatternFly reports the typed count as `inputValue` and the dragged
+            // POSITION as `value`, so only the drag path is converted. Neither
+            // is snapped to a package size: the operator states how many users
+            // they have and the server answers with the cheapest packages
+            // covering it.
+            onChange={(_event, value, inputValue) =>
+              onUsersChange(
+                Math.max(1, inputValue ?? positionToUsers(value, stops)),
+              )
+            }
+            data-testid="pricing-slider"
+          />
+          {/* The thumb's own aria-valuenow is a position, and PatternFly offers
+              no way to override it, so the real count is announced here. */}
+          <span
+            id={capacityLiveId}
+            className="pf-v5-screen-reader"
+            aria-live="polite"
+          >
+            {t("{{count}} users", {
+              count: users,
+              replace: { count: formatCount(users) },
+            })}
+          </span>
+        </>
+      )}
+
+      {isSingleOption ? null : (
+        <PackageStops
+          packages={packages}
+          freePlan={freePlan}
+          quote={isFree ? undefined : quote}
+          isFree={isFree}
+          users={users}
+          onUsersChange={onUsersChange}
         />
       )}
 
@@ -499,6 +546,114 @@ const CapacityChooser: FC<ChooserProps> = ({
         <Skeleton height="12rem" screenreaderText={t("Loading pricing")} />
       )}
     </div>
+  );
+};
+
+/**
+ * The package stops under the capacity slider.
+ *
+ * The slider moved and the total changed, but nothing on screen tied the two
+ * together: the capacity below it ("Up to 200 users") is the SERVER's answer,
+ * not the number under the thumb, so the two read as unrelated. Here every
+ * buyable package is a box, and the boxes the current quote is actually made of
+ * are highlighted — dragging the slider lights up what is being bought, and the
+ * itemised total below is then just the same boxes written out.
+ *
+ * The highlight comes from the quote's line items. Nothing here decides which
+ * packages cover a capacity; that stays on the server with the Stripe
+ * credentials, like every other figure on this card.
+ */
+const PackageStops: FC<{
+  packages: PricingTier[];
+  freePlan: PricingTier | null;
+  /** The current quote, or undefined while the free plan is the selection. */
+  quote: PricingQuote | undefined;
+  isFree: boolean;
+  users: number;
+  onUsersChange: (users: number) => void;
+}> = ({ packages, freePlan, quote, isFree, users, onUsersChange }) => {
+  const { t } = useTranslation();
+  const lines = new Map(
+    quote?.lineItems.map((line) => [line.priceId, line] as const),
+  );
+
+  return (
+    <div>
+      <TextContent className="pf-v5-u-mb-sm">
+        <Text component="small">
+          {isFree
+            ? t("Covered by the free plan.")
+            : quote
+              ? t("Covering your {{users}} users with:", {
+                  users: formatCount(users),
+                })
+              : t("Available packages")}
+        </Text>
+      </TextContent>
+
+      <div className={styles.stops} data-testid="pricing-package-stops">
+        {freePlan ? (
+          <PackageStop
+            label={formatCount(freePlan.userLimit)}
+            detail={t("Free plan")}
+            ariaLabel={t("Free plan, up to {{limit}} users", {
+              limit: formatCount(freePlan.userLimit),
+            })}
+            isSelected={isFree}
+            onSelect={() => onUsersChange(freePlan.userLimit)}
+          />
+        ) : null}
+
+        {packages.map((pkg) => {
+          const line = lines.get(pkg.priceId);
+          const price = formatMoney(pkg.unitAmount, pkg.currency);
+          return (
+            <PackageStop
+              key={pkg.priceId}
+              label={formatCount(pkg.userLimit)}
+              // How many of this package the quote takes, when it takes more
+              // than one — otherwise the box just states what the package costs.
+              detail={
+                line && line.packages > 1
+                  ? `${line.packages} \u00d7 ${price}`
+                  : price
+              }
+              ariaLabel={t("{{size}}-user package", {
+                size: formatCount(pkg.userLimit),
+              })}
+              isSelected={line !== undefined}
+              onSelect={() => onUsersChange(pkg.userLimit)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const PackageStop: FC<{
+  label: string;
+  detail: string;
+  ariaLabel: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}> = ({ label, detail, ariaLabel, isSelected, onSelect }) => {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={isSelected}
+      aria-label={ariaLabel}
+      className={isSelected ? `${styles.stop} ${styles.selected}` : styles.stop}
+      data-testid="pricing-package-stop"
+      data-selected={isSelected}
+    >
+      <span className={styles.size}>
+        {label} {t("users")}
+      </span>
+      <span className={styles.detail}>{detail}</span>
+    </button>
   );
 };
 
