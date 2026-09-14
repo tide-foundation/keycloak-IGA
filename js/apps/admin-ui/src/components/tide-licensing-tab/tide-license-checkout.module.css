@@ -6,3 +6,49 @@
   position: sticky;
   top: 0;
 }
+
+/* TIDECLOAK IMPLEMENTATION — Advanced Troubleshooting panel.
+   Tinted from the PatternFly danger token rather than a fixed red, so the
+   panel keeps its contrast in both the light and the dark theme. */
+.troubleshooting {
+  padding: var(--pf-v5-global--spacer--md) var(--pf-v5-global--spacer--lg);
+  border: 1px solid
+    color-mix(in srgb, var(--pf-v5-global--danger-color--100) 35%, transparent);
+  border-left: 3px solid var(--pf-v5-global--danger-color--100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  background-color: color-mix(
+    in srgb,
+    var(--pf-v5-global--danger-color--100) 7%,
+    transparent
+  );
+}
+
+.troubleshootingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-v5-global--spacer--md);
+  margin-top: var(--pf-v5-global--spacer--md);
+}
+
+.rotationError {
+  margin: var(--pf-v5-global--spacer--sm) 0 0;
+  padding: var(--pf-v5-global--spacer--sm) var(--pf-v5-global--spacer--md);
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--pf-v5-global--FontFamily--monospace, monospace);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--100);
+  background-color: var(--pf-v5-global--BackgroundColor--200);
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+}
+
+.rotationErrorHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pf-v5-global--spacer--md);
+  margin-top: var(--pf-v5-global--spacer--lg);
+}

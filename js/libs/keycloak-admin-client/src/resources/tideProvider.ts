@@ -3,6 +3,18 @@ import { RequiredActionAlias } from "../defs/requiredActionProviderRepresentatio
 import Resource from "./resource.js";
 
 /* TIDECLOAK IMPLEMENTATION */
+/** What the payer node reports it supports. */
+interface payerCapabilitiesResponse {
+  lineItems: boolean;
+  changeCapacity: boolean;
+  packagePlansConfigured: boolean;
+}
+
+/** Whether the realm's Stripe customer has a card on file. */
+interface paymentMethodStatusResponse {
+  hasPaymentMethod: boolean;
+}
+
 interface stripeCheckoutSessionResponse {
   message: string;
   activationPackage: string;
@@ -19,7 +31,14 @@ interface License {
 /* TIDECLOAK IMPLEMENTATION */
 interface licenseDetails {
   currentUserAcc: string;
+  /** When the wallet/subscription itself lapses. */
   expiryDate: number;
+  /**
+   * When the CURRENT VRK's authorizer pack lapses — a different clock from
+   * `expiryDate`. Merged into the payer's JSON by the endpoint, and OMITTED
+   * rather than sent as 0 when the expiry could not be resolved.
+   */
+  vrkExpiry?: number;
 }
 
 /* TIDECLOAK IMPLEMENTATION */
@@ -174,6 +193,37 @@ export class TideProvider extends Resource<{ realm?: string }> {
     queryParamKeys: ["gvrk"],
   });
 
+  /* # TIDECLOAK IMPLEMENTATION
+   * Manual VRK lifecycle recovery, driven by the licensing tab's Advanced
+   * Troubleshooting panel. Each responds `text/plain` "Success" on HTTP 200 and
+   * otherwise throws an RFC 7807 problem (VENDOR_FORCE_*_FAILED); every guard
+   * runs before the component write, so a refusal leaves the realm untouched. */
+  public forceGenVrk = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/force-gen-vrk",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION — signs the pending VRK. */
+  public forceRotateVrk = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/force-rotate-vrk",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION — promotes the pending VRK to active. */
+  public forceSwitchVrk = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/force-switch-vrk",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION
+   * The realm's most recent VRK rotation failure as recorded server-side.
+   * Read-only despite the POST verb; answers `text/plain` with an empty body
+   * when no rotation has failed. */
+  public getLatestRotationError = this.makeRequest<void, string>({
+    method: "POST",
+    path: "/vendorResources/latest-rotation-error",
+  });
+
   /* # TIDECLOAK IMPLEMENTATION */
   public getScheduledTasks = this.makeRequest<void, scheduledTaskInfo[]>({
     method: "GET",
@@ -279,12 +329,27 @@ export class TideProvider extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
-  public createStripeCheckoutSession = this.makeRequest<
-    FormData,
-    stripeCheckoutSessionResponse
-  >({
+  // Returns the checkout redirect URL as the raw response body.
+  public createStripeCheckoutSession = this.makeRequest<FormData, string>({
     method: "POST",
     path: "/vendorResources/createStripeCheckoutSession",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  // Creates — or resumes creation of — the realm's Tide Vendor Key (VVK).
+  // Supersedes createStripeCheckoutSession + generateInitialKey: the backend
+  // drives the whole lifecycle off the current vendor key state.
+  //
+  // Responds `text/plain`, so the body IS the result:
+  //   - HTTP 303 + a Stripe checkout URL — send the browser there.
+  //   - HTTP 200 + "CREATED"      — the VVK exists, nothing left to do.
+  //   - HTTP 200 + "NEED_PAYMENT" — still awaiting payment, no checkout URL yet.
+  //
+  // Payload is a FormData carrying the optional `licensingTier` form param;
+  // it is only read on the first (NotCreated) call.
+  public createTideVendorKey = this.makeRequest<FormData, string>({
+    method: "POST",
+    path: "/vendorResources/CreateTideVendorKey",
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
@@ -300,7 +365,10 @@ export class TideProvider extends Resource<{ realm?: string }> {
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
-  public getSubscriptionStatus = this.makeRequest<void, Response>({
+  // Responds `text/plain`. Either a subscription status resolved through
+  // Midgard, or the literal "awaiting_payment" when the vendor key exists but
+  // payment has not landed yet.
+  public getSubscriptionStatus = this.makeRequest<void, string>({
     method: "GET",
     path: "/vendorResources/getSubscriptionStatus",
   });
@@ -312,6 +380,58 @@ export class TideProvider extends Resource<{ realm?: string }> {
   >({
     method: "POST",
     path: "/vendorResources/createCustomerPortalSession",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Buy more (or fewer) units on the live subscription.
+   *
+   * Takes a USER COUNT (`users`), never a bundle and never an amount: the
+   * server quotes it against current Stripe prices and sends the packages it
+   * resolved. Prorated against the existing billing anchor.
+   */
+  public changeCapacity = this.makeRequest<FormData, Response>({
+    method: "POST",
+    path: "/vendorResources/changeCapacity",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Whether a card is on file. Asked before the operator picks a capacity, so
+   * the change can be disabled with an explanation rather than refused after
+   * they have chosen.
+   */
+  public paymentMethodStatus = this.makeRequest<
+    void,
+    paymentMethodStatusResponse
+  >({
+    method: "GET",
+    path: "/vendorResources/paymentMethodStatus",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * Returns a hosted Stripe URL that saves a card against this realm's
+   * customer. Offered only after a capacity is chosen and the payer reports no
+   * payment method — never as a gate on seeing prices.
+   */
+  public addPaymentMethod = this.makeRequest<
+    FormData,
+    stripeCheckoutSessionResponse
+  >({
+    method: "POST",
+    path: "/vendorResources/addPaymentMethod",
+  });
+
+  /* # TIDECLOAK IMPLEMENTATION */
+  /**
+   * What the payer node supports. 503 when it cannot be determined — an older
+   * payer has no such route — and the console then hides capacity changes
+   * rather than offering one the payer would silently mishandle.
+   */
+  public payerCapabilities = this.makeRequest<void, payerCapabilitiesResponse>({
+    method: "GET",
+    path: "/vendorResources/payerCapabilities",
   });
 
   /* # TIDECLOAK IMPLEMENTATION */
