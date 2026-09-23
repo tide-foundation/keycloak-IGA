@@ -1,8 +1,12 @@
 /**
  * TIDECLOAK IMPLEMENTATION
  *
- * The slider's bounds and granularity, DERIVED from the Stripe packages rather
- * than declared here.
+ * The slider's bounds and granularity, DERIVED from the Stripe PAID packages
+ * rather than declared here.
+ *
+ * The free plan is NOT part of this track. It is its own selection (a separate
+ * card), not the first stop, so the slider spans paid capacity only, starting
+ * at the smallest paid package (the 100-user/$50 first stop).
  *
  * There is no "the slider goes from 100 to 100,000 in steps of 100" constant
  * anywhere: that would be pricing information duplicated in source, and it
@@ -22,18 +26,8 @@ export type CapacityRange = {
   step: number;
 };
 
-/**
- * @param freeLimit capacity of the free plan, when one is offered. It becomes
- *        the FIRST stop, so one continuous track reads "free up to here, priced
- *        above it". Its size participates in the step GCD too, so a free plan of
- *        an odd size cannot make paid stops unreachable.
- */
-export function capacityRange(
-  tiers: PricingTier[],
-  freeLimit?: number,
-): CapacityRange | null {
+export function capacityRange(tiers: PricingTier[]): CapacityRange | null {
   const limits = tiers.map((t) => t.userLimit);
-  if (freeLimit && freeLimit > 0) limits.push(freeLimit);
   if (limits.length === 0) return null;
 
   const step = limits.reduce((a, b) => gcd(a, b));
@@ -55,15 +49,11 @@ function gcd(a: number, b: number): number {
 }
 
 /**
- * The package sizes the track is built from: ascending, de-duplicated, and
- * including the free plan so the axis reads "free up to here, priced above".
+ * The paid package sizes the track is built from: ascending and de-duplicated.
+ * The free plan is excluded; it is a separate selection, not a stop.
  */
-export function capacityStops(
-  tiers: PricingTier[],
-  freeLimit?: number,
-): number[] {
+export function capacityStops(tiers: PricingTier[]): number[] {
   const limits = tiers.map((t) => t.userLimit);
-  if (freeLimit && freeLimit > 0) limits.push(freeLimit);
   return [...new Set(limits.filter((n) => Number.isFinite(n) && n > 0))].sort(
     (a, b) => a - b,
   );
