@@ -160,8 +160,11 @@ export const ManageSubscriptionModal: FC<ManageSubscriptionModalProps> = ({
             </Text>
           </TextContent>
 
-          {/* The free plan is not a choice here: picking it would be a downgrade to
-          a different plan rather than a capacity change. */}
+          {/* The free plan is its own card in the new-license flow, not an
+          option here: this modal changes PAID capacity, and a free realm
+          upgrades by picking a paid package (the slider's first stop is the
+          100-user one). Picking free would be a downgrade, not a capacity
+          change, so the free card is suppressed. */}
           <EnterprisePricing
             serverBaseUrl={serverBaseUrl}
             realm={realm}
