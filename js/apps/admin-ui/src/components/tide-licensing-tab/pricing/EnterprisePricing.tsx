@@ -1,13 +1,15 @@
 /**
  * TIDECLOAK IMPLEMENTATION
  *
- * The Enterprise pricing card that REPLACES the old bare "Request License"
- * button on the licensing tab.
+ * The pricing surface that REPLACES the old bare "Request License" button on
+ * the licensing tab.
  *
- * That button stood for one fixed plan (`LicensingTiers.Free`) and told the
- * operator nothing about capacity or cost. Here the operator states how many
- * users they need and the SERVER answers with the cheapest bundle of Stripe
- * packages that covers it, itemised, before they commit.
+ * The free plan and paid capacity are two separate selections, not one track.
+ * The free plan is its own card (a distinct choice, $0, no card required); the
+ * Enterprise card is the paid capacity chooser, a slider over the PAID packages
+ * only whose first stop is the smallest paid package (the 100-user/$50 one).
+ * Picking the free card is standalone: its users are not carried into any paid
+ * total, and a free realm upgrades by choosing paid capacity instead.
  *
  * Nothing in this file computes a price. The total, the breakdown and the
  * inputs to the effective per-user rate all come from the server's quote. The
@@ -72,9 +74,9 @@ export type EnterprisePricingProps = {
   ctaLabel?: string;
   isCtaDisabled?: boolean;
   /**
-   * Whether the free plan is one of the choices. False where the card is used
-   * to BUY capacity: picking free there would be a downgrade to another plan,
-   * not a capacity change, and its call to action would have nothing to do.
+   * Whether the free plan is offered as its own card. False where the surface
+   * is used to CHANGE capacity on an existing subscription: free is not an
+   * upgrade target there, and its call to action would have nothing to do.
    */
   showFreePlan?: boolean;
   /**
@@ -103,12 +105,11 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
   const freePlan = showFreePlan ? fetchedFreePlan : null;
   const [users, setUsers] = useState<number | null>(null);
 
-  const range = packages.tiers
-    ? capacityRange(packages.tiers, freePlan?.userLimit)
-    : null;
+  // Paid packages only: the free plan is its own card, not part of the track.
+  const range = packages.tiers ? capacityRange(packages.tiers) : null;
 
-  // Open on the smallest package once the catalogue lands, so the card starts
-  // on a real, quotable capacity rather than an invented default.
+  // Open on the smallest paid package once the catalogue lands, so the card
+  // starts on a real, quotable capacity rather than an invented default.
   useEffect(() => {
     if (users !== null || !range) return;
     setUsers(range.min);
@@ -128,7 +129,7 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
     return unsupportedFallback;
   }
 
-  return (
+  const enterpriseCard = (
     <Card isPlain isCompact>
       <CardTitle>
         <Title headingLevel="h2" size="xl">
@@ -169,17 +170,104 @@ export const EnterprisePricing: FC<EnterprisePricingProps> = ({
           <CapacityChooser
             range={range}
             packages={packages.tiers ?? []}
-            freePlan={freePlan}
             users={users ?? range.min}
             onUsersChange={setUsers}
             quote={quoting.quote}
             isQuoting={quoting.isQuoting}
             onChoose={onChoose}
-            onChooseFree={onChooseFree}
             ctaLabel={ctaLabel ?? t("Request License")}
             isCtaDisabled={isCtaDisabled}
           />
         )}
+      </CardBody>
+    </Card>
+  );
+
+  if (!freePlan) {
+    return enterpriseCard;
+  }
+
+  return (
+    <div className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-lg">
+      <FreePlanCard
+        plan={freePlan}
+        ctaLabel={ctaLabel ?? t("Request License")}
+        isCtaDisabled={isCtaDisabled}
+        onChoose={() => onChooseFree?.(freePlan)}
+      />
+      {enterpriseCard}
+    </div>
+  );
+};
+
+/**
+ * The free plan as its own selection.
+ *
+ * It stands apart from the paid capacity chooser: $0, no card required, a fixed
+ * capacity, and one per subscription. Above that capacity the operator picks a
+ * paid package on the Enterprise card instead — the free users are not an
+ * allowance carried into a paid total.
+ */
+const FreePlanCard: FC<{
+  plan: PricingTier;
+  ctaLabel: string;
+  isCtaDisabled: boolean;
+  onChoose: () => void;
+}> = ({ plan, ctaLabel, isCtaDisabled, onChoose }) => {
+  const { t } = useTranslation();
+  return (
+    <Card isPlain isCompact data-testid="pricing-free-card">
+      <CardTitle>
+        <Title headingLevel="h2" size="xl">
+          {t("Free")}
+        </Title>
+        <TextContent>
+          <Text component="small">
+            {t(
+              "Run a realm at no cost, up to the free plan's capacity. No card required.",
+            )}
+          </Text>
+        </TextContent>
+      </CardTitle>
+      <CardBody>
+        <div className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-md">
+          <Title headingLevel="h3" size="3xl" data-testid="pricing-free-amount">
+            {formatMoney(plan.unitAmount, plan.currency)}{" "}
+            <Text component="small">{formatInterval(plan.interval)}</Text>{" "}
+            <Label color="green" data-testid="pricing-free-badge">
+              {t("Free plan")}
+            </Label>
+          </Title>
+
+          <DescriptionList isHorizontal isCompact>
+            <DescriptionListGroup>
+              <DescriptionListTerm>{t("Capacity")}</DescriptionListTerm>
+              <DescriptionListDescription data-testid="pricing-free-capacity">
+                {t("Up to {{limit}} users", {
+                  limit: formatCount(plan.userLimit),
+                })}
+              </DescriptionListDescription>
+            </DescriptionListGroup>
+          </DescriptionList>
+
+          <TextContent data-testid="pricing-free-bundle">
+            <Text component="small">
+              {t(
+                "One free plan per subscription. Above {{limit}} users, choose a paid package on the Enterprise card.",
+                { limit: formatCount(plan.userLimit) },
+              )}
+            </Text>
+          </TextContent>
+
+          <Button
+            variant="secondary"
+            isDisabled={isCtaDisabled}
+            onClick={onChoose}
+            data-testid="pricing-free-choose"
+          >
+            {ctaLabel}
+          </Button>
+        </div>
       </CardBody>
     </Card>
   );
@@ -195,13 +283,11 @@ const MULTI_BUY_STOPS = 10;
 type ChooserProps = {
   range: CapacityRange;
   packages: PricingTier[];
-  freePlan: PricingTier | null;
   users: number;
   onUsersChange: (users: number) => void;
   quote: PricingQuote | undefined;
   isQuoting: boolean;
   onChoose: (quote: PricingQuote) => void;
-  onChooseFree?: (plan: PricingTier) => void;
   ctaLabel: string;
   isCtaDisabled: boolean;
 };
@@ -209,41 +295,28 @@ type ChooserProps = {
 const CapacityChooser: FC<ChooserProps> = ({
   range,
   packages,
-  freePlan,
   users,
   onUsersChange,
   quote,
   isQuoting,
   onChoose,
-  onChooseFree,
   ctaLabel,
   isCtaDisabled,
 }) => {
   const { t } = useTranslation();
   const capacityLiveId = useId();
 
-  // With a single package size in Stripe, min === max, so the packages give no
-  // range to slide over. Capacity still varies — you can buy several of the one
-  // package — so the track spans multiples of that package instead, and the
-  // label below says so rather than implying a choice of sizes.
-  // ONE card covers both plans: at or below the free plan's capacity the
-  // selection IS the free plan, above it the paid packages. Crossing that line
-  // switches plan outright — the free users are NOT carried into the paid
-  // total, because the free plan is standalone and not an allowance.
-  const isFree = freePlan !== null && users <= freePlan.userLimit;
-
-  // Nothing to choose between: one paid package and no free plan, or a free
-  // plan and nothing else. The capacity control would imply a choice that is
-  // not there, so this degrades to a plain price and a button — the shape the
-  // old "Request License" affordance had.
-  const isSingleOption = packages.length + (freePlan ? 1 : 0) <= 1;
+  // Nothing to choose between: a single paid package. The capacity control
+  // would imply a choice that is not there, so this degrades to a plain price
+  // and a button — the shape the old "Request License" affordance had.
+  const isSingleOption = packages.length <= 1;
 
   const hasMultiplePackageSizes = range.max > range.min;
 
   // One package size gives nothing to slide between, so the track spans
   // multiples of it. Those are real boundaries (you buy several of the one
   // package) rather than an invented scale.
-  const packageSizes = capacityStops(packages, freePlan?.userLimit);
+  const packageSizes = capacityStops(packages);
   const stops =
     packageSizes.length > 1
       ? packageSizes
@@ -265,27 +338,10 @@ const CapacityChooser: FC<ChooserProps> = ({
 
   const overshoot = quote ? quote.includedUsers - quote.requestedUsers : 0;
 
-  // The free plan is kept alongside whatever is bought, so the total is
-  // allowance + packages. Both halves are shown: a realm upgrading off the free
-  // plan was otherwise told it was buying "100 users" for the same 100 it
-  // already had, when what it gets is 100 MORE.
-  const freeAllowance = freePlan?.userLimit ?? 0;
-  const purchasedUsers = quote
-    ? Math.max(0, quote.includedUsers - freeAllowance)
-    : 0;
-
   return (
     <div className="pf-v5-u-display-flex pf-v5-u-flex-direction-column pf-v5-u-gap-lg">
-      {/* Headline: the free plan's price, or the server's quoted total. */}
-      {isFree ? (
-        <Title headingLevel="h3" size="3xl" data-testid="pricing-amount">
-          {formatMoney(freePlan.unitAmount, freePlan.currency)}{" "}
-          <Text component="small">{formatInterval(freePlan.interval)}</Text>{" "}
-          <Label color="green" data-testid="pricing-free-badge">
-            {t("Free plan")}
-          </Label>
-        </Title>
-      ) : quote ? (
+      {/* Headline: the server's quoted total. */}
+      {quote ? (
         <Title
           headingLevel="h3"
           size="3xl"
@@ -353,9 +409,7 @@ const CapacityChooser: FC<ChooserProps> = ({
       {isSingleOption ? null : (
         <PackageStops
           packages={packages}
-          freePlan={freePlan}
-          quote={isFree ? undefined : quote}
-          isFree={isFree}
+          quote={quote}
           users={users}
           onUsersChange={onUsersChange}
         />
@@ -371,52 +425,7 @@ const CapacityChooser: FC<ChooserProps> = ({
         </TextContent>
       ) : null}
 
-      {isFree ? (
-        <>
-          <Divider className="pf-v5-u-my-md" />
-          <DescriptionList isHorizontal isCompact>
-            <DescriptionListGroup>
-              <DescriptionListTerm>{t("Capacity")}</DescriptionListTerm>
-              <DescriptionListDescription data-testid="pricing-capacity-value">
-                {t("Up to {{limit}} users", {
-                  limit: formatCount(freePlan.userLimit),
-                })}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>{t("Price")}</DescriptionListTerm>
-              <DescriptionListDescription>
-                {formatMoney(freePlan.unitAmount, freePlan.currency)}{" "}
-                {formatInterval(freePlan.interval)}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-          </DescriptionList>
-
-          <TextContent>
-            <Text component="small">
-              {t(
-                "One free plan per subscription. Above {{limit}} users the capacity is priced in full — the free users are not carried over.",
-                { limit: formatCount(freePlan.userLimit) },
-              )}
-            </Text>
-          </TextContent>
-
-          <TextContent data-testid="pricing-bundle">
-            <Text component="small">
-              {t("Free plan")} &middot; {freePlan.priceId}
-            </Text>
-          </TextContent>
-
-          <Button
-            variant="primary"
-            isDisabled={isCtaDisabled}
-            onClick={() => onChooseFree?.(freePlan)}
-            data-testid="pricing-choose"
-          >
-            {ctaLabel}
-          </Button>
-        </>
-      ) : quote ? (
+      {quote ? (
         <>
           <Divider className="pf-v5-u-my-md" />
           <DescriptionList isHorizontal isCompact>
@@ -429,17 +438,6 @@ const CapacityChooser: FC<ChooserProps> = ({
                 })}
               </DescriptionListDescription>
             </DescriptionListGroup>
-            {freeAllowance > 0 ? (
-              <DescriptionListGroup>
-                <DescriptionListTerm>{t("Made up of")}</DescriptionListTerm>
-                <DescriptionListDescription data-testid="pricing-capacity-breakdown">
-                  {t("{{free}} free + {{paid}} purchased", {
-                    free: formatCount(freeAllowance),
-                    paid: formatCount(purchasedUsers),
-                  })}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            ) : null}
             <DescriptionListGroup>
               <DescriptionListTerm>{t("Price")}</DescriptionListTerm>
               <DescriptionListDescription>
@@ -465,22 +463,6 @@ const CapacityChooser: FC<ChooserProps> = ({
               </DescriptionListDescription>
             </DescriptionListGroup>
           </DescriptionList>
-
-          {freeAllowance > 0 ? (
-            <TextContent data-testid="pricing-addon-advice">
-              <Text>
-                {t(
-                  "Add {{paid}} users for {{price}} {{interval}}, on top of the {{free}} your free plan already includes.",
-                  {
-                    paid: formatCount(purchasedUsers),
-                    price: formatMoney(quote.totalAmount, quote.currency),
-                    interval: formatInterval(quote.interval),
-                    free: formatCount(freeAllowance),
-                  },
-                )}
-              </Text>
-            </TextContent>
-          ) : null}
 
           {overshoot > 0 ? (
             <TextContent data-testid="pricing-overshoot">
@@ -550,7 +532,7 @@ const CapacityChooser: FC<ChooserProps> = ({
 };
 
 /**
- * The package stops under the capacity slider.
+ * The paid package stops under the capacity slider.
  *
  * The slider moved and the total changed, but nothing on screen tied the two
  * together: the capacity below it ("Up to 200 users") is the SERVER's answer,
@@ -565,13 +547,10 @@ const CapacityChooser: FC<ChooserProps> = ({
  */
 const PackageStops: FC<{
   packages: PricingTier[];
-  freePlan: PricingTier | null;
-  /** The current quote, or undefined while the free plan is the selection. */
   quote: PricingQuote | undefined;
-  isFree: boolean;
   users: number;
   onUsersChange: (users: number) => void;
-}> = ({ packages, freePlan, quote, isFree, users, onUsersChange }) => {
+}> = ({ packages, quote, users, onUsersChange }) => {
   const { t } = useTranslation();
   const lines = new Map(
     quote?.lineItems.map((line) => [line.priceId, line] as const),
@@ -581,29 +560,15 @@ const PackageStops: FC<{
     <div>
       <TextContent className="pf-v5-u-mb-sm">
         <Text component="small">
-          {isFree
-            ? t("Covered by the free plan.")
-            : quote
-              ? t("Covering your {{users}} users with:", {
-                  users: formatCount(users),
-                })
-              : t("Available packages")}
+          {quote
+            ? t("Covering your {{users}} users with:", {
+                users: formatCount(users),
+              })
+            : t("Available packages")}
         </Text>
       </TextContent>
 
       <div className={styles.stops} data-testid="pricing-package-stops">
-        {freePlan ? (
-          <PackageStop
-            label={formatCount(freePlan.userLimit)}
-            detail={t("Free plan")}
-            ariaLabel={t("Free plan, up to {{limit}} users", {
-              limit: formatCount(freePlan.userLimit),
-            })}
-            isSelected={isFree}
-            onSelect={() => onUsersChange(freePlan.userLimit)}
-          />
-        ) : null}
-
         {packages.map((pkg) => {
           const line = lines.get(pkg.priceId);
           const price = formatMoney(pkg.unitAmount, pkg.currency);
@@ -615,7 +580,7 @@ const PackageStops: FC<{
               // than one — otherwise the box just states what the package costs.
               detail={
                 line && line.packages > 1
-                  ? `${line.packages} \u00d7 ${price}`
+                  ? `${line.packages} × ${price}`
                   : price
               }
               ariaLabel={t("{{size}}-user package", {
