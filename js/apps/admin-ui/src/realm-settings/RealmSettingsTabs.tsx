@@ -128,7 +128,7 @@ const RealmSettingsHeader = ({
           return;
         }
         addAlert(t("deletedSuccessRealmSetting"), AlertVariant.success);
-        navigate(toDashboard({ realm: environment.masterRealm }));
+        void navigate(toDashboard({ realm: environment.masterRealm }));
         refresh();
       } catch (error) {
         addError("deleteErrorRealmSetting", error);
@@ -320,7 +320,7 @@ export const RealmSettingsTabs = () => {
 
     const isRealmRenamed = realmName !== (r.realm || realm.realm);
     if (isRealmRenamed) {
-      navigate(toRealmSettings({ realm: r.realm!, tab: "general" }));
+      void navigate(toRealmSettings({ realm: r.realm!, tab: "general" }));
     }
     refresh();
   };

@@ -21,7 +21,10 @@ import { KEY_PROVIDER_TYPE } from "../../../util";
 import { useParams } from "../../../utils/useParams";
 import { KeyProviderParams, ProviderType } from "../../routes/KeyProvider";
 import { toKeysTab } from "../../routes/KeysTab";
-import { RoutableTabs, useRoutableTab } from "../../../components/routable-tabs/RoutableTabs";
+import {
+  RoutableTabs,
+  useRoutableTab,
+} from "../../../components/routable-tabs/RoutableTabs";
 import { TideKeyTab, toTideKey } from "../routes/TideKeys";
 import { TideLicensingTab } from "../../../components/tide-licensing-tab/TideLicensingTab";
 
@@ -93,7 +96,12 @@ export const KeyProviderForm = ({
   );
 
   return (
-    <FormAccess isHorizontal role="manage-realm" onSubmit={handleSubmit(save)} className="pf-v5-u-p-md">
+    <FormAccess
+      isHorizontal
+      role="manage-realm"
+      onSubmit={handleSubmit(save)}
+      className="pf-v5-u-p-md"
+    >
       <FormProvider {...form}>
         {id && (
           <TextControl
@@ -140,11 +148,20 @@ export const KeyProviderForm = ({
 };
 
 /** TIDE IMPLEMENTATION START */
-const useTab = ({ realm, id, providerType, tab }: { realm: string; id: string; providerType: ProviderType; tab: TideKeyTab }) => {
+const useTab = ({
+  realm,
+  id,
+  providerType,
+  tab,
+}: {
+  realm: string;
+  id: string;
+  providerType: ProviderType;
+  tab: TideKeyTab;
+}) => {
   return useRoutableTab(toTideKey({ realm, id, providerType, tab }));
 };
 /** TIDE IMPLEMENTATION END */
-
 
 export default function KeyProviderFormPage() {
   const { t } = useTranslation();
@@ -165,34 +182,30 @@ export default function KeyProviderFormPage() {
             unmountOnExit
             defaultLocation={toTideKey({ ...params, tab: "settings" })}
           >
-            <Tab
-              title={<TabTitleText>Settings</TabTitleText>}
-              {...settingsTab}
-            >
+            <Tab title={<TabTitleText>Settings</TabTitleText>} {...settingsTab}>
               <KeyProviderForm
                 {...params}
                 onClose={() =>
-                  navigate(toKeysTab({ realm: params.realm, tab: "providers" }))
+                  void navigate(
+                    toKeysTab({ realm: params.realm, tab: "providers" }),
+                  )
                 }
               />
             </Tab>
-            <Tab
-              title={<TabTitleText>License</TabTitleText>}
-              {...licenseTab}
-            >
+            <Tab title={<TabTitleText>License</TabTitleText>} {...licenseTab}>
               <TideLicensingTab />
             </Tab>
-
           </RoutableTabs>
         ) : (
           <KeyProviderForm
             {...params}
             onClose={() =>
-              navigate(toKeysTab({ realm: params.realm, tab: "providers" }))
+              void navigate(
+                toKeysTab({ realm: params.realm, tab: "providers" }),
+              )
             }
           />
         )}
-
       </PageSection>
     </>
   );

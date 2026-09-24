@@ -75,7 +75,7 @@ export default function AddIdentityProvider() {
       await adminClient.tideAdmin.setUpTideRealm(data);
 
       addAlert(t("createIdentityProviderSuccess"), AlertVariant.success);
-      navigate(
+      void navigate(
         toIdentityProvider({
           realm,
           providerId,
@@ -124,7 +124,7 @@ export default function AddIdentityProvider() {
       });
 
       addAlert(t("createIdentityProviderSuccess"), AlertVariant.success);
-      navigate(
+      void navigate(
         toIdentityProvider({
           realm,
           providerId,

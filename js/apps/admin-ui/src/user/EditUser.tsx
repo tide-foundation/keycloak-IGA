@@ -293,7 +293,7 @@ export default function EditUser() {
           }
         }
         addAlert(t("userDeletedSuccess"), AlertVariant.success);
-        navigate(toUsers({ realm: realmName }));
+        void navigate(toUsers({ realm: realmName }));
       } catch (error) {
         addError("userDeletedError", error);
       }

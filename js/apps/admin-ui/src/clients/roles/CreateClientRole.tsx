@@ -43,7 +43,7 @@ export default function CreateClientRole() {
           navigate,
         })
       ) {
-        navigate(
+        void navigate(
           toClient({
             realm,
             clientId: clientId!,
@@ -59,7 +59,7 @@ export default function CreateClientRole() {
       }))!;
 
       addAlert(t("roleCreated"), AlertVariant.success);
-      navigate(
+      void navigate(
         toClientRole({
           realm,
           clientId: clientId!,

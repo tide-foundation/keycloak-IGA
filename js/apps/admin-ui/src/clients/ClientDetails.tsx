@@ -368,7 +368,7 @@ export default function ClientDetails() {
           return;
         }
         addAlert(t("clientDeletedSuccess"), AlertVariant.success);
-        navigate(toClients({ realm }));
+        void navigate(toClients({ realm }));
       } catch (error) {
         addError("clientDeleteError", error);
       }

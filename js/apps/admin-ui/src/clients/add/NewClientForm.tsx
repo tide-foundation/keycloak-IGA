@@ -100,7 +100,7 @@ export default function NewClientForm() {
           navigate,
         })
       ) {
-        navigate(toClients({ realm }));
+        void navigate(toClients({ realm }));
         return;
       }
 
@@ -121,7 +121,9 @@ export default function NewClientForm() {
 
       void signSettings();
 
-      navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
+      void navigate(
+        toClient({ realm, clientId: newClient.id, tab: "settings" }),
+      );
     } catch (error) {
       addError("createClientError", error);
     } finally {
@@ -137,7 +139,7 @@ export default function NewClientForm() {
       <PageSection variant="light">
         <FormProvider {...form}>
           <Wizard
-            onClose={() => navigate(toClients({ realm }))}
+            onClose={() => void navigate(toClients({ realm }))}
             navAriaLabel={`${title} steps`}
             onSave={save}
             isProgressive

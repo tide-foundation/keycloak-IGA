@@ -60,12 +60,12 @@ export default function CreateUser() {
           navigate,
         })
       ) {
-        navigate(toUsers({ realm: realmName }));
+        void navigate(toUsers({ realm: realmName }));
         return;
       }
 
       addAlert(t("userCreated"), AlertVariant.success);
-      navigate(
+      void navigate(
         toUser({ id: createdUser.id, realm: realmName, tab: "settings" }),
       );
     } catch (error) {

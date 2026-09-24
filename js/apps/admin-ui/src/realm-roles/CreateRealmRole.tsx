@@ -38,7 +38,7 @@ export default function CreateRealmRole() {
           navigate,
         })
       ) {
-        navigate(toRealmRoles({ realm }));
+        void navigate(toRealmRoles({ realm }));
         return;
       }
 
@@ -51,7 +51,9 @@ export default function CreateRealmRole() {
       }
 
       addAlert(t("roleCreated"), AlertVariant.success);
-      navigate(toRealmRole({ realm, id: createdRole.id!, tab: "details" }));
+      void navigate(
+        toRealmRole({ realm, id: createdRole.id!, tab: "details" }),
+      );
     } catch (error) {
       addError("roleCreateError", error);
     }

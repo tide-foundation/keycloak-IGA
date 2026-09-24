@@ -144,14 +144,13 @@ import org.jboss.logging.Logger;
 
 import static java.util.Optional.ofNullable;
 
+import static org.keycloak.models.Constants.DEFAULT_PROTOCOL;
 import static org.keycloak.models.OrganizationDomainModel.ANY_DOMAIN;
 import static org.keycloak.protocol.saml.util.ArtifactBindingUtils.computeArtifactBindingIdentifierString;
 
 public class RepresentationToModel {
 
     private static Logger logger = Logger.getLogger(RepresentationToModel.class);
-    public static final String OIDC = "openid-connect";
-
 
     public static void importRealm(KeycloakSession session, RealmRepresentation rep, RealmModel newRealm, Runnable userImport) {
         session.getProvider(DatastoreProvider.class).getExportImportManager().importRealm(rep, newRealm, userImport);
@@ -534,7 +533,7 @@ public class RepresentationToModel {
             add(updatePropertyAction(client::setFrontchannelLogout, rep::isFrontchannelLogout, client::isFrontchannelLogout));
             add(updatePropertyAction(client::setNotBefore, rep::getNotBefore, client::getNotBefore));
             // Fields with defaults if not initially provided
-            add(updatePropertyAction(client::setProtocol, rep::getProtocol, client::getProtocol, () -> OIDC));
+            add(updatePropertyAction(client::setProtocol, rep::getProtocol, client::getProtocol, () -> DEFAULT_PROTOCOL));
             add(updatePropertyAction(client::setNodeReRegistrationTimeout, rep::getNodeReRegistrationTimeout, () -> defaultNodeReRegistrationTimeout(client, isNew)));
             add(updatePropertyAction(client::setClientAuthenticatorType, rep::getClientAuthenticatorType, client::getClientAuthenticatorType, KeycloakModelUtils::getDefaultClientAuthenticatorType));
             add(updatePropertyAction(client::setFullScopeAllowed, rep::isFullScopeAllowed, () -> defaultFullScopeAllowed(client, isNew)));
@@ -548,6 +547,10 @@ public class RepresentationToModel {
         // Extended client attributes
         if (rep.getAttributes() != null) {
             for (Map.Entry<String, String> entry : rep.getAttributes().entrySet()) {
+                // realm_client is computed when a client is converted to a representation, it must not be stored
+                if (Constants.REALM_CLIENT.equals(entry.getKey())) {
+                    continue;
+                }
                 clientPropertyUpdates.add(
                     updatePropertyAction(val -> client.setAttribute(entry.getKey(), val), entry::getValue));
             }
@@ -780,6 +783,12 @@ public class RepresentationToModel {
     }
 
     public static void createGroups(KeycloakSession session, UserRepresentation userRep, RealmModel newRealm, UserModel user) {
+        createGroups(session, userRep, newRealm, user, user::joinGroup);
+    }
+
+    public static void createGroups(KeycloakSession session, UserRepresentation userRep, RealmModel newRealm, UserModel user, Consumer<GroupModel> membershipHandler) {
+        Objects.requireNonNull(membershipHandler, "membershipHandler must not be null");
+
         if (userRep.getGroups() != null) {
             for (String path : userRep.getGroups()) {
                 GroupModel group = KeycloakModelUtils.findGroupByPath(session, newRealm, path);
@@ -787,7 +796,7 @@ public class RepresentationToModel {
                     throw new RuntimeException("Unable to find group specified by path: " + path);
 
                 }
-                user.joinGroup(group);
+                membershipHandler.accept(group);
             }
         }
     }

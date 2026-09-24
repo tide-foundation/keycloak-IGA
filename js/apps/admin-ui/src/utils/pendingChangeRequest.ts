@@ -77,7 +77,7 @@ export function notifyIfPendingChangeRequest(
       AlertActionLink,
       {
         onClick: () =>
-          navigate({
+          void navigate({
             pathname: target.pathname!,
             search: target.search ?? "",
           }),

@@ -98,11 +98,13 @@ export default function ImportForm() {
           navigate,
         })
       ) {
-        navigate(toClients({ realm }));
+        void navigate(toClients({ realm }));
         return;
       }
       addAlert(t("clientImportSuccess"), AlertVariant.success);
-      navigate(toClient({ realm, clientId: newClient.id, tab: "settings" }));
+      void navigate(
+        toClient({ realm, clientId: newClient.id, tab: "settings" }),
+      );
     } catch (error) {
       addError("clientImportError", error);
     }

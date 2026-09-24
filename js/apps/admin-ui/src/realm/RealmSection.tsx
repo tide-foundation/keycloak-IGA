@@ -203,7 +203,7 @@ export default function RealmSection() {
           !currentRealmPending &&
           selected.some(({ name }) => name === realm)
         ) {
-          navigate(toRealm({ realm: environment.masterRealm }));
+          void navigate(toRealm({ realm: environment.masterRealm }));
         }
         refresh();
         setSelected([]);

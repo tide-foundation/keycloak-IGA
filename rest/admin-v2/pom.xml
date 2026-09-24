@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.keycloak</groupId>
         <artifactId>keycloak-rest-parent</artifactId>
-        <version>26.7.0</version>
+        <version>26.7.4</version>
     </parent>
 
     <artifactId>keycloak-admin-v2-parent</artifactId>

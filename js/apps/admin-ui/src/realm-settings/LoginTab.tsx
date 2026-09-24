@@ -221,7 +221,7 @@ export const RealmSettingsLoginTab = ({
                     realm: realmName,
                     tab: "policies",
                   }),
-                  hash: WEBAUTHN_PASSWORDLESS_POLICY,
+                  search: `?tab=${WEBAUTHN_PASSWORDLESS_POLICY}`,
                 }}
               />
             </FormGroup>

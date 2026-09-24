@@ -312,7 +312,6 @@ export default function DetailSettings() {
     handleSubmit,
     getValues,
     reset,
-    control,
     formState: { isDirty },
   } = form;
   const [provider, setProvider] = useState<IdentityProviderRepresentation>();
@@ -365,7 +364,7 @@ export default function DetailSettings() {
       if (type === "background") {
         setBackgroundImage(file);
         setBackgroundPreviewUrl(URL.createObjectURL(file));
-      } else if (type === "logo") {
+      } else {
         setLogo(file);
         setLogoPreviewUrl(URL.createObjectURL(file));
       }
@@ -376,7 +375,7 @@ export default function DetailSettings() {
     if (type === "background") {
       setBackgroundImage(null);
       setBackgroundPreviewUrl("");
-    } else if (type === "logo") {
+    } else {
       setLogo(null);
       setLogoPreviewUrl("");
     }
@@ -387,9 +386,6 @@ export default function DetailSettings() {
     try {
       const response = await adminClient.tideAdmin.getImageName({ type });
 
-      if (response === null && response === "") {
-        return;
-      }
       // Create a new File object from the Blob
       const file = new File([], response!, { type });
       return file;
@@ -421,7 +417,7 @@ export default function DetailSettings() {
     void initializeImages();
   }, []);
 
-  const hasValue = (value: string) =>
+  const hasValue = (value: string | null | undefined) =>
     value !== undefined && value !== null && value !== "" ? true : false;
   const handleImageUpdate = async (image: File | null, type: string) => {
     try {
@@ -600,7 +596,7 @@ export default function DetailSettings() {
         await adminClient.identityProviders.del({ alias: alias });
 
         addAlert(t("deletedSuccessIdentityProvider"), AlertVariant.success);
-        navigate(toIdentityProviders({ realm }));
+        void navigate(toIdentityProviders({ realm }));
       } catch (error) {
         addError("deleteErrorIdentityProvider", error);
       }
@@ -622,7 +618,7 @@ export default function DetailSettings() {
         });
         addAlert(t("deleteMapperSuccess"), AlertVariant.success);
         refresh();
-        navigate(
+        void navigate(
           toIdentityProvider({ providerId, alias, tab: "mappers", realm }),
         );
       } catch (error) {
@@ -636,7 +632,7 @@ export default function DetailSettings() {
   // This drives WARN (missing) vs INFO (configured) guidance on the offboard
   // dialog; it is advisory only and never blocks offboarding.
   const smtpConfigured =
-    !!realmRepresentation?.smtpServer &&
+    !!realmRepresentation.smtpServer &&
     Object.keys(realmRepresentation.smtpServer).length > 0;
 
   const [toggleOffboardingDialog, OffboardingConfirm] = useOffboardingDialog({
@@ -644,7 +640,8 @@ export default function DetailSettings() {
     messageKey: "offboardProviderConfirmation",
     confirmationText: "CONFIRM OFFBOARDING",
     smtpConfigured,
-    onConfigureEmail: () => navigate(toRealmSettings({ realm, tab: "email" })),
+    onConfigureEmail: () =>
+      void navigate(toRealmSettings({ realm, tab: "email" })),
     onConfirm: async () => {
       try {
         // TIDECLOAK IMPLEMENTATION
@@ -683,7 +680,7 @@ export default function DetailSettings() {
           ),
           AlertVariant.success,
         );
-        navigate(toIdentityProviders({ realm }));
+        void navigate(toIdentityProviders({ realm }));
       } catch (error) {
         addError("offboardingError", error);
       }
@@ -766,7 +763,7 @@ export default function DetailSettings() {
   const navigateToKeyProvider = (id: string) => {
     const path = toKeyProvider({ realm, id, providerType: "tide-vendor-key" });
     path.pathname += "/license";
-    navigate(path);
+    void navigate(path);
   };
 
   const sections = [
@@ -1144,7 +1141,7 @@ export default function DetailSettings() {
                     instructions={t("noMappersInstructions")}
                     primaryActionText={t("addMapper")}
                     onPrimaryAction={() =>
-                      navigate(
+                      void navigate(
                         toIdentityProviderAddMapper({
                           realm,
                           alias: alias!,

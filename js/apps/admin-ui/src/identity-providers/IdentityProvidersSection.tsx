@@ -139,7 +139,7 @@ export default function IdentityProvidersSection() {
   };
 
   const navigateToCreate = (providerId: string) =>
-    navigate(
+    void navigate(
       toIdentityProviderCreate({
         realm,
         providerId,
@@ -156,7 +156,7 @@ export default function IdentityProvidersSection() {
             component="a"
             data-testid={provider.id}
             onClick={() =>
-              navigate(
+              void navigate(
                 toIdentityProviderCreate({
                   realm,
                   providerId: provider.id,
@@ -170,7 +170,6 @@ export default function IdentityProvidersSection() {
       </DropdownGroup>
     ));
 
-  const hasValue = (value: string) => value !== undefined && value !== null && value !== "" ? true : false;
   const [toggleDeleteDialog, DeleteConfirm] = useConfirmDialog({
     titleKey: "deleteProvider",
     messageKey: t("deleteConfirm", { provider: selectedProvider?.alias }),

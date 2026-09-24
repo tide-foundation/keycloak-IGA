@@ -157,7 +157,7 @@ export default function EditClientScope() {
           return;
         }
         addAlert(t("deletedSuccessClientScope"), AlertVariant.success);
-        navigate(toClientScopes({ realm }));
+        void navigate(toClientScopes({ realm }));
       } catch (error) {
         addError("deleteErrorClientScope", error);
       }
@@ -200,7 +200,7 @@ export default function EditClientScope() {
   ): Promise<void> => {
     if (!Array.isArray(mappers)) {
       const mapper = mappers as ProtocolMapperTypeRepresentation;
-      navigate(
+      void navigate(
         toMapper({
           realm,
           id: clientScope!.id!,

@@ -232,7 +232,7 @@ export default function RealmRoleTabs() {
           return;
         }
         addAlert(t("roleDeletedSuccess"), AlertVariant.success);
-        navigate(toOverview());
+        void navigate(toOverview());
       } catch (error) {
         addError("roleDeleteError", error);
       }
@@ -246,7 +246,7 @@ export default function RealmRoleTabs() {
         composites,
       );
       refresh();
-      navigate(toTab("associated-roles"));
+      void navigate(toTab("associated-roles"));
       addAlert(t("addAssociatedRolesSuccess"), AlertVariant.success);
     } catch (error) {
       addError("addAssociatedRolesError", error);
