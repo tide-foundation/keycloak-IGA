@@ -20,7 +20,7 @@
     <parent>
         <artifactId>keycloak-integration-parent</artifactId>
         <groupId>org.keycloak</groupId>
-        <version>26.7.4</version>
+        <version>26.7.5</version>
     </parent>
 
     <name>Keycloak Client CLI</name>

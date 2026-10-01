@@ -43,6 +43,7 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
+import org.keycloak.models.utils.StripSecretsUtils;
 import org.keycloak.protocol.oidc.OIDCLoginProtocolFactory;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.idm.ClientRepresentation;
@@ -145,6 +146,10 @@ public abstract class AbstractClientRegistrationProvider implements ClientRegist
             rep.setSecret(client.getSecret());
         }
 
+        if (auth.isViewOnly()) {
+            StripSecretsUtils.stripClient(rep);
+        }
+
         if (auth.isRegistrationAccessToken()) {
             String registrationAccessToken = ClientRegistrationTokenUtils.updateTokenSignature(session, auth);
             rep.setRegistrationAccessToken(registrationAccessToken);
@@ -170,6 +175,18 @@ public abstract class AbstractClientRegistrationProvider implements ClientRegist
 
         if (!client.getClientId().equals(rep.getClientId())) {
             throw new ErrorResponseException(ErrorCodes.INVALID_CLIENT_METADATA, "Client Identifier modified", Response.Status.BAD_REQUEST);
+        }
+
+        if (auth.isRegistrationAccessToken()) {
+            String existingProtocol = client.getProtocol();
+            String requestedProtocol = rep.getProtocol();
+            if (requestedProtocol != null && !requestedProtocol.equals(existingProtocol)) {
+                throw new ErrorResponseException(
+                        ErrorCodes.INVALID_CLIENT_METADATA,
+                        "Protocol cannot be changed via registration access token",
+                        Response.Status.BAD_REQUEST
+                );
+            }
         }
 
         ClientResource.updateClientServiceAccount(session, client, rep.isServiceAccountsEnabled());

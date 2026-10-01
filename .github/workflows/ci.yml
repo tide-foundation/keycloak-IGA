@@ -258,7 +258,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          ./mvnw test -f quarkus/pom.xml -pl '!tests,!tests/junit5,!tests/integration,!dist'
+          ./mvnw test -B -f quarkus/pom.xml -pl '!tests,!tests/junit5,!tests/integration,!dist'
 
   quarkus-integration-tests:
     name: Quarkus IT
@@ -718,7 +718,7 @@ jobs:
       - id: azure-init
         name: Initialize Azure environment
         run: |
-          AZURE_REGION=westeurope
+          AZURE_REGION=uksouth
           echo "AZURE Region: ${AZURE_REGION}"
 
           AZURE_CLUSTER_NAME="gh-action-$(git rev-parse --short HEAD)-${{ github.run_id }}-${{ github.run_attempt }}"
