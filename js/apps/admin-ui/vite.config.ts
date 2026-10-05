@@ -84,7 +84,9 @@ export default defineConfig(({ mode }) => {
       exclude: [...configDefaults.exclude, "./test/**"],
       server: {
         deps: {
-          inline: [/@patternfly\/.*/],
+          // @tideorg/js (pulled in by @tidecloak/js) uses extensionless ESM
+          // imports that Node refuses, so let vite transform both.
+          inline: [/@patternfly\/.*/, "@tidecloak/js", "@tideorg/js"],
         },
       },
     },
