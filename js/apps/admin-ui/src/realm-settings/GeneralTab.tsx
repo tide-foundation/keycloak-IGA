@@ -234,7 +234,7 @@ function RealmSettingsGeneralTabForm({
     control,
     handleSubmit,
     setValue,
-    formState: { errors },
+    formState: { isDirty, errors },
   } = form;
   const isFeatureEnabled = useIsFeatureEnabled();
   const isOrganizationsEnabled = isFeatureEnabled(Feature.Organizations);
