@@ -28,8 +28,19 @@ ignoredOptionalDependencies:
   - patternfly-bootstrap-treeview
 overrides:
   serialize-javascript: ^7.0.5
-  'brace-expansion@^1': ^1.1.13
-  'brace-expansion@^2': ^2.0.3
+  # Build-tool CVEs (security report, 2026-10-16). Transitive only; none of these ship in the
+  # bundled UI. Raise the floor to the first patched release of each line.
+  'brace-expansion@^1': ^1.1.20
+  'brace-expansion@^2': ^2.1.6
+  'brace-expansion@^5': ^5.0.11
+  'fast-uri@^3': ^3.1.7
+  'js-yaml@^4': ^4.3.2
+  'browserslist@^4': ^4.28.7
+  'nanoid@^3': ^3.3.18
+  'postcss@^8': ^8.5.18
+  'picomatch@^4': ^4.0.4
+  'source-map-js@^1': ^1.2.2
+  'ws@^8': ^8.21.0
   diff@^7: ^8.0.3
   '@microsoft/api-extractor': ^7.58.7
   jquery@^3: ^3.7.1
