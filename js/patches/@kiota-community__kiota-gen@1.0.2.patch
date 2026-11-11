@@ -1,0 +1,13 @@
+diff --git a/bin/kiota.js b/bin/kiota.js
+index 35aa9d7..125a48e 100755
+--- a/bin/kiota.js
++++ b/bin/kiota.js
+@@ -39,7 +39,7 @@ const { https } = followRedirects;
+ const fs = require("fs");
+ const url = require("url");
+ const path = require("path");
+-const decompress = require("decompress");
++const decompress = require("decompress").default;
+ const shell = require("shelljs");
+ 
+ // --------------------------------

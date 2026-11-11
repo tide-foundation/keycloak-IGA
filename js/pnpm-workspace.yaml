@@ -27,13 +27,13 @@ ignoredOptionalDependencies:
   - patternfly-bootstrap-combobox
   - patternfly-bootstrap-treeview
 overrides:
-  serialize-javascript: ^7.0.5
+  serialize-javascript: ^7.1.4
   # Build-tool CVEs (security report, 2026-10-16). Transitive only; none of these ship in the
   # bundled UI. Raise the floor to the first patched release of each line.
   'brace-expansion@^1': ^1.1.20
   'brace-expansion@^2': ^2.1.6
   'brace-expansion@^5': ^5.0.11
-  'fast-uri@^3': ^3.1.7
+  'fast-uri@^3': ^3.1.9
   'js-yaml@^4': ^4.3.2
   'browserslist@^4': ^4.28.7
   'nanoid@^3': ^3.3.18
@@ -46,6 +46,22 @@ overrides:
   jquery@^3: ^3.7.1
   lodash: ^4.17.23
   mdast-util-to-hast: ^13.2.1
+  # Security report, 2026-11. Same idea as above: raise build-tool deps to a patched release.
+  # decompress 4 is unmaintained, the maintained fork is ESM, so kiota-gen gets a small patch.
+  decompress: npm:@xhmikosr/decompress@^11.1.4
+  follow-redirects: ~1.16.0
+  esbuild: ^0.28.2
+  zod: ^4.6.7
+  '@babel/core@^7': ~7.29.7
+  '@humanfs/node': ^0.16.8
+  'glob@>=9 <14.0.2': ~14.0.2
+  'minimatch@>=7 <11.0.1': ~11.0.1
+  # deepmerge is only used by @rollup/plugin-node-resolve as deepMerge({}, defaults).
+  deepmerge: npm:lodash.merge@^4.6.2
+  # patternfly 3 pulls in bootstrap 3, we only copy patternfly's own CSS.
+  'patternfly>bootstrap': '-'
+patchedDependencies:
+  '@kiota-community/kiota-gen@1.0.2': patches/@kiota-community__kiota-gen@1.0.2.patch
 allowBuilds:
   '@swc/core': true
   # @tidecloak/js ships a postinstall (scripts/postinstall.cjs) whose only effect

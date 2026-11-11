@@ -4,7 +4,6 @@ import { FlatCompat } from "@eslint/eslintrc";
 import eslint from "@eslint/js";
 import playwright from "eslint-plugin-playwright";
 import prettierRecommended from "eslint-plugin-prettier/recommended";
-import reactCompiler from "eslint-plugin-react-compiler";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactJsxRuntime from "eslint-plugin-react/configs/jsx-runtime.js";
 import reactRecommended from "eslint-plugin-react/configs/recommended.js";
@@ -34,7 +33,6 @@ export default tseslint.config(
   {
     plugins: {
       "react-hooks": fixupPluginRules(reactHooks),
-      "react-compiler": reactCompiler,
     },
     languageOptions: {
       parserOptions: {
@@ -49,7 +47,6 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-compiler/react-compiler": "warn",
       // ## Rules overwriting config, disabled for now, but will have to be evaluated. ##
       "no-undef": "off",
       "no-unused-private-class-members": "off",

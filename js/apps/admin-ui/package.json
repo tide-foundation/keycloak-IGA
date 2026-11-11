@@ -100,7 +100,7 @@
     "i18next": "^25.7.3",
     "i18next-fetch-backend": "^7.0.0",
     "jszip": "^3.10.1",
-    "@tidecloak/js": "0.14.0",
+    "@tidecloak/js": "0.14.41",
     "keycloak-js": "^26.2.2",
     "lodash-es": "^4.18.1",
     "p-debounce": "^5.1.0",
@@ -130,10 +130,10 @@
     "properties-file": "^5.0.5",
     "ts-node": "^10.9.2",
     "uuid": "^14.0.1",
-    "vite": "^7.3.5",
+    "vite": "~7.3.7",
     "vite-plugin-checker": "^0.12.0",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "author": {
     "name": "Red Hat, Inc.",
